@@ -13,8 +13,8 @@ using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 using Unifesspa.Geo.IntegrationTests.Etl;
-using Unifesspa.Geo.IntegrationTests.Infrastructure;
 using Unifesspa.Geo.IntegrationTests.Fixtures.Authentication;
+using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
 /// Endpoint admin de disparo/acompanhamento do ETL (Story #674, CA-02/CA-06) contra a

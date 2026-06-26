@@ -5,18 +5,18 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-using Unifesspa.Geo.Application.Abstractions.Interfaces;
 using Unifesspa.Geo.Application.Abstractions;
+using Unifesspa.Geo.Application.Abstractions.Interfaces;
 using Unifesspa.Geo.Infrastructure.Caching;
 using Unifesspa.Geo.Infrastructure.Cep;
+using Unifesspa.Geo.Infrastructure.Core.Caching;
+using Unifesspa.Geo.Infrastructure.Core.Persistence;
 using Unifesspa.Geo.Infrastructure.Observability;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Readers;
-using Unifesspa.Geo.Infrastructure.Core.Caching;
-using Unifesspa.Geo.Infrastructure.Core.Persistence;
 
 /// <summary>
 /// Registra a infraestrutura do módulo Geo (DbContext + interceptors

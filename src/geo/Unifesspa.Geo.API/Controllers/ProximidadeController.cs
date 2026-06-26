@@ -6,8 +6,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
-using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.API.Formatting;
+using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.Proximidade;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;

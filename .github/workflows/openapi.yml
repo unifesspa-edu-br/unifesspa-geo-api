@@ -1,0 +1,67 @@
+name: OpenAPI Contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/spectral/**'
+      - '.github/workflows/openapi.yml'
+  pull_request:
+    branches:
+      - main
+      - 'bootstrap/**'
+      - 'feature/**'
+    paths:
+      - 'contracts/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/spectral/**'
+      - '.github/workflows/openapi.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: openapi-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_VERSION: 10.0.x
+
+jobs:
+  drift-and-lint:
+    name: Drift and Spectral
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore Unifesspa.Geo.slnx --locked-mode
+
+      - name: Runtime OpenAPI drift
+        run: dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj --filter SpecRuntime
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Spectral lint
+        run: |
+          set -euo pipefail
+          test -f contracts/openapi.geo.json
+          npx --yes @stoplight/spectral-cli@6.15.0 lint \
+            --ruleset tools/spectral/.spectral.yaml \
+            --fail-severity=error \
+            contracts/openapi.geo.json

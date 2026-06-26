@@ -85,9 +85,12 @@ dotnet_diagnostic.CA1812.severity = none
 # - CA2007: xUnit não usa SynchronizationContext; ConfigureAwait é desnecessário
 # - CA1861: literais de array em assertions priorizam legibilidade; não é hot path
 [tests/**/*.cs]
+dotnet_diagnostic.CA1002.severity = none
 dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1515.severity = none
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.IDE1006.severity = none
 
 # Migrations EF Core são auto-geradas pelo tool — analyzers que cobram
 # defensive coding, perf de array literal ou estilo C# moderno não se aplicam:
