@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 public static class CryptographyServiceCollectionExtensions
 {
-    public static IServiceCollection AddUniPlusEncryption(
+    public static IServiceCollection AddGeoEncryption(
         this IServiceCollection services,
         IConfiguration? configuration = null,
         Action<EncryptionOptions>? configure = null)
@@ -40,7 +40,7 @@ public static class CryptographyServiceCollectionExtensions
 
         optionsBuilder.ValidateDataAnnotations().ValidateOnStart();
 
-        services.AddSingleton<IUniPlusEncryptionService>(sp =>
+        services.AddSingleton<IGeoEncryptionService>(sp =>
         {
             EncryptionOptions opts = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
 
@@ -55,10 +55,10 @@ public static class CryptographyServiceCollectionExtensions
             }
 
             throw new InvalidOperationException(
-                $"UniPlus:Encryption:Provider inválido: '{opts.Provider}'. Use 'vault' ou 'local'.");
+                $"Geo:Encryption:Provider inválido: '{opts.Provider}'. Use 'vault' ou 'local'.");
         });
 
-        // Warmup hosted service força a resolução do IUniPlusEncryptionService no
+        // Warmup hosted service força a resolução do IGeoEncryptionService no
         // Host.StartAsync — falha do construtor (JWT ausente, mutex auth method)
         // vira CrashLoopBackOff antes do app aceitar tráfego, em vez de 500 na
         // primeira request cifrada. Test factories (ApiFactoryBase) carregam

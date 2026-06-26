@@ -9,7 +9,7 @@ namespace Unifesspa.Geo.Infrastructure.Core.Cryptography;
 /// desta interface; handlers trabalham com valores de domínio em texto claro.
 /// </para>
 /// </summary>
-public interface IUniPlusEncryptionService
+public interface IGeoEncryptionService
 {
     /// <summary>Cifra <paramref name="plaintext"/> usando a chave <paramref name="keyName"/>.</summary>
     /// <exception cref="EncryptionFailureException">Qualquer falha na operação.</exception>

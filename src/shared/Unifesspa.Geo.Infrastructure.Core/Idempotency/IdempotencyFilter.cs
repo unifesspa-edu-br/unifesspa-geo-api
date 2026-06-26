@@ -56,7 +56,7 @@ public sealed partial class IdempotencyFilter : IAsyncResourceFilter
     private const string ReplayHeader = "Idempotency-Replayed";
 
     private readonly IIdempotencyStore _store;
-    private readonly IUniPlusEncryptionService _encryption;
+    private readonly IGeoEncryptionService _encryption;
     private readonly IDomainErrorMapper _errorMapper;
     private readonly TimeProvider _time;
     private readonly IUserContext _userContext;
@@ -64,7 +64,7 @@ public sealed partial class IdempotencyFilter : IAsyncResourceFilter
 
     public IdempotencyFilter(
         IIdempotencyStore store,
-        IUniPlusEncryptionService encryption,
+        IGeoEncryptionService encryption,
         IDomainErrorMapper errorMapper,
         TimeProvider time,
         IUserContext userContext,

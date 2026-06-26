@@ -5,16 +5,16 @@ using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 
 /// <summary>
-/// Document transformer que injeta metadata institucional Uni+ em todos os
-/// documentos OpenAPI gerados (selecao, ingresso, futuros). Aplica info
+/// Document transformer que injeta metadata institucional no documento OpenAPI
+/// do Geo. Aplica info
 /// (title, description, contact, license em pt-BR), servers por ambiente, e
 /// versão de contrato alinhada com ADR-0022 (Contrato REST canônico V1).
 /// </summary>
-public sealed class UniPlusInfoTransformer : IOpenApiDocumentTransformer
+public sealed class GeoInfoTransformer : IOpenApiDocumentTransformer
 {
-    private readonly UniPlusOpenApiOptions _options;
+    private readonly GeoOpenApiOptions _options;
 
-    public UniPlusInfoTransformer(IOptions<UniPlusOpenApiOptions> options)
+    public GeoInfoTransformer(IOptions<GeoOpenApiOptions> options)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options.Value;
@@ -28,15 +28,9 @@ public sealed class UniPlusInfoTransformer : IOpenApiDocumentTransformer
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(context);
 
-        string moduleTitle = context.DocumentName switch
-        {
-            "selecao" => "Uni+ — Módulo Seleção",
-            "ingresso" => "Uni+ — Módulo Ingresso",
-            "organizacao" => "Uni+ — Módulo Organização Institucional",
-            "portal" => "Uni+ — Módulo Portal",
-            "geo" => "Uni+ — Módulo Geo",
-            _ => $"Uni+ — {context.DocumentName}",
-        };
+        string moduleTitle = string.Equals(context.DocumentName, "geo", StringComparison.OrdinalIgnoreCase)
+            ? "Uni+ — Módulo Geo"
+            : $"UNIFESSPA — {context.DocumentName}";
 
         document.Info = new OpenApiInfo
         {

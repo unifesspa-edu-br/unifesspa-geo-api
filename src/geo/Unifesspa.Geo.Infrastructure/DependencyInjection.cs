@@ -21,7 +21,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Readers;
 /// <summary>
 /// Registra a infraestrutura do módulo Geo (DbContext + interceptors
 /// transversais soft delete + audit). O <c>GeoDbContext</c> ativa o plugin
-/// NetTopologySuite do Npgsql via o hook do <c>UseUniPlusNpgsqlConventions</c>
+/// NetTopologySuite do Npgsql via o hook do <c>UseGeoNpgsqlConventions</c>
 /// (ADR-0091) — paridade com o design-time factory. Repositórios e readers
 /// entram nas Stories de domínio/API.
 /// </summary>
@@ -33,10 +33,10 @@ public static class GeoInfrastructureRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddUniPlusEfInterceptors();
+        services.AddGeoEfInterceptors();
 
         services.AddDbContext<GeoDbContext>((serviceProvider, options) =>
-            options.UseUniPlusNpgsqlConventions<GeoDbContext>(
+            options.UseGeoNpgsqlConventions<GeoDbContext>(
                 serviceProvider,
                 ConnectionStringName,
                 npgsql => npgsql.UseNetTopologySuite()));

@@ -41,17 +41,17 @@ public static class HealthChecksServiceCollectionExtensions
     ///   <item><description><b>Postgres</b>: usa a connection string nominal — ativa quando
     ///     <c>ConnectionStrings:{connectionStringName}</c> está preenchido.</description></item>
     ///   <item><description><b>Redis</b>: depende de <see cref="StackExchange.Redis.IConnectionMultiplexer"/>
-    ///     registrado por <see cref="CacheServiceCollectionExtensions.AddUniPlusCache"/>.
+    ///     registrado por <see cref="CacheServiceCollectionExtensions.AddGeoCache"/>.
     ///     Ativa quando <c>Redis:ConnectionString</c> está preenchido.</description></item>
     ///   <item><description><b>MinIO</b>: depende de <see cref="Minio.IMinioClient"/>
-    ///     registrado por <see cref="StorageServiceCollectionExtensions.AddUniPlusStorage"/>.
+    ///     registrado por <see cref="StorageServiceCollectionExtensions.AddGeoStorage"/>.
     ///     Ativa quando <c>Storage:Endpoint</c> está preenchido.</description></item>
     ///   <item><description><b>Kafka</b>: depende de <see cref="KafkaSettings"/> bind por
     ///     <see cref="WolverineOutboxConfiguration.UseWolverineOutboxCascading"/>. Ativa quando
     ///     <c>Kafka:BootstrapServers</c> está preenchido.</description></item>
     /// </list>
     /// </remarks>
-    public static IServiceCollection AddUniPlusHealthChecks(
+    public static IServiceCollection AddGeoHealthChecks(
         this IServiceCollection services,
         IConfiguration configuration,
         string connectionStringName)

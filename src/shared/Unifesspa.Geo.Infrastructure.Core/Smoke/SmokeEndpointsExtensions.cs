@@ -42,7 +42,7 @@ public static class SmokeEndpointsExtensions
     /// Mapeia endpoints smoke sob <c>/api/_smoke</c>. Idempotente — chamar duas vezes
     /// causaria conflito de rotas, então deve ser chamado uma única vez por pipeline.
     /// </summary>
-    public static IEndpointRouteBuilder MapUniPlusSmokeEndpoints(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapGeoSmokeEndpoints(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
 

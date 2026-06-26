@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 
 public sealed class EncryptionOptions
 {
-    public const string SectionName = "UniPlus:Encryption";
+    public const string SectionName = "Geo:Encryption";
 
     /// <summary>Provedor ativo: "vault" (produção) ou "local" (dev/CI).</summary>
     [Required]

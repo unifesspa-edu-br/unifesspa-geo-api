@@ -17,7 +17,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 /// e leitura lazy da connection string. Substitui código duplicado nos
 /// <c>Add{Module}Infrastructure</c>.
 /// </summary>
-public static class UniPlusDbContextOptionsExtensions
+public static class GeoDbContextOptionsExtensions
 {
     /// <summary>
     /// Configura o <paramref name="options"/> com o stack canônico Uni+:
@@ -54,7 +54,7 @@ public static class UniPlusDbContextOptionsExtensions
     /// <c>null</c> — não-invasivo: módulos que não passam o hook mantêm o
     /// comportamento atual inalterado.
     /// </param>
-    public static DbContextOptionsBuilder UseUniPlusNpgsqlConventions<TContext>(
+    public static DbContextOptionsBuilder UseGeoNpgsqlConventions<TContext>(
         this DbContextOptionsBuilder options,
         IServiceProvider serviceProvider,
         string connectionStringName,
@@ -127,7 +127,7 @@ public static class UniPlusDbContextOptionsExtensions
     /// localmente sobrescreve via <c>--connection</c>.
     /// </remarks>
     /// <param name="configurarNpgsql">
-    /// Hook opcional idêntico ao de <see cref="UseUniPlusNpgsqlConventions{TContext}"/>
+    /// Hook opcional idêntico ao de <see cref="UseGeoNpgsqlConventions{TContext}"/>
     /// — garante paridade runtime↔design-time. O módulo Geo passa
     /// <c>o =&gt; o.UseNetTopologySuite()</c> para que <c>dotnet ef migrations</c>
     /// gere o mapeamento <c>geography(Point,4326)</c>. Default <c>null</c>.
@@ -151,12 +151,12 @@ public static class UniPlusDbContextOptionsExtensions
 
     /// <summary>
     /// Registra os interceptors transversais consumidos pelo
-    /// <see cref="UseUniPlusNpgsqlConventions{TContext}"/> — Scoped por
+    /// <see cref="UseGeoNpgsqlConventions{TContext}"/> — Scoped por
     /// ciclo de request, pois ambos dependem de <c>IUserContext</c> scoped
     /// (HttpUserContext) para preencher <c>DeletedBy</c> / <c>CreatedBy</c> /
     /// <c>UpdatedBy</c>. Singleton aqui causaria captive dependency.
     /// </summary>
-    public static IServiceCollection AddUniPlusEfInterceptors(this IServiceCollection services)
+    public static IServiceCollection AddGeoEfInterceptors(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 

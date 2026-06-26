@@ -33,12 +33,12 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         if (string.IsNullOrEmpty(provider))
         {
             failures.Add(
-                $"UniPlus:Encryption:Provider é obrigatório. Valores aceitos: 'local', 'vault'. {GuideHint}");
+                $"Geo:Encryption:Provider é obrigatório. Valores aceitos: 'local', 'vault'. {GuideHint}");
         }
         else if (!IsKnownProvider(provider))
         {
             failures.Add(
-                $"UniPlus:Encryption:Provider inválido: '{options.Provider}'. " +
+                $"Geo:Encryption:Provider inválido: '{options.Provider}'. " +
                 $"Valores aceitos: 'local', 'vault'. {GuideHint}");
         }
         else if (provider.Equals("local", StringComparison.OrdinalIgnoreCase))
@@ -63,8 +63,8 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         if (string.IsNullOrWhiteSpace(options.LocalKey))
         {
             failures.Add(
-                "UniPlus:Encryption:LocalKey é obrigatório quando Provider = 'local'. " +
-                "Defina via env var UNIPLUS__ENCRYPTION__LOCALKEY (Base64, 32 bytes). " +
+                "Geo:Encryption:LocalKey é obrigatório quando Provider = 'local'. " +
+                "Defina via env var GEO__ENCRYPTION__LOCALKEY (Base64, 32 bytes). " +
                 "Gere uma chave dev/CI com `head -c 32 /dev/urandom | base64`. " +
                 $"{GuideHint}");
             return;
@@ -78,7 +78,7 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         catch (FormatException)
         {
             failures.Add(
-                "UniPlus:Encryption:LocalKey não é uma string Base64 válida. " +
+                "Geo:Encryption:LocalKey não é uma string Base64 válida. " +
                 "Gere uma chave válida com `head -c 32 /dev/urandom | base64`. " +
                 $"{GuideHint}");
             return;
@@ -87,7 +87,7 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         if (keyBytes.Length != RequiredKeyBytes)
         {
             failures.Add(
-                $"UniPlus:Encryption:LocalKey deve ter {RequiredKeyBytes} bytes (256 bits) após decode Base64. " +
+                $"Geo:Encryption:LocalKey deve ter {RequiredKeyBytes} bytes (256 bits) após decode Base64. " +
                 $"Recebido: {keyBytes.Length} bytes. " +
                 $"{GuideHint}");
         }
@@ -98,14 +98,14 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         if (string.IsNullOrWhiteSpace(options.VaultAddress))
         {
             failures.Add(
-                "UniPlus:Encryption:VaultAddress é obrigatório quando Provider = 'vault'. " +
+                "Geo:Encryption:VaultAddress é obrigatório quando Provider = 'vault'. " +
                 "Exemplo: 'http://platform-vault-uniplus-standalone.vault.svc.cluster.local:8200'. " +
                 $"{GuideHint}");
         }
         else if (!IsAbsoluteHttpUri(options.VaultAddress))
         {
             failures.Add(
-                $"UniPlus:Encryption:VaultAddress inválido: '{options.VaultAddress}'. " +
+                $"Geo:Encryption:VaultAddress inválido: '{options.VaultAddress}'. " +
                 "Deve ser uma URL absoluta com scheme http ou https. " +
                 $"{GuideHint}");
         }
@@ -116,9 +116,9 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         if (!hasKubernetesRole && !hasVaultToken)
         {
             failures.Add(
-                "UniPlus:Encryption requer KubernetesRole (produção) ou VaultToken (testes/dev) quando Provider = 'vault'. " +
-                "Configure UNIPLUS__ENCRYPTION__KUBERNETESROLE (role K8s auth registrada no Vault) " +
-                "ou UNIPLUS__ENCRYPTION__VAULTTOKEN (apenas para testes de integração — nunca em produção). " +
+                "Geo:Encryption requer KubernetesRole (produção) ou VaultToken (testes/dev) quando Provider = 'vault'. " +
+                "Configure GEO__ENCRYPTION__KUBERNETESROLE (role K8s auth registrada no Vault) " +
+                "ou GEO__ENCRYPTION__VAULTTOKEN (apenas para testes de integração — nunca em produção). " +
                 $"{GuideHint}");
         }
         else if (hasKubernetesRole && hasVaultToken)
@@ -128,7 +128,7 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
             // VaultTransitEncryptionService (originalmente uma heurística "K8s se JWT existir, senão token",
             // retirada exatamente por este motivo). Operador escolhe um, explicitamente.
             failures.Add(
-                "UniPlus:Encryption: KubernetesRole e VaultToken são mutuamente exclusivos. " +
+                "Geo:Encryption: KubernetesRole e VaultToken são mutuamente exclusivos. " +
                 "Em produção use KubernetesRole; em testes/dev use VaultToken. " +
                 $"{GuideHint}");
         }
