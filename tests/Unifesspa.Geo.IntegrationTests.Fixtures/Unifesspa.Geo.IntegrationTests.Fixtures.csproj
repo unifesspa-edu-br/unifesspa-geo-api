@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!--
+      Library project consumido por outros assemblies de teste (define ApiFactoryBase, TestAuthHandler,
+      KeycloakContainerFixture). Referencia xunit para expor IAsyncLifetime e atributos de fixture, mas
+      não contém [Fact] próprios. IsTestProject=false impede o test runner do CI de tentar carregar
+      este assembly como executável de teste — isso falharia ao resolver dependências transitivas
+      (p.ex. BouncyCastle vinda de SSH.NET via Testcontainers) num runner sem cache.
+    -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="WolverineFx" />
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      TestAuthHandler reutiliza AuthenticationProblemDetailsWriter do código produtivo
+      para emitir o mesmo body problem+json (RFC 9457) em 401/403 dentro do test host.
+    -->
+    <ProjectReference Include="..\..\src\shared\Unifesspa.Geo.Infrastructure.Core\Unifesspa.Geo.Infrastructure.Core.csproj" />
+  </ItemGroup>
+
+</Project>

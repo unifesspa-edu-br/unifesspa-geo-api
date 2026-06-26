@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unifesspa.Geo.Governance.Contracts\Unifesspa.Geo.Governance.Contracts.csproj" />
+    <ProjectReference Include="..\Unifesspa.Geo.Kernel\Unifesspa.Geo.Kernel.csproj" />
+  </ItemGroup>
+
+</Project>

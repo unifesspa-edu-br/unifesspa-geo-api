@@ -48,3 +48,6 @@ Future changes should not synchronize automatically from `uniplus-api`.
 The dedicated Geo repository must not depend on `ProjectReference` or
 `PackageReference` entries rooted at `Unifesspa.UniPlus.*`; required behavior
 must be copied or adapted under the Geo namespace.
+
+The bootstrap branch currently uses `Unifesspa.Geo.*` project and namespace
+roots for production and test code.
