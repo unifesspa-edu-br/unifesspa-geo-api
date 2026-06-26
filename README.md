@@ -34,6 +34,22 @@ O baseline inicial está em `contracts/openapi.geo.json`.
 
 Consulte `docs/development.md`.
 
+## Qualidade
+
+Os gates mínimos para entrega do repositório são:
+
+- restore locked
+- build Release
+- testes de integração Geo
+- `dotnet format --verify-no-changes`
+- bloqueio de dependências proibidas
+- bloqueio de dependências `Unifesspa.UniPlus.*`
+- drift OpenAPI
+- Spectral
+- CodeQL
+- Trivy bloqueante para vulnerabilidades `HIGH` e `CRITICAL`
+- build estrutural da imagem Docker
+
 ## Release e Consumo
 
 Consulte `docs/release.md`.
