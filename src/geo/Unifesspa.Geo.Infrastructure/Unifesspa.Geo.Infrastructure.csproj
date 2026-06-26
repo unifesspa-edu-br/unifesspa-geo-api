@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- Plugin NetTopologySuite do Npgsql — ativa o.UseNetTopologySuite() e o
+         mapeamento de Point para geography(Point,4326) (ADR-0091). -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\Unifesspa.Geo.Infrastructure.Core\Unifesspa.Geo.Infrastructure.Core.csproj" />
+    <ProjectReference Include="..\Unifesspa.Geo.Application\Unifesspa.Geo.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Expõe internals (ETL: importador, fonte, parse) aos testes de integração —
+         mesmo padrão dos demais módulos. -->
+    <InternalsVisibleTo Include="Unifesspa.Geo.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

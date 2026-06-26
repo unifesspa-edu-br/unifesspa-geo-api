@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\Unifesspa.Geo.Kernel\Unifesspa.Geo.Kernel.csproj" />
+    <ProjectReference Include="..\..\shared\Unifesspa.Geo.Application.Abstractions\Unifesspa.Geo.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\..\shared\Unifesspa.Geo.Governance.Contracts\Unifesspa.Geo.Governance.Contracts.csproj" />
+    <ProjectReference Include="..\Unifesspa.Geo.Domain\Unifesspa.Geo.Domain.csproj" />
+    <ProjectReference Include="..\Unifesspa.Geo.Contracts\Unifesspa.Geo.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

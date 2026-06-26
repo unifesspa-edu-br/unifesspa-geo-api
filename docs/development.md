@@ -9,18 +9,23 @@
 
 This repository is in the extraction bootstrap branch.
 
-The solution file is `Unifesspa.Geo.slnx`. It currently lists the extracted Geo
-projects and Geo integration tests:
+The solution file is `Unifesspa.Geo.slnx`. It lists the extracted Geo projects,
+Geo-owned foundation projects and Geo integration tests:
 
-- `src/geo/Unifesspa.UniPlus.Geo.Domain`
-- `src/geo/Unifesspa.UniPlus.Geo.Contracts`
-- `src/geo/Unifesspa.UniPlus.Geo.Application`
-- `src/geo/Unifesspa.UniPlus.Geo.Infrastructure`
-- `src/geo/Unifesspa.UniPlus.Geo.API`
-- `tests/Unifesspa.UniPlus.Geo.IntegrationTests`
+- `src/geo/Unifesspa.Geo.Domain`
+- `src/geo/Unifesspa.Geo.Contracts`
+- `src/geo/Unifesspa.Geo.Application`
+- `src/geo/Unifesspa.Geo.Infrastructure`
+- `src/geo/Unifesspa.Geo.API`
+- `src/shared/Unifesspa.Geo.Kernel`
+- `src/shared/Unifesspa.Geo.Governance.Contracts`
+- `src/shared/Unifesspa.Geo.Application.Abstractions`
+- `src/shared/Unifesspa.Geo.Infrastructure.Core`
+- `tests/Unifesspa.Geo.IntegrationTests.Fixtures`
+- `tests/Unifesspa.Geo.IntegrationTests`
 
-The next bootstrap step is to remove dependencies on `Unifesspa.UniPlus.*` by
-copying or adapting required code into Geo-owned namespaces.
+The repository must remain free of dependencies on packages or projects rooted
+at `Unifesspa.UniPlus.*`.
 
 ## Local Commands
 
@@ -37,9 +42,8 @@ bash tools/forbidden-deps/check.sh
 bash tools/forbidden-deps/check-geo-independence.sh .
 ```
 
-At this bootstrap stage, restore/build are expected to fail until the remaining
-`ProjectReference` entries to UniPlus shared projects and test fixtures are
-replaced by Geo-owned code.
+At this bootstrap stage, restore and build pass. Integration tests still require
+the local Docker infrastructure described by the migrated compose files.
 
 ## OpenAPI
 
