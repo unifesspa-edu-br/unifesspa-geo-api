@@ -51,18 +51,22 @@ package or namespace semantics.
 The API uses JWT Bearer authentication backed by an OIDC authority:
 
 - `Auth:Authority`: issuer/realm URL.
-- `Auth:Audience`: expected `aud` claim.
+- `Auth:ValidateAudience`: optional strict `aud` validation. Default is
+  `false` so any UNIFESSPA application token issued by the configured realm can
+  consume Geo read endpoints.
+- `Auth:Audience`: expected `aud` claim only when `Auth:ValidateAudience=true`.
 - HTTPS metadata is required outside `Development`.
-- JWT validation checks issuer, audience, lifetime and signing key.
+- JWT validation always checks issuer/realm, lifetime and signing key.
 - 401 and 403 responses use `application/problem+json`.
 
-Public reference-data endpoints are explicitly `[AllowAnonymous]`. Admin
-endpoints under `/api/admin/geo` require JWT authentication and the
-`plataforma-admin` role.
+Reference-data/query endpoints require an authenticated JWT from the configured
+realm but do not require an administrative role. Operations that write, mutate
+state or administer Geo, including endpoints under `/api/admin/geo`, require JWT
+authentication and the `plataforma-admin` role.
 
 The integration test suite includes a real Keycloak container and exercises the
-production `JwtBearer` pipeline for valid tokens, invalid audience, missing
-token and insufficient roles.
+production `JwtBearer` pipeline for valid tokens, tokens from another client in
+the same realm, wrong issuer/realm, missing token and insufficient roles.
 
 ## Local Commands
 

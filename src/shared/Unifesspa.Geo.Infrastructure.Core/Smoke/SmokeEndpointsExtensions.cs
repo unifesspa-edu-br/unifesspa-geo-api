@@ -56,20 +56,26 @@ public static class SmokeEndpointsExtensions
             .DisableAntiforgery()
             .WithName("smokeStorageUpload")
             .WithSummary("Smoke E2E — Storage upload")
-            .WithDescription("Faz upload de um arquivo no bucket configurado para validar conectividade + credentials do MinIO. Restrito a usuários com role admin.");
+            .WithDescription("Faz upload de um arquivo no bucket configurado para validar conectividade + credentials do MinIO. Restrito a usuários com role admin.")
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         // Cache: SET (random key + UTC now) com TTL 5min, retorna value para verificação.
         group.MapGet("/cache/{key}", ProbeSmokeCacheAsync)
             .WithName("smokeCacheProbe")
             .WithSummary("Smoke E2E — Cache probe")
-            .WithDescription("Faz SET/GET de uma chave temporária no Redis com TTL 5min para validar conectividade. Restrito a usuários com role admin.");
+            .WithDescription("Faz SET/GET de uma chave temporária no Redis com TTL 5min para validar conectividade. Restrito a usuários com role admin.")
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         // Messaging: publica SmokePingMessage via IMessageBus — handler em Infrastructure.Core
         // confirma round-trip via log.
         group.MapPost("/messaging/publish", PublishSmokeMessageAsync)
             .WithName("smokeMessagingPublish")
             .WithSummary("Smoke E2E — Messaging publish")
-            .WithDescription("Publica um SmokePingMessage via Wolverine outbox para validar persistência + transport (PG queue ou Kafka). O handler em Infrastructure.Core registra log do round-trip. Restrito a usuários com role admin.");
+            .WithDescription("Publica um SmokePingMessage via Wolverine outbox para validar persistência + transport (PG queue ou Kafka). O handler em Infrastructure.Core registra log do round-trip. Restrito a usuários com role admin.")
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         return app;
     }

@@ -37,6 +37,7 @@ public sealed class GeoJwtApiFactory : ApiFactoryBase<Program>
         new("ConnectionStrings:GeoDb", "Host=localhost;Port=5432;Database=unifesspa_geo_auth_tests;Username=geo;Password=geo"),
         new("Auth:Authority", _keycloak.Authority),
         new("Auth:Audience", KeycloakContainerFixture.Audience),
+        new("Auth:ValidateAudience", "false"),
         new("Geo:Etl:WorkerHabilitado", "false"),
         new("Redis:ConnectionString", string.Empty),
         new("Storage:Endpoint", string.Empty),

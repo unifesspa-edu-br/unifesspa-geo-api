@@ -42,7 +42,7 @@ public sealed class KeycloakContainerFixture : IAsyncLifetime
 
     /// <summary>
     /// Client confidencial sem o scope <c>uniplus-profile</c> — emite tokens cuja audience não inclui
-    /// <c>uniplus</c>. Usado para validar a rejeição por audience inválida.
+    /// <c>uniplus</c>. Usado para validar que Geo aceita outro client quando o issuer/realm é o mesmo.
     /// </summary>
     public const string BadAudienceClientId = "e2e-tests-bad-aud";
 

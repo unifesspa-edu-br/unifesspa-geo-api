@@ -12,8 +12,8 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Endpoints públicos de leitura de Estados (#675) contra a API real + PostGIS.
-/// Read-only <c>[AllowAnonymous]</c> — sem autenticação. Cobre CA-01, CA-07,
+/// Endpoints de leitura autenticada de Estados (#675) contra a API real + PostGIS.
+/// Read-only sem role administrativa. Cobre CA-01, CA-07,
 /// CA-09 e CA-10. A collection é serial; cada teste TRUNCA e semeia.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
@@ -32,7 +32,7 @@ public sealed class EstadosEndpointTests
         IReadOnlyList<string> ufsSemeadas = ["AC", "AL", "AM", "BA", "CE"];
         await SemearEstadosAsync(ufsSemeadas);
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // Página 1 (limit=2) — espera-se header Link com next e _links.self por item.
         using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client, "/api/estados?limit=2");
@@ -82,7 +82,7 @@ public sealed class EstadosEndpointTests
     {
         // Semeia fora de ordem: a ordem alfabética dos nomes difere da ordem de inserção/Id.
         await SemearForaDeOrdemAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         List<string> nomes = [];
         string? proximo = "/api/estados?limit=2";
@@ -103,7 +103,7 @@ public sealed class EstadosEndpointTests
     public async Task Estados_NavegacaoPrev_Alfabetica()
     {
         await SemearForaDeOrdemAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage p1 = await GeoReferenceSeed.Obter(client, "/api/estados?limit=2");
         ExtrairNomes(await LerArrayAsync(p1)).Should().Equal("Acre", "Bahia");
@@ -122,7 +122,7 @@ public sealed class EstadosEndpointTests
     public async Task Estado_Detalhe_PorUf()
     {
         await SemearParaAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/estados/PA");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -147,7 +147,7 @@ public sealed class EstadosEndpointTests
     public async Task Estado_Detalhe_PorUf_CaseInsensitive(string uf)
     {
         await SemearParaAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/estados/{uf}");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -159,7 +159,7 @@ public sealed class EstadosEndpointTests
     public async Task Estado_Detalhe_Inexistente_404()
     {
         await SemearParaAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/estados/ZZ");
         resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -171,7 +171,7 @@ public sealed class EstadosEndpointTests
     [InlineData("/api/estados/12")]
     public async Task Estado_Detalhe_Malformada_400(string rota)
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -181,7 +181,7 @@ public sealed class EstadosEndpointTests
     public async Task Estados_VendorMime()
     {
         await SemearParaAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpRequestMessage incompativel = new(HttpMethod.Get, "/api/estados");
         incompativel.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.uniplus.estado.v2+json"));
@@ -208,7 +208,7 @@ public sealed class EstadosEndpointTests
             await ctx.SaveChangesAsync();
         }
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage lista = await GeoReferenceSeed.Obter(client, "/api/estados?limit=100");
         JsonElement itens = await LerArrayAsync(lista);

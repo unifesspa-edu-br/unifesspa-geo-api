@@ -14,11 +14,13 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Infrastructure.Core.Pagination;
 
 /// <summary>
-/// Endpoints públicos de navegação descendente da Cidade: distritos, bairros e
-/// autocomplete de logradouros.
+/// Endpoints autenticados de navegação descendente da Cidade: distritos, bairros e
+/// autocomplete de logradouros. Exigem token do realm configurado, sem role
+/// administrativa.
 /// </summary>
 [ApiController]
 [Route("api")]
+[Authorize]
 [SuppressMessage(
     "Performance",
     "CA1515:Consider making public types internal",
@@ -52,7 +54,6 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     /// Código IBGE malformado retorna 400; cidade-pai inexistente retorna 404.
     /// </summary>
     [HttpGet("cidades/{codigoIbge}/distritos")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "distrito", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<DistritoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -92,7 +93,6 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     /// <paramref name="q"/> e paginação por cursor opaco.
     /// </summary>
     [HttpGet("cidades/{codigoIbge}/bairros")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "bairro", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<BairroDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -142,7 +142,6 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     /// ranking por relevância não compõe o keyset por Id (ADR-0089).
     /// </summary>
     [HttpGet("cidades/{codigoIbge}/logradouros")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "logradouro", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<LogradouroResumoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

@@ -12,8 +12,9 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Endpoints públicos de hierarquia/autocomplete Geo (#677) contra API real +
-/// PostGIS. Cobre Cidade → Distrito/Bairro/Logradouro, cursor, HATEOAS e boundary.
+/// Endpoints autenticados de hierarquia/autocomplete Geo (#677) contra API real +
+/// PostGIS, sem role administrativa. Cobre Cidade → Distrito/Bairro/Logradouro,
+/// cursor, HATEOAS e boundary.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
 public sealed class CidadeHierarquiaEndpointTests
@@ -29,7 +30,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Distritos_PorCidade_Paginado()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client, "/api/cidades/3550308/distritos?limit=1");
         pagina1.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -63,7 +64,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Bairros_Busca_AcentoInsensivel(string termo)
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, $"/api/cidades/3550308/bairros?q={Uri.EscapeDataString(termo)}&limit=100");
@@ -87,7 +88,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_PorCidade()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // A busca corre sobre NomeNormalizado (= texto completo sem acento, #707), então
         // casa por qualquer parte do logradouro acento/caixa-insensível: "sé" → "Praça da Sé".
@@ -117,7 +118,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_PorTipo()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // "praça" vive na coluna tipo, mas compõe o texto completo de NomeNormalizado (#707):
         // a busca por tipo passa a casar — e fica escopada a São Paulo (Marabá tem "Praça
@@ -135,7 +136,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_PorTextoCompleto()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, $"/api/cidades/3550308/logradouros?q={Uri.EscapeDataString("praça da sé")}&limit=100");
@@ -150,7 +151,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_OrdenadoPorRelevancia()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // "Rua das Flores" e "Rua das Flores e Jardins" casam ambos "rua das flores"; o de
         // texto exato (similaridade máxima) precede o mais longo, independentemente do Id.
@@ -170,7 +171,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_AbreviacaoEOrdem(string termo)
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // word_similarity (#709) casa o termo contra o texto completo independentemente de
         // abreviação ou ordem; o ILIKE da #707 rejeitaria ambos. A match esperada fica no
@@ -187,7 +188,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_AbreviacaoNaoPrefixo()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // "pca" não é prefixo de "praça": só o word_similarity (trigram) casa; FTS-prefix e
         // ILIKE falhariam. Confirma a escolha do spike (#709).
@@ -203,7 +204,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Logradouros_Autocomplete_Typo()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // O typo ("paulysta") ainda recupera o logradouro. Asserção de recall (Contains),
         // não de ranking: em datasets grandes o typo pode ficar fora do topo — limitação
@@ -222,7 +223,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Hierarquia_CidadeInexistente_404_EFiltroVazio_200()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage inexistente = await GeoReferenceSeed.Obter(client, "/api/cidades/9999999/distritos");
         inexistente.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -238,7 +239,7 @@ public sealed class CidadeHierarquiaEndpointTests
     [InlineData("/api/cidades/35503080/logradouros")]
     public async Task Hierarquia_CodigoIbgeInvalido_400(string rota)
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -248,7 +249,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Hierarquia_Cursor_PreservaEscopoEFiltro()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client, "/api/cidades/3550308/bairros?q=sa&limit=1");
         pagina1.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -286,7 +287,7 @@ public sealed class CidadeHierarquiaEndpointTests
     public async Task Hierarquia_VendorMime_TermoLongo()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpRequestMessage incompativel = new(HttpMethod.Get, "/api/cidades/3550308/logradouros?q=praca");
         incompativel.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.uniplus.logradouro.v2+json"));

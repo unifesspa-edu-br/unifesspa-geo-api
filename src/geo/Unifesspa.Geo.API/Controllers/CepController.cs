@@ -13,18 +13,19 @@ using Unifesspa.Geo.Infrastructure.Core.Formatting;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
 /// <summary>
-/// Endpoint público de lookup de CEP — reference data (<c>[AllowAnonymous]</c>, sem
-/// Idempotency-Key, carga via ETL/F3): <c>GET /api/cep/{cep}</c> resolve o CEP em
-/// um endereço estruturado (logradouro/faixa/grande usuário). CEP é dado estável →
-/// cache Redis com TTL longo (cache-aside no resolver). Ver ADR-0090.
+/// Endpoint autenticado de lookup de CEP — reference data (sem role administrativa,
+/// sem Idempotency-Key, carga via ETL/F3): <c>GET /api/cep/{cep}</c> resolve o CEP
+/// em um endereço estruturado (logradouro/faixa/grande usuário). CEP é dado estável
+/// → cache Redis com TTL longo (cache-aside no resolver). Ver ADR-0090.
 /// </summary>
 /// <remarks>
-/// Rate-limiting deste endpoint anônimo é aplicado na <strong>borda</strong>
-/// (gateway/Traefik), não no app — defesa em profundidade uniforme para todos os
-/// endpoints públicos de reference data; controle no app fica adiado (ADR-0093).
+/// A autenticação valida o token contra o issuer/realm configurado. Qualquer
+/// aplicação UNIFESSPA do mesmo realm pode consultar; roles são exigidas apenas
+/// para operações de escrita, mutação ou administração.
 /// </remarks>
 [ApiController]
 [Route("api")]
+[Authorize]
 [SuppressMessage(
     "Performance",
     "CA1515:Consider making public types internal",
@@ -47,7 +48,6 @@ public sealed class CepController : ControllerBase
     /// → 404. Resolução positiva traz <c>_links</c> para cidade e estado (ADR-0029).
     /// </summary>
     [HttpGet("cep/{cep}")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "cep", Versions = [1])]
     [ProducesResponseType(typeof(CepResolvidoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

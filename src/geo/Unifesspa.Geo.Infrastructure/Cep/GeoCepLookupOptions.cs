@@ -13,7 +13,7 @@ public sealed class GeoCepLookupOptions
     /// Teto de logradouros materializados por CEP (#705). Um CEP tem cardinalidade
     /// baixa de logradouros na prática — só interessam o primário + alternativos —,
     /// mas um CEP patológico (anomalia da fonte DNE) materializaria todas as linhas
-    /// num endpoint <c>[AllowAnonymous]</c>, risco de memória/payload. O teto corta a
+    /// num endpoint de consulta compartilhado, risco de memória/payload. O teto corta a
     /// materialização; atingi-lo é logado como aviso (não mascara a anomalia).
     /// Default 50. Valores &lt; 1 são tratados como 1 pelo reader (defensivo).
     /// </summary>

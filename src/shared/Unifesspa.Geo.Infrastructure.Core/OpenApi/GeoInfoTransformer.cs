@@ -12,6 +12,8 @@ using Microsoft.OpenApi;
 /// </summary>
 public sealed class GeoInfoTransformer : IOpenApiDocumentTransformer
 {
+    public const string BearerSecuritySchemeName = "Bearer";
+
     private readonly GeoOpenApiOptions _options;
 
     public GeoInfoTransformer(IOptions<GeoOpenApiOptions> options)
@@ -57,6 +59,17 @@ public sealed class GeoInfoTransformer : IOpenApiDocumentTransformer
             new OpenApiServer { Url = _options.ProductionServerUrl, Description = "Produção" },
             new OpenApiServer { Url = _options.StagingServerUrl, Description = "Homologação" },
         ];
+
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??=
+            new Dictionary<string, IOpenApiSecurityScheme>(StringComparer.Ordinal);
+        document.Components.SecuritySchemes[BearerSecuritySchemeName] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "Token JWT emitido pelo issuer/realm OIDC configurado para a Geo API.",
+        };
 
         return Task.CompletedTask;
     }

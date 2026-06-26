@@ -69,7 +69,7 @@ internal sealed partial class CepReader : ICepReader
     // chave de desempate estável (nome_normalizado, distrito_id, bairro_id, Id) — o Id
     // (Guid v7) é o tie-breaker final, garantindo o mesmo primário/ordem entre execuções.
     // A materialização é limitada ao teto defensivo (#705): um CEP patológico (anomalia
-    // da fonte) não materializa milhares de linhas num endpoint anônimo. Probe n+1 para
+    // da fonte) não materializa milhares de linhas num endpoint de consulta. Probe n+1 para
     // distinguir truncamento real de cardinalidade igual ao teto.
     private async Task<CepResolvidoDto?> ResolverPorLogradouroAsync(string cep, CancellationToken cancellationToken)
     {

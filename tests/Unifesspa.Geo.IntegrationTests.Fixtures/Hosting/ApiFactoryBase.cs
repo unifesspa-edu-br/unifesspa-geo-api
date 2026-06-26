@@ -187,8 +187,8 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
     /// padrão da maioria das suítes de integração, que não precisam exercitar a validação criptográfica
     /// do JWT em si.
     ///
-    /// Subclasses que exercitam o pipeline real <c>JwtBearer</c> (validação de issuer/audience/lifetime/
-    /// signing key) contra um IdP real — p.ex. Keycloak via Testcontainers — sobrescrevem este método
+    /// Subclasses que exercitam o pipeline real <c>JwtBearer</c> (validação de issuer/lifetime/
+    /// signing key e, quando habilitada, audience) contra um IdP real — p.ex. Keycloak via Testcontainers — sobrescrevem este método
     /// como no-op para PRESERVAR o esquema produtivo registrado pela API.
     /// </summary>
     /// <param name="services">A coleção de serviços do host de teste.</param>

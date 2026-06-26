@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 
 using Idempotency;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
@@ -18,6 +19,9 @@ using Microsoft.OpenApi;
 public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
 {
     private const string ProblemJsonMediaType = "application/problem+json";
+    private const string UnauthorizedStatus = "401";
+    private const string ForbiddenStatus = "403";
+    private const string ProblemDetailsSchemaName = "ProblemDetails";
 
     public Task TransformAsync(
         OpenApiOperation operation,
@@ -30,6 +34,8 @@ public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
         CoerceErrorResponsesToProblemJson(operation);
 
         IList<object> metadata = context.Description.ActionDescriptor.EndpointMetadata;
+
+        ApplyAuthorizationMetadata(operation, context, metadata);
 
         bool requiresIdempotency = metadata.OfType<RequiresIdempotencyKeyAttribute>().Any();
         if (requiresIdempotency)
@@ -62,6 +68,76 @@ public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
         }
 
         return Task.CompletedTask;
+    }
+
+    private static void ApplyAuthorizationMetadata(
+        OpenApiOperation operation,
+        OpenApiOperationTransformerContext context,
+        IList<object> metadata)
+    {
+        if (metadata.OfType<IAllowAnonymous>().Any())
+            return;
+
+        IAuthorizeData[] authorizeData = [.. metadata.OfType<IAuthorizeData>()];
+        if (authorizeData.Length == 0)
+            return;
+
+        operation.Security ??= [];
+        if (!operation.Security.Any(ContainsBearerRequirement))
+        {
+            operation.Security.Add(new OpenApiSecurityRequirement
+            {
+                [
+                    new OpenApiSecuritySchemeReference(
+                        GeoInfoTransformer.BearerSecuritySchemeName,
+                        context.Document,
+                        externalResource: null)
+                ] = [],
+            });
+        }
+
+        AddProblemResponseIfMissing(operation, context, UnauthorizedStatus, "Unauthorized");
+
+        bool hasAuthorizationConstraint = authorizeData.Any(static data =>
+            !string.IsNullOrWhiteSpace(data.Roles) ||
+            !string.IsNullOrWhiteSpace(data.Policy));
+        if (hasAuthorizationConstraint)
+        {
+            AddProblemResponseIfMissing(operation, context, ForbiddenStatus, "Forbidden");
+        }
+    }
+
+    private static bool ContainsBearerRequirement(OpenApiSecurityRequirement requirement) =>
+        requirement.Keys.Any(static scheme =>
+            string.Equals(
+                scheme.Reference?.Id,
+                GeoInfoTransformer.BearerSecuritySchemeName,
+                StringComparison.Ordinal));
+
+    private static void AddProblemResponseIfMissing(
+        OpenApiOperation operation,
+        OpenApiOperationTransformerContext context,
+        string statusCode,
+        string description)
+    {
+        operation.Responses ??= new OpenApiResponses();
+        if (operation.Responses.ContainsKey(statusCode))
+            return;
+
+        operation.Responses[statusCode] = new OpenApiResponse
+        {
+            Description = description,
+            Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
+            {
+                [ProblemJsonMediaType] = new()
+                {
+                    Schema = new OpenApiSchemaReference(
+                        ProblemDetailsSchemaName,
+                        context.Document,
+                        externalResource: null),
+                },
+            },
+        };
     }
 
     private static void CoerceErrorResponsesToProblemJson(OpenApiOperation operation)

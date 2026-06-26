@@ -18,10 +18,17 @@ public sealed class AuthOptions
     public required string Authority { get; init; }
 
     /// <summary>
-    /// Expected audience (<c>aud</c>) claim of the incoming access token.
+    /// Optional expected audience (<c>aud</c>) claim. Geo validates issuer/realm by
+    /// default so any UNIFESSPA application in the configured realm can consume read
+    /// endpoints; set <see cref="ValidateAudience"/> to require a specific client.
     /// </summary>
-    [Required(AllowEmptyStrings = false)]
-    public required string Audience { get; init; }
+    public string? Audience { get; init; }
+
+    /// <summary>
+    /// Enables strict audience validation when an environment intentionally needs to
+    /// restrict tokens to a specific client/application.
+    /// </summary>
+    public bool ValidateAudience { get; init; }
 
     /// <summary>
     /// Clock skew tolerance for token lifetime validation. Default 30s absorbs
