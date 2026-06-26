@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Messaging.SchemaRegistry;
 
 using System;
+
 using Microsoft.Extensions.Options;
 
 /// <summary>

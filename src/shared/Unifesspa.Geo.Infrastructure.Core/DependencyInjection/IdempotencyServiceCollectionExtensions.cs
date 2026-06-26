@@ -1,12 +1,12 @@
 namespace Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 
+using Idempotency;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-
-using Idempotency;
 
 /// <summary>
 /// Registra o stack de Idempotency-Key (ADR-0027): options + store EF

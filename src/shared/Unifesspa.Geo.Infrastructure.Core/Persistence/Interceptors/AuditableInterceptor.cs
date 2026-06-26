@@ -1,11 +1,12 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Persistence.Interceptors;
 
+using Kernel.Domain.Entities;
+using Kernel.Domain.Interfaces;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 using Unifesspa.Geo.Application.Abstractions.Authentication;
-using Kernel.Domain.Entities;
-using Kernel.Domain.Interfaces;
 
 // Auditoria automática de criação/modificação (issue #390 + ADR-0033):
 //   - Para toda EntityBase: preenche CreatedAt em Added e UpdatedAt em

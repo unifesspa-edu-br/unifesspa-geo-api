@@ -5,8 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.API.Formatting;
+using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.Cep;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;

@@ -35,7 +35,7 @@ public sealed class EstadosEndpointTests
         using HttpClient client = _fixture.Factory.CreateClient();
 
         // Página 1 (limit=2) — espera-se header Link com next e _links.self por item.
-        using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client,"/api/estados?limit=2");
+        using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client, "/api/estados?limit=2");
         pagina1.StatusCode.Should().Be(HttpStatusCode.OK);
 
         JsonElement itens1 = await LerArrayAsync(pagina1);
@@ -59,7 +59,7 @@ public sealed class EstadosEndpointTests
         bool viuPrevEmPaginaSeguinte = false;
         while (proximo is not null)
         {
-            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client,proximo);
+            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
             pagina.StatusCode.Should().Be(HttpStatusCode.OK);
             JsonElement itens = await LerArrayAsync(pagina);
             coletadas.AddRange(ExtrairUfs(itens));
@@ -124,7 +124,7 @@ public sealed class EstadosEndpointTests
         await SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateClient();
 
-        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client,"/api/estados/PA");
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/estados/PA");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
@@ -149,7 +149,7 @@ public sealed class EstadosEndpointTests
         await SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateClient();
 
-        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client,$"/api/estados/{uf}");
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/estados/{uf}");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
         using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
         doc.RootElement.GetProperty("uf").GetString().Should().Be("PA");
@@ -161,7 +161,7 @@ public sealed class EstadosEndpointTests
         await SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateClient();
 
-        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client,"/api/estados/ZZ");
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/estados/ZZ");
         resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -173,7 +173,7 @@ public sealed class EstadosEndpointTests
     {
         using HttpClient client = _fixture.Factory.CreateClient();
 
-        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client,rota);
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -210,11 +210,11 @@ public sealed class EstadosEndpointTests
 
         using HttpClient client = _fixture.Factory.CreateClient();
 
-        using HttpResponseMessage lista = await GeoReferenceSeed.Obter(client,"/api/estados?limit=100");
+        using HttpResponseMessage lista = await GeoReferenceSeed.Obter(client, "/api/estados?limit=100");
         JsonElement itens = await LerArrayAsync(lista);
         ExtrairUfs(itens).Should().Contain("PA").And.NotContain("ZZ");
 
-        using HttpResponseMessage detalhe = await GeoReferenceSeed.Obter(client,"/api/estados/ZZ");
+        using HttpResponseMessage detalhe = await GeoReferenceSeed.Obter(client, "/api/estados/ZZ");
         detalhe.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 

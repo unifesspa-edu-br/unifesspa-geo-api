@@ -5,9 +5,9 @@ using System.Data.Common;
 
 using AwesomeAssertions;
 
-using Microsoft.EntityFrameworkCore;
-
 using Infrastructure;
+
+using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Infrastructure.Persistence;
 

@@ -2,11 +2,11 @@ namespace Unifesspa.Geo.IntegrationTests;
 
 using AwesomeAssertions;
 
+using Infrastructure;
+
 using Microsoft.EntityFrameworkCore;
 
 using NetTopologySuite.Geometries;
-
-using Infrastructure;
 
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Persistence;

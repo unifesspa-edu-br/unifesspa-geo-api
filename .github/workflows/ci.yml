@@ -1,0 +1,96 @@
+name: Geo API CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches:
+      - main
+      - 'bootstrap/**'
+      - 'feature/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_VERSION: 10.0.x
+  BUILD_CONFIG: Release
+  SOLUTION_PATH: Unifesspa.Geo.slnx
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build-test:
+    name: Restore, build, test and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.SOLUTION_PATH }} --locked-mode
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIG }} --no-restore
+
+      - name: Run Geo tests
+        run: dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj --configuration ${{ env.BUILD_CONFIG }} --no-build --logger trx
+
+      - name: Verify formatting
+        run: dotnet format ${{ env.SOLUTION_PATH }} --verify-no-changes --no-restore
+
+      - name: Forbidden dependencies
+        run: bash tools/forbidden-deps/check.sh .
+
+      - name: Geo independence gate
+        run: bash tools/forbidden-deps/check-geo-independence.sh .
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.geo
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: unifesspa-geo-api:ci
+          cache-from: type=gha,scope=geo-amd64
+          cache-to: type=gha,scope=geo-amd64,mode=max
+
+      - name: Structural image smoke
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect unifesspa-geo-api:ci --format '{{.Config.User}}')" = "appuser"
+          docker image inspect unifesspa-geo-api:ci --format '{{json .Config.Entrypoint}}' | grep -q 'Unifesspa.Geo.API.dll'

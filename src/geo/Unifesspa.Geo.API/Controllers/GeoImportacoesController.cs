@@ -5,8 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-using Unifesspa.Geo.Application.Abstractions.Authentication;
 using Unifesspa.Geo.Application.Abstractions;
+using Unifesspa.Geo.Application.Abstractions.Authentication;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
