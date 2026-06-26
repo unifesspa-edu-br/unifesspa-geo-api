@@ -9,7 +9,8 @@ using Infrastructure;
 /// <summary>
 /// Prova que a API do módulo Geo sobe e fica pronta contra um Postgres com
 /// PostGIS provisionado (CA-02): o schema é migrado no startup (extensão postgis
-/// + tabela-sonda) e <c>/health/ready</c> responde 200.
+/// + tabela-sonda) e os health checks <c>/health/live</c> e
+/// <c>/health/ready</c> respondem 200.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
 public sealed class GeoFundacaoTests
@@ -27,6 +28,16 @@ public sealed class GeoFundacaoTests
         using HttpClient client = _fixture.Factory.CreateClient();
 
         HttpResponseMessage response = await client.GetAsync(new Uri("/health/ready", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact(DisplayName = "GET /health/live responde 200 sem depender de infraestrutura externa")]
+    public async Task HealthLive_SemChecksExternos_Responde200()
+    {
+        using HttpClient client = _fixture.Factory.CreateClient();
+
+        HttpResponseMessage response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
