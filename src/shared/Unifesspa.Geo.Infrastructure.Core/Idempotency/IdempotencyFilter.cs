@@ -8,17 +8,19 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Cryptography;
+
+using Errors;
+
+using Kernel.Results;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
 
-using Cryptography;
-using Errors;
-
 using Unifesspa.Geo.Application.Abstractions.Authentication;
-using Kernel.Results;
 
 /// <summary>
 /// Resource filter (roda antes de model binding e antes do action filter)

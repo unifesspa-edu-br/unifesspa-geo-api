@@ -1,10 +1,11 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Persistence.Interceptors;
 
+using Kernel.Domain.Interfaces;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 using Unifesspa.Geo.Application.Abstractions.Authentication;
-using Kernel.Domain.Interfaces;
 
 // LGPD audit trail (issue #127): converte DELETE em UPDATE preservando o
 // identificador do usuário responsável em DeletedBy. Em requests autenticados,

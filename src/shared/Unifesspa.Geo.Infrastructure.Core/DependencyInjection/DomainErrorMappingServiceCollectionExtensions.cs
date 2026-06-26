@@ -1,8 +1,8 @@
 namespace Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 
-using Microsoft.Extensions.DependencyInjection;
-
 using Errors;
+
+using Microsoft.Extensions.DependencyInjection;
 
 public static class DomainErrorMappingServiceCollectionExtensions
 {

@@ -2,16 +2,6 @@ using Microsoft.AspNetCore.OpenApi;
 
 using Serilog;
 
-using Unifesspa.Geo.Infrastructure.Core.Authentication;
-using Unifesspa.Geo.Infrastructure.Core.Cors;
-using Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
-using Unifesspa.Geo.Infrastructure.Core.Errors;
-using Unifesspa.Geo.Infrastructure.Core.Logging;
-using Unifesspa.Geo.Infrastructure.Core.Messaging;
-using Unifesspa.Geo.Infrastructure.Core.Middleware;
-using Unifesspa.Geo.Infrastructure.Core.Observability;
-using Unifesspa.Geo.Infrastructure.Core.Profile;
-using Unifesspa.Geo.Infrastructure.Core.Smoke;
 using Unifesspa.Geo.API.Errors;
 using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.API.Hateoas;
@@ -20,8 +10,18 @@ using Unifesspa.Geo.Application;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure;
 using Unifesspa.Geo.Infrastructure.Cep;
-using Unifesspa.Geo.Infrastructure.Persistence;
+using Unifesspa.Geo.Infrastructure.Core.Authentication;
+using Unifesspa.Geo.Infrastructure.Core.Cors;
+using Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
+using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
+using Unifesspa.Geo.Infrastructure.Core.Logging;
+using Unifesspa.Geo.Infrastructure.Core.Messaging;
+using Unifesspa.Geo.Infrastructure.Core.Middleware;
+using Unifesspa.Geo.Infrastructure.Core.Observability;
+using Unifesspa.Geo.Infrastructure.Core.Profile;
+using Unifesspa.Geo.Infrastructure.Core.Smoke;
+using Unifesspa.Geo.Infrastructure.Persistence;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 

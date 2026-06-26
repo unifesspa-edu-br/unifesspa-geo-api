@@ -1,9 +1,10 @@
 namespace Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 
+using Messaging;
+
 using Microsoft.Extensions.DependencyInjection;
 
 using Unifesspa.Geo.Application.Abstractions.Messaging;
-using Messaging;
 
 public static class WolverineMessagingServiceCollectionExtensions
 {

@@ -1,0 +1,110 @@
+name: Publish Geo Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish GHCR image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate semver tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag '$tag' must be vX.Y.Z or vX.Y.Z-prerelease."
+            exit 1
+          fi
+
+      - name: Validate tag is reachable from main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          tag_commit=$(git rev-parse "${GITHUB_REF}^{commit}")
+          if ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} points to $tag_commit outside origin/main."
+            exit 1
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/unifesspa-geo-api
+          flavor: |
+            latest=false
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=ref,event=tag
+          labels: |
+            org.opencontainers.image.title=unifesspa-geo-api
+            org.opencontainers.image.description=API Geo institucional transversal da UNIFESSPA
+            org.opencontainers.image.vendor=Universidade Federal do Sul e Sudeste do Para
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Build local image for structural smoke
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.geo
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: smoke/unifesspa-geo-api:ci
+          cache-from: type=gha,scope=geo-amd64
+          cache-to: type=gha,scope=geo-amd64,mode=max
+
+      - name: Structural image smoke
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect smoke/unifesspa-geo-api:ci --format '{{.Config.User}}')" = "appuser"
+          docker image inspect smoke/unifesspa-geo-api:ci --format '{{json .Config.Entrypoint}}' | grep -q 'Unifesspa.Geo.API.dll'
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.geo
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=gha,scope=geo-amd64
+            type=gha,scope=geo-multiarch
+          cache-to: type=gha,scope=geo-multiarch,mode=max

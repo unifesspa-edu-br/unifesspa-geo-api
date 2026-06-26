@@ -16,13 +16,13 @@ using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Infrastructure.Core.Observability;
 using Unifesspa.Geo.Infrastructure.Observability;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
-using Unifesspa.Geo.Infrastructure.Core.Observability;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>

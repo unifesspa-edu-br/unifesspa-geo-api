@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 using Testcontainers.PostgreSql;
 
-using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Core.Persistence.Interceptors;
+using Unifesspa.Geo.Infrastructure.Persistence;
 
 /// <summary>
 /// Provisiona um Postgres efêmero com <strong>PostGIS</strong> (Testcontainers,
