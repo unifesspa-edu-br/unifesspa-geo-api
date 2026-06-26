@@ -14,13 +14,14 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Infrastructure.Core.Pagination;
 
 /// <summary>
-/// Endpoints públicos de leitura de Cidades — reference data
-/// (<c>[AllowAnonymous]</c>, sem Idempotency-Key, carga via ETL/F3):
+/// Endpoints autenticados de leitura de Cidades — reference data
+/// (sem role administrativa, sem Idempotency-Key, carga via ETL/F3):
 /// <c>GET /api/cidades?uf=&amp;q=</c> (lista paginada com filtro por UF e busca
 /// textual) e <c>GET /api/cidades/{codigoIbge}</c> (detalhe pela chave natural).
 /// </summary>
 [ApiController]
 [Route("api")]
+[Authorize]
 [SuppressMessage(
     "Performance",
     "CA1515:Consider making public types internal",
@@ -54,7 +55,6 @@ public sealed partial class CidadesController : ControllerBase
     /// o <c>cursor</c> do header <c>Link</c>.
     /// </summary>
     [HttpGet("cidades")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "cidade", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<CidadeResumoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -97,7 +97,6 @@ public sealed partial class CidadesController : ControllerBase
     /// boundary, ADR-0031); bem-formado e inexistente → 404.
     /// </summary>
     [HttpGet("cidades/{codigoIbge}")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "cidade", Versions = [1])]
     [ProducesResponseType(typeof(CidadeDetalheDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

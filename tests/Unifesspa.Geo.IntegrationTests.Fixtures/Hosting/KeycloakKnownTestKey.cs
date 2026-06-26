@@ -11,7 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 /// validação criptográfica do <c>JwtBearer</c> da API.
 ///
 /// O propósito é permitir que testes E2E forjem tokens com assinatura válida e isolem ESPECIFICAMENTE
-/// validações lógicas (issuer, audience, lifetime) — em vez de cair sempre em
+/// validações lógicas (issuer, audience opcional, lifetime) — em vez de cair sempre em
 /// <c>ValidateIssuerSigningKey</c>. Sem isso, um regressão que desligue <c>ValidateIssuer</c> mas
 /// mantenha a checagem de signing key ainda passaria pelos testes, dando falsa cobertura.
 ///

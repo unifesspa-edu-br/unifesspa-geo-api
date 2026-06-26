@@ -14,13 +14,14 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Infrastructure.Core.Pagination;
 
 /// <summary>
-/// Endpoints públicos de leitura de Estados (UFs) — reference data
-/// (<c>[AllowAnonymous]</c>, sem Idempotency-Key, carga via ETL/F3):
+/// Endpoints autenticados de leitura de Estados (UFs) — reference data
+/// (sem role administrativa, sem Idempotency-Key, carga via ETL/F3):
 /// <c>GET /api/estados</c> (lista paginada por cursor) e
 /// <c>GET /api/estados/{uf}</c> (detalhe pela chave natural <c>uf</c>).
 /// </summary>
 [ApiController]
 [Route("api")]
+[Authorize]
 [SuppressMessage(
     "Performance",
     "CA1515:Consider making public types internal",
@@ -44,7 +45,6 @@ public sealed partial class EstadosController : ControllerBase
     /// carrega seu <c>_links.self</c> resolvível para <c>GET /api/estados/{uf}</c>.
     /// </summary>
     [HttpGet("estados")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "estado", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<EstadoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -74,7 +74,6 @@ public sealed partial class EstadosController : ControllerBase
     /// inválido → 400 (decode no boundary, ADR-0031); bem-formado e inexistente → 404.
     /// </summary>
     [HttpGet("estados/{uf}")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "estado", Versions = [1])]
     [ProducesResponseType(typeof(EstadoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

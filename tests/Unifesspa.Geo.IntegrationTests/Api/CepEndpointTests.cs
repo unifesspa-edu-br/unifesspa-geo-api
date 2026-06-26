@@ -18,8 +18,8 @@ using Unifesspa.Geo.Infrastructure.Persistence.Readers;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Lookup de CEP (#676) contra a API real + PostGIS. Read-only
-/// <c>[AllowAnonymous]</c>. Cobre CA-01..CA-06 e CA-09 (a cobertura de cache-aside
+/// Lookup de CEP (#676) contra a API real + PostGIS. Consulta autenticada sem role
+/// administrativa. Cobre CA-01..CA-06 e CA-09 (a cobertura de cache-aside
 /// CA-07/CA-08 fica nos testes de unidade do <c>CepResolver</c>, que provam "hit não
 /// toca o banco" e "404 não é cacheado" com precisão). O cache degrada para o banco
 /// (Redis vazio na <see cref="GeoApiFactory"/>). A collection é serial; cada teste
@@ -39,7 +39,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ResolveLogradouro()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/01001000");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -68,7 +68,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ComplementoUnico()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/01001000");
         using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
@@ -79,7 +79,7 @@ public sealed class CepEndpointTests
     public async Task Cep_MultiplosComplementos_Null()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/01002000");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -92,7 +92,7 @@ public sealed class CepEndpointTests
     public async Task Cep_MultiplosLogradouros_DesempateEstavel()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         async Task<(string Primario, IReadOnlyList<string> Alternativos)> ResolverAsync()
         {
@@ -122,7 +122,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ResolvePorFaixaCidade()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/68500005");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -140,7 +140,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ResolvePorFaixaBairro()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/68507100");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -157,7 +157,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ResolvePorFaixaDistrito()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // 68508100 está na faixa de cidade (Marabá) e na faixa de distrito (Nova Marabá),
         // mas NÃO na faixa de bairro (68507000-68507999) → resolve no nível distrito.
@@ -177,7 +177,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ResolveGrandeUsuario_CidadeDaFaixa()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/01051900");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -195,7 +195,7 @@ public sealed class CepEndpointTests
     public async Task Cep_ComMascara_Resolve()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/01001-000");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -210,7 +210,7 @@ public sealed class CepEndpointTests
     [InlineData("/api/cep/abcdefgh")]
     public async Task Cep_Malformado_400(string rota)
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -220,7 +220,7 @@ public sealed class CepEndpointTests
     public async Task Cep_Inexistente_404()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/99999999");
         resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -230,7 +230,7 @@ public sealed class CepEndpointTests
     public async Task Cep_LogradouroStale_NaoResolve()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // 30000000 só tem um logradouro stale e não está em nenhuma faixa → 404.
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/30000000");
@@ -241,7 +241,7 @@ public sealed class CepEndpointTests
     public async Task Cep_VendorMime_406()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpRequestMessage incompativel = new(HttpMethod.Get, "/api/cep/01001000");
         incompativel.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.uniplus.cep.v2+json"));

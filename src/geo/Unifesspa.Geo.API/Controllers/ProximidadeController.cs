@@ -15,8 +15,8 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
 /// <summary>
 /// Consultas geoespaciais de proximidade (ADR-0091) — reference data
-/// (<c>[AllowAnonymous]</c>, sem Idempotency-Key): dado um ponto (lat/long) e um raio,
-/// devolve as cidades (<c>GET /api/cidades/proximas</c>) ou logradouros
+/// (autenticadas, sem role administrativa e sem Idempotency-Key): dado um ponto
+/// (lat/long) e um raio, devolve as cidades (<c>GET /api/cidades/proximas</c>) ou logradouros
 /// (<c>GET /api/logradouros/proximos</c>) dentro do raio, ordenados por distância
 /// crescente (top-N). Filtro por <c>ST_DWithin</c> (índice GIST) + ordenação por
 /// <c>ST_Distance</c>. Ranking por distância — sem cursor/paginação (ADR-0026/0089
@@ -24,6 +24,7 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 /// </summary>
 [ApiController]
 [Route("api")]
+[Authorize]
 [SuppressMessage(
     "Performance",
     "CA1515:Consider making public types internal",
@@ -54,7 +55,6 @@ public sealed class ProximidadeController : ControllerBase
     /// por distância crescente. Parâmetro ausente ou fora de faixa → 400 (ADR-0031).
     /// </summary>
     [HttpGet("cidades/proximas")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "cidade-proxima", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<CidadeProximaDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -87,7 +87,6 @@ public sealed class ProximidadeController : ControllerBase
     /// próximo deste ponto". Parâmetro ausente ou fora de faixa → 400 (ADR-0031).
     /// </summary>
     [HttpGet("logradouros/proximos")]
-    [AllowAnonymous]
     [VendorMediaType(Resource = "logradouro-proximo", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<LogradouroProximoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

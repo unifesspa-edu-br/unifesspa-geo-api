@@ -15,7 +15,7 @@ using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
 /// Consulta de proximidade geoespacial (#678) contra a API real + PostGIS. Read-only
-/// <c>[AllowAnonymous]</c>. Ponto de referência fixo próximo a Marabá
+/// autenticada sem role administrativa. Ponto de referência fixo próximo a Marabá
 /// (<c>lat=-5.35</c>, <c>long=-49.13</c>). A collection é serial; cada teste TRUNCA e
 /// semeia cidades/logradouros com coordenada (<c>geography(Point,4326)</c>).
 /// </summary>
@@ -33,7 +33,7 @@ public sealed class ProximidadeEndpointTests
     public async Task CidadesProximas_OrdenaPorDistancia()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, "/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=100");
@@ -61,7 +61,7 @@ public sealed class ProximidadeEndpointTests
     public async Task LogradourosProximos_PorPonto()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, "/api/logradouros/proximos?lat=-5.35&long=-49.13&raioKm=50");
@@ -95,7 +95,7 @@ public sealed class ProximidadeEndpointTests
     [InlineData("/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=10&limit=0")] // limit <= 0
     public async Task CidadesProximas_Validacao_400(string rota)
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -105,7 +105,7 @@ public sealed class ProximidadeEndpointTests
     public async Task CidadesProximas_SemCoordenada_Exclui()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, "/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=100");
@@ -120,7 +120,7 @@ public sealed class ProximidadeEndpointTests
     public async Task CidadesProximas_RaioVazio_ListaVazia()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, "/api/cidades/proximas?lat=0&long=-30&raioKm=10");
@@ -134,7 +134,7 @@ public sealed class ProximidadeEndpointTests
     public async Task CidadesProximas_Limit_RespeitaTopN()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(
             client, "/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=200&limit=1");
@@ -148,7 +148,7 @@ public sealed class ProximidadeEndpointTests
     public async Task CidadesProximas_VendorMime_406()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
         const string rota = "/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=100";
 
         using HttpRequestMessage incompativel = new(HttpMethod.Get, rota);
@@ -166,7 +166,7 @@ public sealed class ProximidadeEndpointTests
     public async Task CidadesProximas_OrdemCoordenadas_LongLat()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // Correto: (lat=-5.35, long=-49.13) próximo a Marabá.
         using HttpResponseMessage correto = await GeoReferenceSeed.Obter(
@@ -191,7 +191,7 @@ public sealed class ProximidadeEndpointTests
     [Fact(DisplayName = "Contrato: lat/long/raioKm são required no OpenAPI; limit é opcional")]
     public async Task Contrato_ParametrosObrigatorios_MarcadosRequired()
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage spec = await GeoReferenceSeed.Obter(client, "/openapi/geo.json");
         spec.StatusCode.Should().Be(HttpStatusCode.OK);

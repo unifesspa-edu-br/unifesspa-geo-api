@@ -16,8 +16,9 @@ using Unifesspa.Geo.Application.Abstractions.Authentication;
 
 /// <summary>
 /// Extension methods for configuring OIDC/JWT Bearer authentication.
-/// Validation is OIDC-standard (issuer, audience, signing key, lifetime); the Keycloak
-/// reference in ADR-008 is about the current provider, not the code contract.
+/// Validation is OIDC-standard (issuer/realm, signing key, lifetime); audience
+/// validation is optional because Geo is consumed by multiple UNIFESSPA applications
+/// in the same configured realm.
 /// </summary>
 public static class OidcAuthenticationConfiguration
 {
@@ -48,6 +49,9 @@ public static class OidcAuthenticationConfiguration
                     || options.Authority is not string authority
                     || !authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase),
                 "Auth:Authority must use HTTPS outside Development.")
+            .Validate(
+                options => !options.ValidateAudience || !string.IsNullOrWhiteSpace(options.Audience),
+                "Auth:Audience must be set when Auth:ValidateAudience is true.")
             .ValidateOnStart();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -59,14 +63,15 @@ public static class OidcAuthenticationConfiguration
                 AuthOptions auth = authAccessor.Value;
 
                 jwtOptions.Authority = auth.Authority;
-                jwtOptions.Audience = auth.Audience;
+                jwtOptions.Audience = auth.ValidateAudience ? auth.Audience : null;
                 jwtOptions.RequireHttpsMetadata = requireHttps;
                 jwtOptions.MapInboundClaims = false;
 
                 jwtOptions.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidateAudience = true,
+                    ValidateAudience = auth.ValidateAudience,
+                    ValidAudience = auth.ValidateAudience ? auth.Audience : null,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = auth.ClockSkew,

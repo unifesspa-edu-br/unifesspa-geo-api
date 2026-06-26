@@ -12,8 +12,8 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Endpoints públicos de leitura de Cidades (#675) contra a API real + PostGIS.
-/// Read-only <c>[AllowAnonymous]</c>. Cobre CA-02 a CA-08. A collection é serial;
+/// Endpoints de leitura autenticada de Cidades (#675) contra a API real + PostGIS.
+/// Read-only sem role administrativa. Cobre CA-02 a CA-08. A collection é serial;
 /// cada teste TRUNCA e semeia.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
@@ -30,7 +30,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidades_FiltraPorUf()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage soPara = await GeoReferenceSeed.Obter(client, "/api/cidades?uf=PA&limit=100");
         soPara.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -50,7 +50,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidades_Busca_AcentoInsensivel(string termo)
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/cidades?q={Uri.EscapeDataString(termo)}&limit=100");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -64,7 +64,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidades_FiltroMaisCursor_Persiste()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // 'a' casa Marabá e Parauapebas (PA); Óbidos (PA, "obidos") NÃO casa.
         // limit=1 força paginação — exercita o filtro em cada página seguida.
@@ -95,7 +95,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidades_OrdenadasAlfabeticamente()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         List<string> nomes = [];
         string? proximo = "/api/cidades?limit=2";
@@ -128,7 +128,7 @@ public sealed class CidadesEndpointTests
             await ctx.SaveChangesAsync();
         }
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         List<string> nomes = [];
         string? proximo = "/api/cidades?limit=1";
@@ -160,7 +160,7 @@ public sealed class CidadesEndpointTests
             await ctx.SaveChangesAsync();
         }
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         async Task<List<string>> ColetarCodigosAsync()
         {
@@ -192,7 +192,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidades_Busca_MetacaractereLiteral(string termo)
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // Sem escape, "%"/"_" casariam quase tudo. Com o escape do reader, são texto
         // literal: nenhum nome contém '%' ou '_', então o resultado é vazio.
@@ -206,7 +206,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidade_Detalhe_PorCodigoIbge()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cidades/1500402");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -244,7 +244,7 @@ public sealed class CidadesEndpointTests
             await ctx.SaveChangesAsync();
         }
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cidades/1500701");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -257,7 +257,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidade_Detalhe_Inexistente_404()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cidades/9999999");
         resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -269,7 +269,7 @@ public sealed class CidadesEndpointTests
     [InlineData("/api/cidades/15004020")]
     public async Task Cidade_Detalhe_Malformado_400(string rota)
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -279,7 +279,7 @@ public sealed class CidadesEndpointTests
     public async Task Cidades_VendorMime_406()
     {
         await SemearAsync();
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpRequestMessage incompativel = new(HttpMethod.Get, "/api/cidades");
         incompativel.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.uniplus.cidade.v2+json"));
@@ -295,7 +295,7 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "CA-08: termo de busca acima do limite retorna 400")]
     public async Task Cidades_Busca_Longa_400()
     {
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         string termoLongo = new('a', 257);
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/cidades?q={termoLongo}");
@@ -318,7 +318,7 @@ public sealed class CidadesEndpointTests
             await ctx.SaveChangesAsync();
         }
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage busca = await GeoReferenceSeed.Obter(client, "/api/cidades?q=acara&limit=100");
         (await LerArrayAsync(busca)).GetArrayLength().Should().Be(0, "ILIKE sobre coluna NULL não casa");
@@ -345,7 +345,7 @@ public sealed class CidadesEndpointTests
             await ctx.SaveChangesAsync();
         }
 
-        using HttpClient client = _fixture.Factory.CreateClient();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage lista = await GeoReferenceSeed.Obter(client, "/api/cidades?limit=100");
         (await LerArrayAsync(lista)).EnumerateArray()

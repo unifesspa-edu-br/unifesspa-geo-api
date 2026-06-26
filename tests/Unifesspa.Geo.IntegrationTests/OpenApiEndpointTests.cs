@@ -40,6 +40,24 @@ public sealed class OpenApiEndpointTests : IClassFixture<GeoOpenApiFactory>
         root.GetProperty("openapi").GetString().Should().StartWith("3.");
         root.GetProperty("info").GetProperty("title").GetString().Should().Be("Uni+ — Módulo Geo");
         root.GetProperty("info").GetProperty("version").GetString().Should().Be("1.0.0");
+
+        JsonElement bearer = root
+            .GetProperty("components")
+            .GetProperty("securitySchemes")
+            .GetProperty("Bearer");
+        bearer.GetProperty("type").GetString().Should().Be("http");
+        bearer.GetProperty("scheme").GetString().Should().Be("bearer");
+
+        JsonElement estadosGet = root.GetProperty("paths").GetProperty("/api/estados").GetProperty("get");
+        estadosGet.GetProperty("security")[0].GetProperty("Bearer").GetArrayLength().Should().Be(0);
+        estadosGet.GetProperty("responses").TryGetProperty("401", out _).Should().BeTrue();
+        estadosGet.GetProperty("responses").TryGetProperty("403", out _).Should().BeFalse(
+            "consultas Geo exigem token do realm, mas nao role administrativa");
+
+        JsonElement adminPost = root.GetProperty("paths").GetProperty("/api/admin/geo/importacoes").GetProperty("post");
+        adminPost.GetProperty("security")[0].GetProperty("Bearer").GetArrayLength().Should().Be(0);
+        adminPost.GetProperty("responses").TryGetProperty("403", out _).Should().BeTrue(
+            "operacoes de administracao exigem role");
     }
 
     [Fact(DisplayName = "Spec runtime de Geo bate com baseline committed em contracts/")]

@@ -8,17 +8,17 @@ informed:
   - "Equipe Uni+"
 ---
 
-# ADR-0093: Rate-limiting de endpoints públicos de reference data na borda, não no app
+# ADR-0093: Rate-limiting de endpoints de consulta de reference data na borda, não no app
 
 ## Contexto e enunciado do problema
 
-O módulo `Geo` ([ADR-0090](0090-modulo-geo-localidades.md)) expõe endpoints de consulta de reference data marcados `[AllowAnonymous]` — lookup de CEP (`GET /api/cep/{cep}`), listagens de estados/cidades, hierarquia/autocomplete e proximidade. São dados públicos (IBGE/DNE), sem autenticação, e o lookup de CEP em particular tem um **caminho frio** (cache miss / Redis fora) que encadeia consultas sobre as tabelas de faixa.
+O módulo `Geo` ([ADR-0090](0090-modulo-geo-localidades.md)) expõe endpoints de consulta de reference data — lookup de CEP (`GET /api/cep/{cep}`), listagens de estados/cidades, hierarquia/autocomplete e proximidade. São dados públicos (IBGE/DNE), mas a API dedicada exige JWT emitido pelo realm UNIFESSPA configurado; a consulta não exige role administrativa. O lookup de CEP em particular tem um **caminho frio** (cache miss / Redis fora) que encadeia consultas sobre as tabelas de faixa.
 
-Mesmo com o cache-aside por selo de versão ([#674], memoizado em processo por [#703]) e o índice de range do caminho frio ([#704]), um endpoint anônimo é alvo natural de tráfego volumétrico/abuso. A pergunta é **onde** aplicar o controle de taxa (rate-limiting): no próprio aplicativo (middleware `RateLimiter` do ASP.NET Core, por endpoint/módulo) ou na **borda** (gateway de ingresso, ex.: Traefik), e se o controle no app deve entrar já.
+Mesmo com o cache-aside por selo de versão ([#674], memoizado em processo por [#703]) e o índice de range do caminho frio ([#704]), endpoints de consulta compartilhados por várias aplicações continuam sujeitos a tráfego volumétrico/abuso. A pergunta é **onde** aplicar o controle de taxa (rate-limiting): no próprio aplicativo (middleware `RateLimiter` do ASP.NET Core, por endpoint/módulo) ou na **borda** (gateway de ingresso, ex.: Traefik), e se o controle no app deve entrar já.
 
 ## Drivers da decisão
 
-- **Preocupação transversal** — rate-limiting de endpoints anônimos vale para todos os módulos, não só o `Geo`; aplicá-lo por módulo gera divergência de política.
+- **Preocupação transversal** — rate-limiting de endpoints de consulta institucional vale para todos os módulos, não só o `Geo`; aplicá-lo por módulo gera divergência de política.
 - **Ingresso único** — todo tráfego externo passa pelo gateway, que já termina TLS e roteia; é o ponto natural para política uniforme.
 - **Defesa em profundidade** — o índice de range ([#704]) e o cache ([#674]/[#703]) já amortecem a pressão no banco; o limitador é a camada contra abuso volumétrico, não a única defesa.
 - **Simplicidade do app** — manter o app focado em lógica de domínio, sem política operacional de taxa espalhada em cada API.
@@ -32,9 +32,9 @@ Mesmo com o cache-aside por selo de versão ([#674], memoizado em processo por [
 
 ## Resultado da decisão
 
-**Escolhida:** "B — rate-limiting na borda (gateway), controle no app adiado", porque o controle de taxa de endpoints anônimos é uma preocupação transversal de infraestrutura, mais bem aplicada de forma uniforme no ingresso único do que replicada e divergente em cada módulo.
+**Escolhida:** "B — rate-limiting na borda (gateway), controle no app adiado", porque o controle de taxa de endpoints de consulta institucional é uma preocupação transversal de infraestrutura, mais bem aplicada de forma uniforme no ingresso único do que replicada e divergente em cada módulo.
 
-A política de taxa (limite, burst, granularidade por IP) vive na configuração do gateway (Traefik), no repositório de infraestrutura, e cobre uniformemente os endpoints `[AllowAnonymous]` de reference data de todos os módulos. O caminho frio do lookup de CEP permanece protegido em profundidade pelo índice de range ([#704]) e pelo cache por selo ([#674]/[#703]). O limitador no app fica **disponível como escalonamento futuro** — se surgir necessidade de política por endpoint que o gateway não exprima bem (ex.: cota atrelada à identidade autenticada), entra com a sua própria ADR. Os controllers afetados carregam um comentário apontando para esta decisão.
+A política de taxa (limite, burst, granularidade por IP ou por identidade, conforme suporte do gateway) vive na configuração do gateway (Traefik), no repositório de infraestrutura, e cobre uniformemente os endpoints de consulta de reference data de todos os módulos. O caminho frio do lookup de CEP permanece protegido em profundidade pelo índice de range ([#704]) e pelo cache por selo ([#674]/[#703]). O limitador no app fica **disponível como escalonamento futuro** — se surgir necessidade de política por endpoint que o gateway não exprima bem, entra com a sua própria ADR.
 
 ## Consequências
 
@@ -55,7 +55,7 @@ A política de taxa (limite, burst, granularidade por IP) vive na configuração
 
 ## Confirmação
 
-- Comentário em `CepController` (e demais controllers anônimos do `Geo`, conforme evoluírem) apontando para esta ADR.
+- Comentário em `CepController` (e demais controllers de consulta do `Geo`, conforme evoluírem) apontando para esta ADR.
 - A configuração de taxa do gateway materializa a política; um escalonamento para limitador no app adicionaria `AddRateLimiter` com ADR própria.
 
 ## Prós e contras das opções
@@ -77,6 +77,6 @@ A política de taxa (limite, burst, granularidade por IP) vive na configuração
 
 ## Mais informações
 
-- Aplica-se aos endpoints `[AllowAnonymous]` de reference data do módulo `Geo` ([ADR-0090](0090-modulo-geo-localidades.md)).
+- Aplica-se aos endpoints autenticados de consulta de reference data do módulo `Geo` ([ADR-0090](0090-modulo-geo-localidades.md)).
 - Mitigações de caminho frio do lookup de CEP: índice de range das faixas (#704), cache-aside por selo de versão (#674) e memoização do selo em processo (#703).
 - Origem: revisão do PR #701 (Story #676 — API de lookup de CEP).
