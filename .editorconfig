@@ -1,0 +1,100 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.cs]
+# Organização de usings
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = true
+
+# Preferências de tipo
+csharp_style_var_for_built_in_types = false:warning
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:warning
+
+# Namespace
+csharp_style_namespace_declarations = file_scoped:warning
+
+# Nullable
+dotnet_diagnostic.CS8600.severity = error
+dotnet_diagnostic.CS8601.severity = error
+dotnet_diagnostic.CS8602.severity = error
+dotnet_diagnostic.CS8603.severity = error
+dotnet_diagnostic.CS8604.severity = error
+
+# Naming conventions — ordem importa: Roslyn aplica a primeira regra que casa,
+# então constantes e static readonly precisam vir ANTES da regra geral de
+# private_fields, senão IDE1006 marca `const Foo` como violação por não ter
+# prefixo `_`. Convenção .NET (BCL, runtime, MS guidelines):
+#   - const                → PascalCase
+#   - static readonly      → PascalCase
+#   - private field        → _camelCase
+#   - private static field → _camelCase (regra geral; sem distinção especial)
+
+# Constantes em qualquer accessibility → PascalCase
+dotnet_naming_rule.constants_should_be_pascal_case.severity = warning
+dotnet_naming_rule.constants_should_be_pascal_case.symbols = constants
+dotnet_naming_rule.constants_should_be_pascal_case.style = pascal_case
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+
+# Static readonly em qualquer accessibility → PascalCase
+dotnet_naming_rule.static_readonly_should_be_pascal_case.severity = warning
+dotnet_naming_rule.static_readonly_should_be_pascal_case.symbols = static_readonly_fields
+dotnet_naming_rule.static_readonly_should_be_pascal_case.style = pascal_case
+dotnet_naming_symbols.static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_fields.applicable_accessibilities = *
+dotnet_naming_symbols.static_readonly_fields.required_modifiers = static, readonly
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+# Private fields (instance): _camelCase
+dotnet_naming_rule.private_fields_should_be_camel_case.severity = warning
+dotnet_naming_rule.private_fields_should_be_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_should_be_camel_case.style = camel_case_underscore_prefix
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.camel_case_underscore_prefix.required_prefix = _
+dotnet_naming_style.camel_case_underscore_prefix.capitalization = camel_case
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# Camada API (hosts ASP.NET Core) — não possui SynchronizationContext, ConfigureAwait(false)
+# é no-op. Library code em Infrastructure.Core mantém ConfigureAwait(false) e CA2007 ativo.
+[src/**/*.API/**.cs]
+dotnet_diagnostic.CA2007.severity = none
+
+# Controllers e Middleware internos são instanciados via reflexão pelo framework
+# (routing MVC, app.UseMiddleware<T>). CA1812 não detecta essa instanciação.
+[src/**/*.API/{Controllers,Middleware}/**.cs]
+dotnet_diagnostic.CA1812.severity = none
+
+# Projetos de teste — convenções xUnit:
+# - CA1707: nomes de métodos com underscores (Fato_QuandoCondicao_DeveProduzirResultado)
+# - CA2007: xUnit não usa SynchronizationContext; ConfigureAwait é desnecessário
+# - CA1861: literais de array em assertions priorizam legibilidade; não é hot path
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1861.severity = none
+
+# Migrations EF Core são auto-geradas pelo tool — analyzers que cobram
+# defensive coding, perf de array literal ou estilo C# moderno não se aplicam:
+# - CA1062: tool não emite ArgumentNullException no migrationBuilder
+# - CA1861: tool emite arrays inline (`new[] { ... }`) em CreateIndex
+# - IDE0161: tool emite namespace-block clássico, não file-scoped
+[src/**/Migrations/**.cs]
+dotnet_diagnostic.CA1062.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.IDE0161.severity = none
