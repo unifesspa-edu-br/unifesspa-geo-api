@@ -432,7 +432,7 @@ public sealed class EtlAtualizacaoPeriodicaTests
         {
             InstrumentPublished = (instrumento, l) =>
             {
-                if (instrumento.Meter.Name == UniPlusServiceNames.Geo &&
+                if (instrumento.Meter.Name == GeoServiceNames.Geo &&
                     instrumento.Name.StartsWith("geo.etl.", StringComparison.Ordinal))
                 {
                     l.EnableMeasurementEvents(instrumento);

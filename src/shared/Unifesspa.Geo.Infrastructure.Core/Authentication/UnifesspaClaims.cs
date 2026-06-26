@@ -15,7 +15,7 @@ namespace Unifesspa.Geo.Infrastructure.Core.Authentication;
 /// <c>uniplus-profile</c>, protocol mappers <c>cpf</c> e <c>nomeSocial</c>.
 /// </para>
 /// </remarks>
-internal static class UniPlusClaims
+internal static class UnifesspaClaims
 {
     public const string Cpf = "cpf";
     public const string NomeSocial = "nomeSocial";

@@ -18,7 +18,7 @@ public sealed class GeoDbContextDesignTimeFactory
     public GeoDbContext CreateDbContext(string[] args)
     {
         return new GeoDbContext(
-            UniPlusDbContextOptionsExtensions.BuildDesignTimeOptions<GeoDbContext>(
+            GeoDbContextOptionsExtensions.BuildDesignTimeOptions<GeoDbContext>(
                 npgsql => npgsql.UseNetTopologySuite()));
     }
 }

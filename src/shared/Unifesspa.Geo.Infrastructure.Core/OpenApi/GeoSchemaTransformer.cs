@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
 /// <summary>
-/// Schema transformer que aplica invariantes de domínio Uni+ a propriedades
+/// Schema transformer que aplica invariantes de domínio a propriedades
 /// tipadas. Hoje cobre <c>cpf</c> (regex de 11 dígitos + nota PII).
 /// <para>
 /// O <c>code</c> de ProblemDetails NÃO é coberto aqui: o campo vive em
@@ -14,7 +14,7 @@ using Microsoft.OpenApi;
 /// do spec gerado pela rule Spectral <c>uniplus-error-code-format</c>.
 /// </para>
 /// </summary>
-public sealed class UniPlusSchemaTransformer : IOpenApiSchemaTransformer
+public sealed class GeoSchemaTransformer : IOpenApiSchemaTransformer
 {
     public Task TransformAsync(
         OpenApiSchema schema,

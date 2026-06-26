@@ -6,7 +6,7 @@ using Unifesspa.Geo.Infrastructure.Core.Observability;
 
 /// <summary>
 /// Métricas OpenTelemetry da carga do ETL DNE (Story #674, CA-07). O <see cref="Meter"/>
-/// usa o nome canônico do serviço (<see cref="UniPlusServiceNames.Geo"/>), já coletado
+/// usa o nome canônico do serviço (<see cref="GeoServiceNames.Geo"/>), já coletado
 /// por <c>AdicionarObservabilidade</c> via <c>AddMeter(nomeServico)</c> — sem registro
 /// extra no Program. Sem PII (reference data público); as tags são versão e status.
 /// </summary>
@@ -20,7 +20,7 @@ internal sealed class GeoEtlMetrics : IDisposable
 
     public GeoEtlMetrics()
     {
-        _meter = new Meter(UniPlusServiceNames.Geo);
+        _meter = new Meter(GeoServiceNames.Geo);
         _duracao = _meter.CreateHistogram<double>("geo.etl.duracao", unit: "ms", description: "Duração da carga do ETL DNE.");
         _linhas = _meter.CreateCounter<long>("geo.etl.linhas", unit: "{linha}", description: "Linhas inseridas + atualizadas pela carga.");
         _degradados = _meter.CreateCounter<long>("geo.etl.degradados", unit: "{linha}", description: "Valores externos degradados para null no parse tolerante.");

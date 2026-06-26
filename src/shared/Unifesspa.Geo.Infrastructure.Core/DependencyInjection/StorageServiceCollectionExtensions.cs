@@ -34,14 +34,14 @@ public static class StorageServiceCollectionExtensions
     /// <summary>
     /// Registra <see cref="StorageOptions"/>, <see cref="IMinioClient"/> e
     /// <see cref="IStorageService"/>. Deve ser chamado uma única vez por aplicação,
-    /// junto com os demais <c>AddUniPlus*</c> em <c>Program.cs</c>.
+    /// junto com os demais <c>AddGeo*</c> em <c>Program.cs</c>.
     /// </summary>
     /// <param name="services">A coleção de serviços.</param>
     /// <param name="configuration">Configuração da aplicação (lê seção <c>Storage</c>).</param>
     /// <param name="environment">Ambiente de hospedagem — controla rigor da validação.</param>
     /// <returns>A própria <paramref name="services"/> para encadeamento fluente.</returns>
     /// <exception cref="ArgumentNullException">Algum dos parâmetros é <see langword="null"/>.</exception>
-    public static IServiceCollection AddUniPlusStorage(
+    public static IServiceCollection AddGeoStorage(
         this IServiceCollection services,
         IConfiguration configuration,
         IHostEnvironment environment)

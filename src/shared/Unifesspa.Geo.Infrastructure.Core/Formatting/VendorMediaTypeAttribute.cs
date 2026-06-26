@@ -28,7 +28,7 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
 {
     private const string JsonSuffix = "+json";
     private const string VendorPrefix = "application/vnd.uniplus.";
-    private const string ResponseContextKey = "__UniPlusVendorMediaTypeAccepted";
+    private const string ResponseContextKey = "__GeoVendorMediaTypeAccepted";
 
     /// <summary>Identificador do recurso na vendor MIME (ex.: <c>edital</c>).</summary>
     public string Resource { get; init; } = string.Empty;

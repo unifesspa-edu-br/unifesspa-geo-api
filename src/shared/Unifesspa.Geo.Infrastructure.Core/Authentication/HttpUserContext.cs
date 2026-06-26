@@ -48,9 +48,9 @@ public sealed partial class HttpUserContext : IUserContext
 
     public string? Email => GetFirstClaimValue(EmailClaimCandidates);
 
-    public string? Cpf => GetSingleClaimValue(UniPlusClaims.Cpf);
+    public string? Cpf => GetSingleClaimValue(UnifesspaClaims.Cpf);
 
-    public string? NomeSocial => GetSingleClaimValue(UniPlusClaims.NomeSocial);
+    public string? NomeSocial => GetSingleClaimValue(UnifesspaClaims.NomeSocial);
 
     public IReadOnlyList<string> Roles => _roles.Value;
 

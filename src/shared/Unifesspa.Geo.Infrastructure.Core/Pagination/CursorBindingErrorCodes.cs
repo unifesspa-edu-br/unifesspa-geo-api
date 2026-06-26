@@ -14,5 +14,5 @@ public static class CursorBindingErrorCodes
     public const string DirecaoInvalida = "Cursor.DirecaoInvalida";
 
     /// <summary>Chave em <c>HttpContext.Items</c> onde o binder publica o código do erro.</summary>
-    public const string HttpContextItemKey = "__UniPlusCursorBindingError";
+    public const string HttpContextItemKey = "__GeoCursorBindingError";
 }

@@ -13,7 +13,7 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 
 /// <summary>
 /// Garante que a troca da imagem base para PostGIS (<c>postgis/postgis:18-3.6</c>)
-/// não regride as extensões já usadas pelos demais bancos do Uni+ (CA-05):
+/// mantém disponíveis as extensões usadas pelo Geo (CA-05):
 /// <c>pg_trgm</c>, <c>unaccent</c>, <c>btree_gist</c> continuam criáveis — junto
 /// com a própria <c>postgis</c>.
 /// </summary>

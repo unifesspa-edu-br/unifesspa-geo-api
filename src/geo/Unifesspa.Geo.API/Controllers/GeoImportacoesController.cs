@@ -34,13 +34,13 @@ public sealed class GeoImportacoesController : ControllerBase
     private readonly IGeoImportacaoService _servico;
     private readonly IDomainErrorMapper _mapper;
     private readonly IResourceLinksBuilder<ImportacaoGeoDto> _linksBuilder;
-    private readonly IUserContext _userContext;
+    private readonly IRequiredUserContext _userContext;
 
     public GeoImportacoesController(
         IGeoImportacaoService servico,
         IDomainErrorMapper mapper,
         IResourceLinksBuilder<ImportacaoGeoDto> linksBuilder,
-        IUserContext userContext)
+        IRequiredUserContext userContext)
     {
         _servico = servico;
         _mapper = mapper;
@@ -69,7 +69,7 @@ public sealed class GeoImportacoesController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        string disparadoPor = _userContext.UserId ?? "desconhecido";
+        string disparadoPor = _userContext.UserId;
 
         Result<Guid> resultado = await _servico
             .IniciarAsync(request.Versao, disparadoPor, cancellationToken)

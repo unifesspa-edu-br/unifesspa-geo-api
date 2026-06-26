@@ -2,7 +2,7 @@ namespace Unifesspa.Geo.Infrastructure.Core.Storage;
 
 /// <summary>
 /// Bound options for object storage (S3-compatible — MinIO em todos os ambientes Uni+).
-/// Ligadas via <see cref="DependencyInjection.StorageServiceCollectionExtensions.AddUniPlusStorage"/>.
+/// Ligadas via <see cref="DependencyInjection.StorageServiceCollectionExtensions.AddGeoStorage"/>.
 /// Fora de Development, <see cref="Endpoint"/>/<see cref="AccessKey"/>/<see cref="SecretKey"/>
 /// devem estar preenchidos — caso contrário, o startup falha. Em Development a validação é leniente
 /// para permitir bring-up parcial sem MinIO local (ex.: rodar API de auth sem subir storage).

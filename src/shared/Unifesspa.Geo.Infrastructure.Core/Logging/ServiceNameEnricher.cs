@@ -13,7 +13,7 @@ using Serilog.Events;
 /// <c>Resource</c> do OpenTelemetry SDK em
 /// <see cref="Observability.OpenTelemetryConfiguration.AdicionarObservabilidade"/>
 /// — duplicação intencional e validada por construção via
-/// <see cref="Observability.UniPlusServiceNames"/>. A propriedade Serilog é
+/// <see cref="Observability.GeoServiceNames"/>. A propriedade Serilog é
 /// <c>ServiceName</c> (PascalCase, alinhada com <c>CorrelationId</c>); o
 /// atributo OTel Resource é <c>service.name</c> (dot-notation, semantic
 /// conventions). O sink Serilog OTLP traduz a property para o Resource attr no
@@ -39,7 +39,7 @@ public sealed class ServiceNameEnricher : ILogEventEnricher
     private readonly LogEventProperty _property;
 
     /// <param name="serviceName">Nome canônico do serviço — tipicamente um valor
-    /// de <see cref="Observability.UniPlusServiceNames"/>. Não pode ser vazio.</param>
+    /// de <see cref="Observability.GeoServiceNames"/>. Não pode ser vazio.</param>
     public ServiceNameEnricher(string serviceName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceName);

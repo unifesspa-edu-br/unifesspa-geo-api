@@ -4,14 +4,14 @@ using Microsoft.Extensions.Hosting;
 
 /// <summary>
 /// <see cref="IHostedService"/> que força a resolução do singleton
-/// <see cref="IUniPlusEncryptionService"/> no startup da aplicação.
+/// <see cref="IGeoEncryptionService"/> no startup da aplicação.
 ///
 /// <para>
 /// O singleton é registrado com factory lazy em
-/// <c>CryptographyServiceCollectionExtensions.AddUniPlusEncryption</c>, então
+/// <c>CryptographyServiceCollectionExtensions.AddGeoEncryption</c>, então
 /// erros do construtor (JWT do ServiceAccount ausente/vazio,
 /// <c>KubernetesJwtPath</c> em branco, mutex de auth method) só estourariam no
-/// primeiro <c>GetRequiredService&lt;IUniPlusEncryptionService&gt;()</c>. Em
+/// primeiro <c>GetRequiredService&lt;IGeoEncryptionService&gt;()</c>. Em
 /// produção, hosted services existentes (Idempotency-Key store, cursor
 /// pagination) tipicamente forçam a resolução cedo o suficiente para o pod
 /// entrar em <c>CrashLoopBackOff</c>, mas isso não é garantido por contrato.
@@ -27,7 +27,7 @@ using Microsoft.Extensions.Hosting;
 ///
 /// <para>
 /// Em testes, <c>ApiFactoryBase</c> carrega <c>appsettings.Development.json</c>
-/// que já provê <c>UniPlus:Encryption:LocalKey</c> válida, então o warmup roda
+/// que já provê <c>Geo:Encryption:LocalKey</c> válida, então o warmup roda
 /// sem mock. Fixtures que precisem mockar o pipeline sem cifragem real (cenário
 /// raro) podem filtrar este hosted service via heurística de
 /// <c>ImplementationType</c>, espelhando o pattern de
@@ -36,7 +36,7 @@ using Microsoft.Extensions.Hosting;
 /// </summary>
 internal sealed class EncryptionWarmupHostedService : IHostedService
 {
-    public EncryptionWarmupHostedService(IUniPlusEncryptionService encryptionService)
+    public EncryptionWarmupHostedService(IGeoEncryptionService encryptionService)
     {
         // O parâmetro existe para forçar a resolução do singleton via DI durante
         // a enumeração dos IHostedService no Host.StartAsync — qualquer falha do

@@ -13,9 +13,9 @@ using OpenApi;
 /// seu próprio nome (ex.: <c>"selecao"</c>, <c>"ingresso"</c>); transformers
 /// são reutilizados (<c>TryAddSingleton</c>).
 /// </summary>
-public static class UniPlusOpenApiServiceCollectionExtensions
+public static class GeoOpenApiServiceCollectionExtensions
 {
-    public static IServiceCollection AddUniPlusOpenApi(
+    public static IServiceCollection AddGeoOpenApi(
         this IServiceCollection services,
         string documentName,
         IConfiguration configuration)
@@ -25,28 +25,28 @@ public static class UniPlusOpenApiServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services
-            .AddOptions<UniPlusOpenApiOptions>()
-            .Bind(configuration.GetSection(UniPlusOpenApiOptions.SectionName))
+            .AddOptions<GeoOpenApiOptions>()
+            .Bind(configuration.GetSection(GeoOpenApiOptions.SectionName))
             .Validate(
                 static o => Uri.TryCreate(o.ContactUrl, UriKind.Absolute, out _)
                     && Uri.TryCreate(o.ProductionServerUrl, UriKind.Absolute, out _)
                     && Uri.TryCreate(o.StagingServerUrl, UriKind.Absolute, out _),
-                "UniPlus:OpenApi — ContactUrl/ProductionServerUrl/StagingServerUrl precisam ser URIs absolutas.")
+                "Geo:OpenApi — ContactUrl/ProductionServerUrl/StagingServerUrl precisam ser URIs absolutas.")
             .ValidateOnStart();
 
-        services.TryAddSingleton<UniPlusInfoTransformer>();
-        services.TryAddSingleton<UniPlusOperationTransformer>();
+        services.TryAddSingleton<GeoInfoTransformer>();
+        services.TryAddSingleton<GeoOperationTransformer>();
         services.TryAddSingleton<CursorPaginationOperationTransformer>();
         services.TryAddSingleton<PaginationOrphanSchemaDocumentTransformer>();
-        services.TryAddSingleton<UniPlusSchemaTransformer>();
+        services.TryAddSingleton<GeoSchemaTransformer>();
 
         services.AddOpenApi(documentName, options =>
         {
-            options.AddDocumentTransformer<UniPlusInfoTransformer>();
-            options.AddOperationTransformer<UniPlusOperationTransformer>();
+            options.AddDocumentTransformer<GeoInfoTransformer>();
+            options.AddOperationTransformer<GeoOperationTransformer>();
             options.AddOperationTransformer<CursorPaginationOperationTransformer>();
             options.AddDocumentTransformer<PaginationOrphanSchemaDocumentTransformer>();
-            options.AddSchemaTransformer<UniPlusSchemaTransformer>();
+            options.AddSchemaTransformer<GeoSchemaTransformer>();
         });
 
         return services;

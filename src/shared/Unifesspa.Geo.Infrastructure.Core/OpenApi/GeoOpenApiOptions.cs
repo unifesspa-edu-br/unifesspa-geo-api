@@ -3,16 +3,16 @@ namespace Unifesspa.Geo.Infrastructure.Core.OpenApi;
 using System.Diagnostics.CodeAnalysis;
 
 /// <summary>
-/// Configuração compartilhada do <c>UniPlusInfoTransformer</c>: dados
+/// Configuração compartilhada do <c>GeoInfoTransformer</c>: dados
 /// institucionais que aparecem em todos os documentos OpenAPI gerados pela
 /// API Uni+ (contact, license, servers). Bind a partir de
-/// <c>UniPlus:OpenApi</c>; defaults sensatos para dev/CI.
+/// <c>Geo:OpenApi</c>; defaults sensatos para dev/CI.
 /// </summary>
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "Properties bound from JSON via IOptions; System.Text.Json não desserializa Uri nativamente. Conversão para Uri acontece no transformer.")]
-public sealed record UniPlusOpenApiOptions
+public sealed record GeoOpenApiOptions
 {
-    public const string SectionName = "UniPlus:OpenApi";
+    public const string SectionName = "Geo:OpenApi";
 
     /// <summary>Email institucional para contato técnico.</summary>
     public string ContactEmail { get; init; } = "ctic@unifesspa.edu.br";
