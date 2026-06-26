@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/geo/">
+    <Project Path="src/geo/Unifesspa.UniPlus.Geo.API/Unifesspa.UniPlus.Geo.API.csproj" />
+    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Application/Unifesspa.UniPlus.Geo.Application.csproj" />
+    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Contracts/Unifesspa.UniPlus.Geo.Contracts.csproj" />
+    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Domain/Unifesspa.UniPlus.Geo.Domain.csproj" />
+    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Infrastructure/Unifesspa.UniPlus.Geo.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Unifesspa.UniPlus.Geo.IntegrationTests/Unifesspa.UniPlus.Geo.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
