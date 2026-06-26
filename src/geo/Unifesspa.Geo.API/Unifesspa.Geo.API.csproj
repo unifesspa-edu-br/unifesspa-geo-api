@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="WolverineFx.Postgresql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unifesspa.Geo.Application\Unifesspa.Geo.Application.csproj" />
+    <ProjectReference Include="..\Unifesspa.Geo.Infrastructure\Unifesspa.Geo.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Permite testar helpers de boundary internos (ex.: CepValido) sem expô-los publicamente. -->
+    <InternalsVisibleTo Include="Unifesspa.Geo.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

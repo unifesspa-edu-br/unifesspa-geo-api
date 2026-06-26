@@ -1,13 +1,20 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/geo/">
-    <Project Path="src/geo/Unifesspa.UniPlus.Geo.API/Unifesspa.UniPlus.Geo.API.csproj" />
-    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Application/Unifesspa.UniPlus.Geo.Application.csproj" />
-    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Contracts/Unifesspa.UniPlus.Geo.Contracts.csproj" />
-    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Domain/Unifesspa.UniPlus.Geo.Domain.csproj" />
-    <Project Path="src/geo/Unifesspa.UniPlus.Geo.Infrastructure/Unifesspa.UniPlus.Geo.Infrastructure.csproj" />
+    <Project Path="src/geo/Unifesspa.Geo.API/Unifesspa.Geo.API.csproj" />
+    <Project Path="src/geo/Unifesspa.Geo.Application/Unifesspa.Geo.Application.csproj" />
+    <Project Path="src/geo/Unifesspa.Geo.Contracts/Unifesspa.Geo.Contracts.csproj" />
+    <Project Path="src/geo/Unifesspa.Geo.Domain/Unifesspa.Geo.Domain.csproj" />
+    <Project Path="src/geo/Unifesspa.Geo.Infrastructure/Unifesspa.Geo.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/shared/">
+    <Project Path="src/shared/Unifesspa.Geo.Application.Abstractions/Unifesspa.Geo.Application.Abstractions.csproj" />
+    <Project Path="src/shared/Unifesspa.Geo.Governance.Contracts/Unifesspa.Geo.Governance.Contracts.csproj" />
+    <Project Path="src/shared/Unifesspa.Geo.Infrastructure.Core/Unifesspa.Geo.Infrastructure.Core.csproj" />
+    <Project Path="src/shared/Unifesspa.Geo.Kernel/Unifesspa.Geo.Kernel.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Unifesspa.UniPlus.Geo.IntegrationTests/Unifesspa.UniPlus.Geo.IntegrationTests.csproj" />
+    <Project Path="tests/Unifesspa.Geo.IntegrationTests.Fixtures/Unifesspa.Geo.IntegrationTests.Fixtures.csproj" />
+    <Project Path="tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj" />
   </Folder>
 </Solution>

@@ -12,10 +12,9 @@ independente.
 O branch `bootstrap/732-extract-geo-history` contém a extração histórica inicial
 dos paths Geo vindos de `unifesspa-edu-br/uniplus-api`.
 
-O código ainda preserva nomes e referências `Unifesspa.UniPlus.*` até a etapa de
-independência de namespace e dependências. Antes do primeiro build verde, o repo
-deve assumir código próprio sob namespace Geo e remover qualquer dependência de
-projetos ou pacotes UniPlus.
+Os projetos extraídos foram renomeados para `Unifesspa.Geo.*`. O código
+foundation necessário foi copiado para este repositório como código próprio,
+também sob `Unifesspa.Geo.*`.
 
 ## Contrato
 
