@@ -86,11 +86,11 @@ public sealed class OpenApiEndpointTests : IClassFixture<GeoOpenApiFactory>
             throw new ArgumentException("Caminho deve ser relativo à raiz do repositório.", nameof(relative));
 
         string? current = AppContext.BaseDirectory;
-        while (current is not null && !File.Exists(Path.Combine(current, "UniPlus.slnx")))
+        while (current is not null && !File.Exists(Path.Combine(current, "Unifesspa.Geo.slnx")))
             current = Path.GetDirectoryName(current);
 
         if (current is null)
-            throw new DirectoryNotFoundException("UniPlus.slnx não encontrado a partir de AppContext.BaseDirectory.");
+            throw new DirectoryNotFoundException("Unifesspa.Geo.slnx não encontrado a partir de AppContext.BaseDirectory.");
 
         return Path.Combine(current, relative);
     }
