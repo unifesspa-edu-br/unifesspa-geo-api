@@ -25,9 +25,9 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// service.name canônico — single source of truth em UniPlusServiceNames evita
+// service.name canônico — single source of truth em GeoServiceNames evita
 // drift entre logs (Serilog/Loki) e traces (Tempo). Ver Selecao.API/Program.cs.
-const string nomeServico = UniPlusServiceNames.Geo;
+const string nomeServico = GeoServiceNames.Geo;
 
 builder.Host.UseSerilog((context, loggerConfig) =>
     loggerConfig.ConfigurarSerilog(context.Configuration, nomeServico));
@@ -46,7 +46,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 // OpenAPI 3.1 (ADR-0030) — spec em /openapi/geo.json.
-builder.Services.AddUniPlusOpenApi("geo", builder.Configuration);
+builder.Services.AddGeoOpenApi("geo", builder.Configuration);
 // Marca lat/long/raioKm da proximidade (#678) como required no contrato — são
 // validados em runtime (400 se ausentes), mas como query params double? o
 // ApiExplorer os descreveria como opcionais. AddOpenApi para o mesmo documento é
@@ -60,7 +60,7 @@ builder.Services.AddDomainErrorMapper();
 // Criptografia (entries de idempotency at-rest) + cursor pagination (ADR-0026/0031).
 // AddCursorPagination já entra na fundação porque as Stories de API do Geo
 // (listagens de localidades) terão endpoints paginados.
-builder.Services.AddUniPlusEncryption(builder.Configuration);
+builder.Services.AddGeoEncryption(builder.Configuration);
 builder.Services.AddCursorPagination(builder.Configuration);
 // Idempotency-Key (ADR-0027) — store EF adjacente ao GeoDbContext, filter global
 // que se ativa apenas em endpoints com [RequiresIdempotencyKey].
@@ -136,11 +136,11 @@ builder.Host.UseWolverineOutboxCascading(
 builder.Services.AddWolverineMessaging();
 
 builder.Services.AddCorsConfiguration(builder.Configuration, builder.Environment);
-builder.Services.AddUniPlusStorage(builder.Configuration, builder.Environment);
-builder.Services.AddUniPlusCache(builder.Configuration, builder.Environment);
+builder.Services.AddGeoStorage(builder.Configuration, builder.Environment);
+builder.Services.AddGeoCache(builder.Configuration, builder.Environment);
 
 // Health checks: Postgres + Redis + MinIO + Kafka + OIDC.
-builder.Services.AddUniPlusHealthChecks(builder.Configuration, connectionStringName: "GeoDb");
+builder.Services.AddGeoHealthChecks(builder.Configuration, connectionStringName: "GeoDb");
 
 WebApplication app = builder.Build();
 
@@ -152,7 +152,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapSharedAuthEndpoints();
 app.MapSharedProfileEndpoints();
-app.MapUniPlusSmokeEndpoints();
+app.MapGeoSmokeEndpoints();
 app.MapControllers();
 app.MapOpenApi("/openapi/{documentName}.json");
 

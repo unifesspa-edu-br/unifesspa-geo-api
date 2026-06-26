@@ -101,7 +101,7 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
                 .UseNpgsql(ConnectionString, npgsql =>
                 {
                     npgsql.UseNetTopologySuite();
-                    // Mesmas convenções de migrations da produção (UseUniPlusNpgsqlConventions):
+                    // Mesmas convenções de migrations da produção (UseGeoNpgsqlConventions):
                     // sem este pin, a UseSnakeCaseNamingConvention poderia gravar a história
                     // numa tabela snake-cased divergente da `__EFMigrationsHistory` usada pelo
                     // host (AddGeoInfrastructure), fazendo a migration de startup ver a inicial

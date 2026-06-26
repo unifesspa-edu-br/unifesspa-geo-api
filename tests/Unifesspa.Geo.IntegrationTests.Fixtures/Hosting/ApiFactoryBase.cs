@@ -90,7 +90,7 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
 
     /// <summary>
     /// Nomes dos health checks de infra externa registrados por
-    /// <c>AddUniPlusHealthChecks</c> que são removidos por default em testes — o pipeline
+    /// <c>AddGeoHealthChecks</c> que são removidos por default em testes — o pipeline
     /// HTTP típico não tem Postgres/Redis/MinIO/Kafka rodando, e mantê-los gera Unhealthy
     /// permanente em <c>/health</c>/<c>/health/ready</c>, mascarando o estado real do
     /// pipeline de auth/routing/controllers que a suite quer validar.

@@ -8,14 +8,14 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
 /// <summary>
-/// Operation transformer que injeta metadata Uni+ por operação:
+/// Operation transformer que injeta metadata institucional por operação:
 /// <list type="bullet">
 ///   <item><description>Header <c>Idempotency-Key</c> declarado como required quando a action tem <c>[RequiresIdempotencyKey]</c>.</description></item>
-///   <item><description>Extension <c>x-uniplus-idempotent: true</c> em endpoints com idempotência opt-in.</description></item>
+///   <item><description>Extension <c>x-uniplus-idempotent: true</c> em endpoints com idempotência opt-in, preservada por compatibilidade V1.</description></item>
 ///   <item><description>Content type de respostas 4xx/5xx coagido para <c>application/problem+json</c> — espelha o que o middleware de fato emite via <c>result.ToActionResult(mapper)</c> (ADR-0023, RFC 9457). Sem isso o spec declararia <c>application/json</c> (default do MVC) e clientes gerados rejeitariam o response real.</description></item>
 /// </list>
 /// </summary>
-public sealed class UniPlusOperationTransformer : IOpenApiOperationTransformer
+public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
 {
     private const string ProblemJsonMediaType = "application/problem+json";
 

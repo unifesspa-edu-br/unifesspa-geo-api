@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 /// Implementação AES-GCM 256 para dev/CI. Não usar em produção.
 /// Formato do ciphertext: nonce (12 bytes) || tag (16 bytes) || dados cifrados.
 /// </summary>
-internal sealed partial class LocalAesEncryptionService : IUniPlusEncryptionService
+internal sealed partial class LocalAesEncryptionService : IGeoEncryptionService
 {
     private const int NonceSizeBytes = 12;
     private const int TagSizeBytes = 16;
@@ -26,8 +26,8 @@ internal sealed partial class LocalAesEncryptionService : IUniPlusEncryptionServ
 
         string localKey = options.Value.LocalKey
             ?? throw new InvalidOperationException(
-                "UniPlus:Encryption:LocalKey é obrigatório quando Provider = 'local'. " +
-                "Defina via env var UNIPLUS__ENCRYPTION__LOCALKEY (base64, 32 bytes).");
+                "Geo:Encryption:LocalKey é obrigatório quando Provider = 'local'. " +
+                "Defina via env var GEO__ENCRYPTION__LOCALKEY (base64, 32 bytes).");
 
         byte[] keyBytes;
         try
@@ -37,13 +37,13 @@ internal sealed partial class LocalAesEncryptionService : IUniPlusEncryptionServ
         catch (FormatException ex)
         {
             throw new InvalidOperationException(
-                "UniPlus:Encryption:LocalKey não é uma string Base64 válida.", ex);
+                "Geo:Encryption:LocalKey não é uma string Base64 válida.", ex);
         }
 
         if (keyBytes.Length != 32)
         {
             throw new InvalidOperationException(
-                $"UniPlus:Encryption:LocalKey deve ter 32 bytes (256 bits). Recebido: {keyBytes.Length} bytes.");
+                $"Geo:Encryption:LocalKey deve ter 32 bytes (256 bits). Recebido: {keyBytes.Length} bytes.");
         }
 
         _key = keyBytes;

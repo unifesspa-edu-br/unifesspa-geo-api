@@ -17,7 +17,7 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 /// <summary>
 /// Prova que o hook NetTopologySuite está ativo no <see cref="GeoDbContext"/>
 /// tanto no caminho runtime (<c>AddGeoInfrastructure</c> →
-/// <c>UseUniPlusNpgsqlConventions</c>) quanto no design-time
+/// <c>UseGeoNpgsqlConventions</c>) quanto no design-time
 /// (<see cref="GeoDbContextDesignTimeFactory"/>) — paridade exigida por CA-03a.
 /// Ambos materializam o modelo offline (sem conexão), mapeando
 /// <c>Coordenada</c> para <c>geography (Point, 4326)</c>.

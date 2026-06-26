@@ -15,7 +15,7 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Padrão alinhado com <see cref="StorageServiceCollectionExtensions.AddUniPlusStorage"/>:
+/// Padrão alinhado com <see cref="StorageServiceCollectionExtensions.AddGeoStorage"/>:
 /// validação leniente em Development, fail-fast fora quando <c>Redis:ConnectionString</c>
 /// está vazio.
 /// </para>
@@ -31,9 +31,9 @@ public static class CacheServiceCollectionExtensions
     /// <summary>
     /// Registra <see cref="RedisOptions"/>, <see cref="IConnectionMultiplexer"/> e
     /// <see cref="ICacheService"/>. Deve ser chamado uma única vez por aplicação,
-    /// junto com os demais <c>AddUniPlus*</c> em <c>Program.cs</c>.
+    /// junto com os demais <c>AddGeo*</c> em <c>Program.cs</c>.
     /// </summary>
-    public static IServiceCollection AddUniPlusCache(
+    public static IServiceCollection AddGeoCache(
         this IServiceCollection services,
         IConfiguration configuration,
         IHostEnvironment environment)

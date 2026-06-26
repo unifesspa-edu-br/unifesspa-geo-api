@@ -2,7 +2,7 @@ namespace Unifesspa.Geo.Infrastructure.Core.Caching;
 
 /// <summary>
 /// Bound options for Redis cache. Ligadas via
-/// <see cref="DependencyInjection.CacheServiceCollectionExtensions.AddUniPlusCache"/>.
+/// <see cref="DependencyInjection.CacheServiceCollectionExtensions.AddGeoCache"/>.
 /// Fora de Development, <see cref="ConnectionString"/> deve estar preenchida — caso contrário,
 /// o startup falha. Em Development a validação é leniente para permitir bring-up parcial sem
 /// Redis local (ex.: rodar API só com pipeline HTTP/auth sem subir cache).

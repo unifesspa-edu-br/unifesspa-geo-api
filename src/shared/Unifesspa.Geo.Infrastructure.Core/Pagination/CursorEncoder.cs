@@ -8,13 +8,13 @@ using Cryptography;
 
 /// <summary>
 /// Codifica e decodifica cursores opacos AES-GCM (ADR-0026): JSON do
-/// <see cref="CursorPayload"/> cifrado via <see cref="IUniPlusEncryptionService"/>
+/// <see cref="CursorPayload"/> cifrado via <see cref="IGeoEncryptionService"/>
 /// e codificado em Base64URL.
 /// </summary>
 public sealed class CursorEncoder
 {
     /// <summary>
-    /// Nome de chave usado para cifrar cursores em <see cref="IUniPlusEncryptionService"/>.
+    /// Nome de chave usado para cifrar cursores em <see cref="IGeoEncryptionService"/>.
     /// Default alinhado com a key canônica provisionada pelo chart
     /// <c>platform/vault-transit-bootstrap</c> do uniplus-infra (uniplus-infra#219):
     /// <c>uniplus-idempotency-aesgcm</c>. Por enquanto reusa a mesma key da
@@ -31,7 +31,7 @@ public sealed class CursorEncoder
         WriteIndented = false,
     };
 
-    private readonly IUniPlusEncryptionService _encryption;
+    private readonly IGeoEncryptionService _encryption;
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
@@ -40,7 +40,7 @@ public sealed class CursorEncoder
     /// adicional sem TimeProvider seria silenciosamente preferido por
     /// <c>ActivatorUtilities</c> e ignoraria override de relógio em testes.
     /// </summary>
-    public CursorEncoder(IUniPlusEncryptionService encryption, TimeProvider timeProvider)
+    public CursorEncoder(IGeoEncryptionService encryption, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(encryption);
         ArgumentNullException.ThrowIfNull(timeProvider);

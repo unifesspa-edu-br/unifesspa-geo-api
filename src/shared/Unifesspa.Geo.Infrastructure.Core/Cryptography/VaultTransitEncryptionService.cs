@@ -15,7 +15,7 @@ using VaultSharp.V1.SecretsEngines.Transit;
 /// Implementação de produção via HashiCorp Vault transit engine.
 /// Chaves nunca saem do Vault; autenticação via Kubernetes auth method.
 /// </summary>
-internal sealed partial class VaultTransitEncryptionService : IUniPlusEncryptionService, IDisposable
+internal sealed partial class VaultTransitEncryptionService : IGeoEncryptionService, IDisposable
 {
     private volatile VaultClient _vault;
     private readonly string _vaultAddress;
@@ -39,7 +39,7 @@ internal sealed partial class VaultTransitEncryptionService : IUniPlusEncryption
         if (string.IsNullOrWhiteSpace(opts.VaultAddress))
         {
             throw new InvalidOperationException(
-                "UniPlus:Encryption:VaultAddress é obrigatório quando Provider = 'vault'.");
+                "Geo:Encryption:VaultAddress é obrigatório quando Provider = 'vault'.");
         }
 
         bool hasRole = !string.IsNullOrWhiteSpace(opts.KubernetesRole);
@@ -54,7 +54,7 @@ internal sealed partial class VaultTransitEncryptionService : IUniPlusEncryption
         if (hasRole && hasToken)
         {
             throw new InvalidOperationException(
-                "UniPlus:Encryption: KubernetesRole e VaultToken são mutuamente exclusivos quando Provider = 'vault'. " +
+                "Geo:Encryption: KubernetesRole e VaultToken são mutuamente exclusivos quando Provider = 'vault'. " +
                 "Em produção use KubernetesRole; em testes/dev use VaultToken. " +
                 "Ver EncryptionOptionsValidator e docs/guia-config-cifragem.md.");
         }
@@ -62,8 +62,8 @@ internal sealed partial class VaultTransitEncryptionService : IUniPlusEncryption
         if (!hasRole && !hasToken)
         {
             throw new InvalidOperationException(
-                "UniPlus:Encryption: nem KubernetesRole nem VaultToken estão definidos quando Provider = 'vault'. " +
-                "Configure UNIPLUS__ENCRYPTION__KUBERNETESROLE (produção) ou UNIPLUS__ENCRYPTION__VAULTTOKEN (testes/dev). " +
+                "Geo:Encryption: nem KubernetesRole nem VaultToken estão definidos quando Provider = 'vault'. " +
+                "Configure GEO__ENCRYPTION__KUBERNETESROLE (produção) ou GEO__ENCRYPTION__VAULTTOKEN (testes/dev). " +
                 "Ver EncryptionOptionsValidator e docs/guia-config-cifragem.md.");
         }
 
@@ -153,7 +153,7 @@ internal sealed partial class VaultTransitEncryptionService : IUniPlusEncryption
         if (string.IsNullOrWhiteSpace(_jwtPath))
         {
             throw new InvalidOperationException(
-                "UniPlus:Encryption:KubernetesJwtPath está vazio. Configure o path do JWT do " +
+                "Geo:Encryption:KubernetesJwtPath está vazio. Configure o path do JWT do " +
                 "ServiceAccount (default: /var/run/secrets/kubernetes.io/serviceaccount/token).");
         }
 
@@ -162,7 +162,7 @@ internal sealed partial class VaultTransitEncryptionService : IUniPlusEncryption
             throw new InvalidOperationException(
                 $"JWT do ServiceAccount não encontrado em '{_jwtPath}'. " +
                 "Verifique se o ServiceAccount está montado no Pod (automountServiceAccountToken=true) " +
-                "e se o caminho UniPlus:Encryption:KubernetesJwtPath corresponde ao volume do token.");
+                "e se o caminho Geo:Encryption:KubernetesJwtPath corresponde ao volume do token.");
         }
 
         string content = File.ReadAllText(_jwtPath);
