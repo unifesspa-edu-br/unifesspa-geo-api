@@ -5,6 +5,19 @@
 - .NET SDK 10.0.100 or compatible latest feature release.
 - Docker for local PostgreSQL/PostGIS and adjacent infrastructure.
 
+## Local Infrastructure
+
+Copy the compose environment template before starting dependencies:
+
+```bash
+cp docker/.env.example docker/.env
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d postgres redis minio kafka apicurio keycloak
+```
+
+The compose stack includes the dependencies currently used by the Geo runtime:
+PostGIS, Redis, MinIO, Kafka/Apicurio and Keycloak. Test-only Keycloak data is
+kept in `docker/keycloak/realm-e2e-tests.json`.
+
 ## Current Bootstrap State
 
 This repository is in the extraction bootstrap branch.
@@ -44,6 +57,14 @@ bash tools/forbidden-deps/check-geo-independence.sh .
 
 At this bootstrap stage, restore and build pass. Integration tests still require
 the local Docker infrastructure described by the migrated compose files.
+
+## Container Image
+
+The dedicated Geo Dockerfile is `docker/Dockerfile.geo`:
+
+```bash
+docker build -f docker/Dockerfile.geo -t unifesspa-geo-api:local .
+```
 
 ## OpenAPI
 
