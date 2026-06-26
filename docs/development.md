@@ -38,12 +38,35 @@ Geo-owned foundation projects and Geo integration tests:
 - `tests/Unifesspa.Geo.IntegrationTests`
 
 The repository must remain free of dependencies on packages or projects rooted
-at `Unifesspa.UniPlus.*`.
+at `Unifesspa.UniPlus.*`. Code copied during extraction is now owned by this
+repository under `Unifesspa.Geo.*`.
+
+Internal extension points copied from the Uni+ codebase were renamed to the Geo
+foundation (`AddGeoOpenApi`, `AddGeoEncryption`, `AddGeoHealthChecks`,
+`UseGeoNpgsqlConventions`) so future maintenance does not depend on UniPlus
+package or namespace semantics.
+
+## Authentication
+
+The API uses JWT Bearer authentication backed by an OIDC authority:
+
+- `Auth:Authority`: issuer/realm URL.
+- `Auth:Audience`: expected `aud` claim.
+- HTTPS metadata is required outside `Development`.
+- JWT validation checks issuer, audience, lifetime and signing key.
+- 401 and 403 responses use `application/problem+json`.
+
+Public reference-data endpoints are explicitly `[AllowAnonymous]`. Admin
+endpoints under `/api/admin/geo` require JWT authentication and the
+`plataforma-admin` role.
+
+The integration test suite includes a real Keycloak container and exercises the
+production `JwtBearer` pipeline for valid tokens, invalid audience, missing
+token and insufficient roles.
 
 ## Local Commands
 
-These commands are expected to become the standard gates after the namespace and
-dependency extraction is complete:
+Run the same gates used by CI before opening or updating a PR:
 
 ```bash
 dotnet restore Unifesspa.Geo.slnx --locked-mode
@@ -55,8 +78,24 @@ bash tools/forbidden-deps/check.sh
 bash tools/forbidden-deps/check-geo-independence.sh .
 ```
 
-At this bootstrap stage, restore and build pass. Integration tests still require
-the local Docker infrastructure described by the migrated compose files.
+Integration tests require Docker because they use Testcontainers for
+PostgreSQL/PostGIS and Keycloak.
+
+## Commit Convention
+
+Use Conventional Commits in pt-BR, following the UNIFESSPA organization pattern:
+
+```text
+feat(geo): adiciona endpoint de localidades
+fix(geo): corrige validacao de audience jwt
+test(geo): cobre autenticacao jwt real
+docs(geo): documenta processo de release
+ci(geo): torna scan trivy bloqueante
+refactor(geo): remove nomes residuais do bootstrap
+```
+
+Prefer one semantic commit per concern: code behavior, tests, docs and CI should
+not be mixed unless the change is intrinsically coupled.
 
 ## Container Image
 
