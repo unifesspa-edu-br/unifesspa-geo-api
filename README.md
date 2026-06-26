@@ -34,6 +34,10 @@ O baseline inicial está em `contracts/openapi.geo.json`.
 
 Consulte `docs/development.md`.
 
+## Release e Consumo
+
+Consulte `docs/release.md`.
+
 ## Proveniência
 
 Consulte `docs/extraction-provenance.md`.
