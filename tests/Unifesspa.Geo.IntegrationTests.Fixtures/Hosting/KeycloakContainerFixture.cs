@@ -151,7 +151,7 @@ public sealed class KeycloakContainerFixture : IAsyncLifetime
     /// <summary>
     /// Resolve o caminho absoluto do realm sintético de testes (<c>realm-e2e-tests.json</c>) caminhando
     /// para cima a partir do diretório de testes até encontrar a raiz do repositório (marcada por
-    /// <c>UniPlus.slnx</c>). O canônico <c>realm-export.json</c> é deliberadamente ignorado — ele é
+    /// <c>Unifesspa.Geo.slnx</c>). O canônico <c>realm-export.json</c> é deliberadamente ignorado — ele é
     /// fonte de verdade para dev/homologação/produção e não deve ser carregado em testes E2E.
     /// </summary>
     private static string ResolveRealmExportHostPath()
@@ -162,7 +162,7 @@ public sealed class KeycloakContainerFixture : IAsyncLifetime
         while (current is not null)
         {
             string candidate = Path.Combine(current.FullName, "docker", "keycloak", RealmFileName);
-            if (File.Exists(candidate) && File.Exists(Path.Combine(current.FullName, "UniPlus.slnx")))
+            if (File.Exists(candidate) && File.Exists(Path.Combine(current.FullName, "Unifesspa.Geo.slnx")))
             {
                 return candidate;
             }
@@ -172,7 +172,7 @@ public sealed class KeycloakContainerFixture : IAsyncLifetime
 
         throw new FileNotFoundException(
             $"Não foi possível localizar 'docker/keycloak/{RealmFileName}' subindo a partir do diretório "
-            + "de testes. Verifique se o teste está rodando dentro da árvore do repositório uniplus-api.");
+            + "de testes. Verifique se o teste está rodando dentro da árvore do repositório unifesspa-geo-api.");
     }
 
     [SuppressMessage(
