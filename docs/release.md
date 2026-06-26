@@ -33,6 +33,9 @@ npx --yes @stoplight/spectral-cli@6.15.0 lint --ruleset tools/spectral/.spectral
 docker build -f docker/Dockerfile.geo -t unifesspa-geo-api:local .
 ```
 
+Security scans are release blockers. CodeQL runs on the repository and Trivy
+fails CI for `HIGH` or `CRITICAL` filesystem/image findings.
+
 ## OpenAPI contract
 
 The canonical committed contract is:
