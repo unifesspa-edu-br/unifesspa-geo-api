@@ -43,7 +43,7 @@ jobs:
           output: trivy-fs.sarif
           severity: CRITICAL,HIGH
           limit-severities-for-sarif: 'true'
-          exit-code: '0'
+          exit-code: '1'
           skip-dirs: 'tests,docs'
           cache: 'true'
 
@@ -85,7 +85,7 @@ jobs:
           output: trivy-image.sarif
           severity: CRITICAL,HIGH
           limit-severities-for-sarif: 'true'
-          exit-code: '0'
+          exit-code: '1'
           cache: 'true'
 
       - name: Upload SARIF
