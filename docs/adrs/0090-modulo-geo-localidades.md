@@ -14,9 +14,9 @@ informed:
 
 O Uni+ precisa de um catálogo nacional de localidades (país, unidade federativa, município) e, no futuro, de endereçamento e georreferência (CEP, bairro, logradouro, coordenadas), para suportar cidades de prova, campi, bônus regional e demais usos que cruzam vários módulos. Esses dados são **reference data** de origem externa (IBGE, DNE dos Correios), de leitura intensa e baixa escrita.
 
-A [ADR-0054](0054-naming-convention-e-strategy-migrations.md) estabeleceu bancos PostgreSQL **isolados por módulo**, sem chave estrangeira cruzando o limite entre contextos. A questão é **onde** as localidades vivem: dentro de um módulo de negócio existente (ex.: Configuração), espalhadas, ou em um contexto próprio. Localidade não pertence a nenhum módulo de negócio específico — é consumida por todos.
+A ADR-0054 estabeleceu bancos PostgreSQL **isolados por módulo**, sem chave estrangeira cruzando o limite entre contextos. A questão é **onde** as localidades vivem: dentro de um módulo de negócio existente (ex.: Configuração), espalhadas, ou em um contexto próprio. Localidade não pertence a nenhum módulo de negócio específico — é consumida por todos.
 
-Há ainda a pergunta de **como** os demais módulos consomem localidades: por leitor read-side cross-módulo (como em [ADR-0056](0056-modulo-configuracao-e-read-side-via-reader.md)) ou por composição no cliente. Editais congelam os parâmetros que usam (RN08), então o processo seletivo guarda o **snapshot** da localidade no momento do vínculo, não uma referência viva.
+Há ainda a pergunta de **como** os demais módulos consomem localidades: por leitor read-side cross-módulo (como em ADR-0056) ou por composição no cliente. Editais congelam os parâmetros que usam (RN08), então o processo seletivo guarda o **snapshot** da localidade no momento do vínculo, não uma referência viva.
 
 ## Drivers da decisão
 
@@ -81,6 +81,6 @@ Há ainda a pergunta de **como** os demais módulos consomem localidades: por le
 
 ## Mais informações
 
-- Aplica a [ADR-0054](0054-naming-convention-e-strategy-migrations.md) (bancos isolados por módulo) ao contexto transversal de localidades.
-- Contrasta com a [ADR-0056](0056-modulo-configuracao-e-read-side-via-reader.md): aqui o consumo é por composição no cliente, não por leitor read-side.
+- Aplica a ADR-0054 (bancos isolados por módulo) ao contexto transversal de localidades.
+- Contrasta com a ADR-0056: aqui o consumo é por composição no cliente, não por leitor read-side.
 - O mecanismo de georreferência do módulo é fixado na [ADR-0091](0091-postgis-georreferencia-nts.md); a isenção de soft-delete do reference data, na [ADR-0092](0092-etl-carga-dne-reference-data.md).

@@ -21,7 +21,7 @@ ghcr.io/unifesspa-edu-br/uniplus-keycloak
 Componentes:
 
 - **Base:** `quay.io/keycloak/keycloak:26.5.7`
-- **JAR `cpf-matcher-*.jar`** embutido em `/opt/keycloak/providers/` — Authenticator Java SPI custom que resolve auto-link por CPF no first-broker-login do gov.br (ver [ADR-0020](../../docs/adrs/0020-identity-brokering-govbr.md))
+- **JAR `cpf-matcher-*.jar`** embutido em `/opt/keycloak/providers/` — Authenticator Java SPI custom que resolve auto-link por CPF no first-broker-login do gov.br (ver ADR-0020)
 
 ### Tags publicadas
 
@@ -218,7 +218,7 @@ Detalhes em [`../ldap/README.md`](../ldap/README.md) — origem dos dados, como 
 
 ## Identity Provider gov.br (ADR-029)
 
-O gov.br é registrado no realm `unifesspa` como Identity Provider externo OIDC, permitindo que candidatos façam login via Login Único com CPF, nome, e-mail e nível de confiabilidade (bronze/prata/ouro) sincronizados automaticamente. A decisão arquitetural está documentada na [ADR-029](https://github.com/unifesspa-edu-br/uniplus-docs/blob/main/docs/adrs/ADR-029-identity-brokering-govbr-ldap-google.md).
+O gov.br é registrado no realm `unifesspa` como Identity Provider externo OIDC, permitindo que candidatos façam login via Login Único com CPF, nome, e-mail e nível de confiabilidade (bronze/prata/ouro) sincronizados automaticamente. A decisão arquitetural está documentada na ADR-029.
 
 A configuração é aplicada via Admin API por um script idempotente — **não** entra no `realm-export.json` (segredos versionados são proibidos):
 

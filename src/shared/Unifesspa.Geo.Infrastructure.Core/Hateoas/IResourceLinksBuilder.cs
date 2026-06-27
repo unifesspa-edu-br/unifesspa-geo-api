@@ -2,7 +2,7 @@ namespace Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
 /// <summary>
 /// Constrói o conjunto de <c>_links</c> hypermedia (HATEOAS Level 1) para um
-/// DTO de recurso single, conforme <see href="https://github.com/unifesspa-edu-br/uniplus-api/blob/main/docs/adrs/0029-hateoas-level-1-links.md">ADR-0029</see>.
+/// DTO de recurso single, conforme ADR-0029.
 /// </summary>
 /// <remarks>
 /// <para>
