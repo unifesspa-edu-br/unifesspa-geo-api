@@ -75,15 +75,24 @@ Run the same gates used by CI before opening or updating a PR:
 ```bash
 dotnet restore Unifesspa.Geo.slnx --locked-mode
 dotnet build Unifesspa.Geo.slnx
-dotnet test Unifesspa.Geo.slnx --filter "Category!=Integration"
-dotnet test Unifesspa.Geo.slnx --filter "Category=Integration"
+dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj
 dotnet format Unifesspa.Geo.slnx --verify-no-changes
-bash tools/forbidden-deps/check.sh
+bash tools/forbidden-deps/check.sh .
 bash tools/forbidden-deps/check-geo-independence.sh .
 ```
 
-Integration tests require Docker because they use Testcontainers for
-PostgreSQL/PostGIS and Keycloak.
+Every test in this repository is an integration test, so there is no
+unit-vs-integration split to filter on. CI runs the whole
+`Unifesspa.Geo.IntegrationTests` project. To run a subset locally, filter by
+test name, e.g.:
+
+```bash
+dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj \
+  --filter "FullyQualifiedName~CepEndpointTests"
+```
+
+These tests require Docker because they use Testcontainers. The containers
+actually started by the Geo suite are PostgreSQL/PostGIS and Keycloak.
 
 ## Commit Convention
 
