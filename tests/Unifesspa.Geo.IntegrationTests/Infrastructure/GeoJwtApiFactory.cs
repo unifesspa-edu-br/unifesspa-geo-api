@@ -40,7 +40,6 @@ public sealed class GeoJwtApiFactory : ApiFactoryBase<Program>
         new("Auth:ValidateAudience", "false"),
         new("Geo:Etl:WorkerHabilitado", "false"),
         new("Redis:ConnectionString", string.Empty),
-        new("Storage:Endpoint", string.Empty),
         new("Kafka:BootstrapServers", string.Empty),
     ];
 }

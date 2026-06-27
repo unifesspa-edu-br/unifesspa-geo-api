@@ -8,7 +8,7 @@ using Unifesspa.Geo.Infrastructure.Core.HealthChecks;
 using Unifesspa.Geo.Infrastructure.Core.Messaging;
 
 /// <summary>
-/// Registra health checks agregados para Postgres, Redis, MinIO e Kafka. Pareado com a
+/// Registra health checks agregados para Postgres, Redis e Kafka. Pareado com a
 /// configuração existente de <see cref="Authentication.OidcAuthenticationConfiguration"/>
 /// (que já registra <c>OidcDiscoveryHealthCheck</c>) para compor o readiness probe completo
 /// das APIs Uni+.
@@ -43,9 +43,6 @@ public static class HealthChecksServiceCollectionExtensions
     ///   <item><description><b>Redis</b>: depende de <see cref="StackExchange.Redis.IConnectionMultiplexer"/>
     ///     registrado por <see cref="CacheServiceCollectionExtensions.AddGeoCache"/>.
     ///     Ativa quando <c>Redis:ConnectionString</c> está preenchido.</description></item>
-    ///   <item><description><b>MinIO</b>: depende de <see cref="Minio.IMinioClient"/>
-    ///     registrado por <see cref="StorageServiceCollectionExtensions.AddGeoStorage"/>.
-    ///     Ativa quando <c>Storage:Endpoint</c> está preenchido.</description></item>
     ///   <item><description><b>Kafka</b>: depende de <see cref="KafkaSettings"/> bind por
     ///     <see cref="WolverineOutboxConfiguration.UseWolverineOutboxCascading"/>. Ativa quando
     ///     <c>Kafka:BootstrapServers</c> está preenchido.</description></item>
@@ -76,13 +73,6 @@ public static class HealthChecksServiceCollectionExtensions
             hc.AddCheck<RedisHealthCheck>(
                 name: "redis",
                 tags: [ReadyTag, "cache"]);
-        }
-
-        if (!string.IsNullOrWhiteSpace(configuration[$"{Storage.StorageOptions.SectionName}:{nameof(Storage.StorageOptions.Endpoint)}"]))
-        {
-            hc.AddCheck<MinioHealthCheck>(
-                name: "minio",
-                tags: [ReadyTag, "storage"]);
         }
 
         if (!string.IsNullOrWhiteSpace(configuration[$"{KafkaSettings.SectionName}:{nameof(KafkaSettings.BootstrapServers)}"]))

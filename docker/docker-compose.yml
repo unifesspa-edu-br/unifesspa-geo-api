@@ -57,25 +57,6 @@ services:
       retries: 5
       start_period: 30s
 
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   openldap:
     # OpenLDAP local com dados sintéticos (4devs) para reproduzir o cenário
     # do LDAP institucional Unifesspa em ambiente de desenvolvimento.
@@ -179,6 +160,5 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
   openldap_data:
   openldap_config:

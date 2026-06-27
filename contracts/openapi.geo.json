@@ -99,64 +99,6 @@
         ]
       }
     },
-    "/api/_smoke/storage/upload": {
-      "post": {
-        "tags": [
-          "_smoke"
-        ],
-        "summary": "Smoke E2E \u2014 Storage upload",
-        "description": "Faz upload de um arquivo no bucket configurado para validar conectividade \u002B credentials do MinIO. Restrito a usu\u00E1rios com role admin.",
-        "operationId": "smokeStorageUpload",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "required": [
-                  "file"
-                ],
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "$ref": "#/components/schemas/IFormFile"
-                  }
-                }
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem\u002Bjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem\u002Bjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
     "/api/_smoke/cache/{key}": {
       "get": {
         "tags": [
@@ -2327,10 +2269,6 @@
             }
           }
         }
-      },
-      "IFormFile": {
-        "type": "string",
-        "format": "binary"
       },
       "ImportacaoGeoDto": {
         "required": [

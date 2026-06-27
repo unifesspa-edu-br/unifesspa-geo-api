@@ -15,8 +15,7 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Padrão alinhado com <see cref="StorageServiceCollectionExtensions.AddGeoStorage"/>:
-/// validação leniente em Development, fail-fast fora quando <c>Redis:ConnectionString</c>
+/// Validação leniente em Development, fail-fast fora quando <c>Redis:ConnectionString</c>
 /// está vazio.
 /// </para>
 /// <para>
