@@ -3,18 +3,16 @@ namespace Unifesspa.Geo.Infrastructure.Core.Smoke;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Options;
 
 using StackExchange.Redis;
 
 using Unifesspa.Geo.Infrastructure.Core.Caching;
-using Unifesspa.Geo.Infrastructure.Core.Storage;
 
 using Wolverine;
 
 /// <summary>
-/// Endpoints smoke E2E para validação ponta-a-ponta de Storage (MinIO), Cache (Redis) e
-/// Messaging (Wolverine outbox + transport). Mapeados sob <c>/api/_smoke</c> e protegidos
+/// Endpoints smoke E2E para validação ponta-a-ponta de Cache (Redis) e Messaging
+/// (Wolverine outbox + transport). Mapeados sob <c>/api/_smoke</c> e protegidos
 /// por papel <c>admin</c> via policy <c>RequireRole</c>.
 /// </summary>
 /// <remarks>
@@ -28,13 +26,12 @@ using Wolverine;
 /// <c>AddOidcAuthentication</c>) que mapeia o claim Keycloak <c>realm_access.roles</c> para
 /// <c>ClaimTypes.Role</c>. A policy roda na pipeline de AuthZ middleware ANTES do model
 /// binding — anônimos recebem 401, autenticados sem role admin recebem 403, sem hidratar
-/// IFormFile/etc.
+/// o corpo da requisição.
 /// </para>
 /// </remarks>
 public static class SmokeEndpointsExtensions
 {
     public const string AdminRole = "admin";
-    public const string SmokeBucketFallback = "uniplus-smoke";
     public const string SmokeCacheKeyPrefix = "smoke:";
     private static readonly TimeSpan DefaultCacheTtl = TimeSpan.FromMinutes(5);
 
@@ -50,15 +47,6 @@ public static class SmokeEndpointsExtensions
             .MapGroup("/api/_smoke")
             .RequireAuthorization(policy => policy.RequireRole(AdminRole))
             .WithTags("_smoke");
-
-        // Storage: PUT em bucket configurado, retorna location.
-        group.MapPost("/storage/upload", UploadSmokeStorageAsync)
-            .DisableAntiforgery()
-            .WithName("smokeStorageUpload")
-            .WithSummary("Smoke E2E — Storage upload")
-            .WithDescription("Faz upload de um arquivo no bucket configurado para validar conectividade + credentials do MinIO. Restrito a usuários com role admin.")
-            .Produces(StatusCodes.Status200OK)
-            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         // Cache: SET (random key + UTC now) com TTL 5min, retorna value para verificação.
         group.MapGet("/cache/{key}", ProbeSmokeCacheAsync)
@@ -78,33 +66,6 @@ public static class SmokeEndpointsExtensions
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         return app;
-    }
-
-    private static async Task<IResult> UploadSmokeStorageAsync(
-        IFormFile file,
-        IStorageService storage,
-        IOptions<StorageOptions> storageOptions,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(file);
-        ArgumentNullException.ThrowIfNull(storage);
-        ArgumentNullException.ThrowIfNull(storageOptions);
-
-        string bucket = string.IsNullOrWhiteSpace(storageOptions.Value.BucketName)
-            ? SmokeBucketFallback
-            : storageOptions.Value.BucketName;
-
-        string objectName = $"smoke/{Guid.NewGuid():N}-{Path.GetFileName(file.FileName)}";
-
-        Stream stream = file.OpenReadStream();
-        await using (stream.ConfigureAwait(false))
-        {
-            string location = await storage
-                .UploadAsync(bucket, objectName, stream, file.ContentType, cancellationToken)
-                .ConfigureAwait(false);
-
-            return Results.Ok(new { bucket, objectName, location });
-        }
     }
 
     private static async Task<IResult> ProbeSmokeCacheAsync(

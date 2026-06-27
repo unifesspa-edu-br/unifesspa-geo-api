@@ -91,7 +91,7 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
     /// <summary>
     /// Nomes dos health checks de infra externa registrados por
     /// <c>AddGeoHealthChecks</c> que são removidos por default em testes — o pipeline
-    /// HTTP típico não tem Postgres/Redis/MinIO/Kafka rodando, e mantê-los gera Unhealthy
+    /// HTTP típico não tem Postgres/Redis/Kafka rodando, e mantê-los gera Unhealthy
     /// permanente em <c>/health</c>/<c>/health/ready</c>, mascarando o estado real do
     /// pipeline de auth/routing/controllers que a suite quer validar.
     /// </summary>
@@ -102,7 +102,7 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
     /// ativos.
     /// </remarks>
     protected virtual ISet<string> InfraHealthCheckNamesToRemoveForTests { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "postgres", "redis", "minio", "kafka" };
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "postgres", "redis", "kafka" };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -153,7 +153,7 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
             }
 
             // Filtro de health checks de infra externa — removidos por default porque a maioria
-            // das suites HTTP-only não tem PG/Redis/MinIO/Kafka rodando. Override
+            // das suites HTTP-only não tem PG/Redis/Kafka rodando. Override
             // InfraHealthCheckNamesToRemoveForTests => emptyset em fixtures que provisionam
             // todas as deps. Aplicado via Configure<HealthCheckServiceOptions> que roda na
             // pipeline de IServiceCollection — a remoção acontece antes do host materializar

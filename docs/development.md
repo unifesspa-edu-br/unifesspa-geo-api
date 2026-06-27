@@ -11,11 +11,11 @@ Copy the compose environment template before starting dependencies:
 
 ```bash
 cp docker/.env.example docker/.env
-docker compose -f docker/docker-compose.yml --env-file docker/.env up -d postgres redis minio kafka apicurio keycloak
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d postgres redis kafka apicurio keycloak
 ```
 
 The compose stack includes the dependencies currently used by the Geo runtime:
-PostGIS, Redis, MinIO, Kafka/Apicurio and Keycloak. Test-only Keycloak data is
+PostGIS, Redis, Kafka/Apicurio and Keycloak. Test-only Keycloak data is
 kept in `docker/keycloak/realm-e2e-tests.json`.
 
 ## Current Bootstrap State

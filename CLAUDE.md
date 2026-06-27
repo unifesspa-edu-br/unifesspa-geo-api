@@ -45,10 +45,10 @@ bash tools/forbidden-deps/check-geo-independence.sh .     # zero deps Unifesspa.
 dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj \
   --filter "FullyQualifiedName~CepEndpointTests"
 
-# Subir a infra local (PostGIS, Redis, MinIO, Kafka/Apicurio, Keycloak)
+# Subir a infra local (PostGIS, Redis, Kafka/Apicurio, Keycloak)
 cp docker/.env.example docker/.env
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d \
-  postgres redis minio kafka apicurio keycloak
+  postgres redis kafka apicurio keycloak
 
 # Imagem do container (Dockerfile dedicado, não na raiz)
 docker build -f docker/Dockerfile.geo -t unifesspa-geo-api:local .
@@ -58,7 +58,7 @@ Os **testes de integração exigem Docker** — os Testcontainers efetivamente u
 **PostgreSQL/PostGIS** e **Keycloak**. Não há projeto de testes unitários separado: a solution lista
 só `IntegrationTests` + `IntegrationTests.Fixtures`. Testes usam `[Fact(DisplayName = "CA-NN: …")]`
 e compartilham containers via `[Collection(GeoPostgisCollection.Name)]` (a grande maioria) e a
-collection do `KeycloakContainerFixture`. (As fixtures `Minio`/`Vault`/`OtelCollector` existem na
+collection do `KeycloakContainerFixture`. (As fixtures `Vault`/`OtelCollector` existem na
 pasta de fixtures como herança da extração, mas nenhum teste do Geo as usa.)
 
 ## Arquitetura

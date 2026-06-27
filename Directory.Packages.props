@@ -50,9 +50,6 @@
          que o do SDK das imagens Docker e quebraria o publish (CS9057). -->
     <PackageVersion Include="MR.EntityFrameworkCore.KeysetPagination" Version="1.6.0" />
 
-    <!-- Storage -->
-    <PackageVersion Include="Minio" Version="7.0.0" />
-
     <!-- Health Checks -->
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.5" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />

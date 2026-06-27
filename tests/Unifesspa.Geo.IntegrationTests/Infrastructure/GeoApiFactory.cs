@@ -14,7 +14,7 @@ using Unifesspa.Geo.IntegrationTests.Fixtures.Hosting;
 /// <para><c>DisableWolverineRuntimeForTests = false</c>: o host roda a migration
 /// (cria a extensão postgis + tabela-sonda) e o WolverineRuntime contra o banco
 /// efêmero — exatamente o caminho produtivo.</para>
-/// <para>Os health checks de infra não provisionada (redis/minio/kafka) e o
+/// <para>Os health checks de infra não provisionada (redis/kafka) e o
 /// <c>oidc-discovery</c> (sem IdP em teste) são removidos para que
 /// <c>/health/ready</c> avalie apenas o <c>postgres</c> — provando o readiness
 /// contra PG+PostGIS real (CA-02).</para>
@@ -28,7 +28,7 @@ public sealed class GeoApiFactory : ApiFactoryBase<Program>
     protected override bool DisableWolverineRuntimeForTests => false;
 
     protected override ISet<string> InfraHealthCheckNamesToRemoveForTests { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "redis", "minio", "kafka", "oidc-discovery" };
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "redis", "kafka", "oidc-discovery" };
 
     protected override IEnumerable<KeyValuePair<string, string?>> GetConfigurationOverrides() =>
     [
