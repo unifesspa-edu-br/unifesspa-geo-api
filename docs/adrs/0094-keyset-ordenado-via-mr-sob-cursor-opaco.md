@@ -12,7 +12,7 @@ informed:
 
 ## Contexto e enunciado do problema
 
-A paginação por cursor do Uni+ usa keyset bidirecional sobre `Id` ([ADR-0089](0089-navegacao-bidirecional-cursor-keyset-reverso.md)) embrulhado num cursor opaco AES-GCM ([ADR-0026](0026-paginacao-cursor-opaco-cifrado.md)). A ordem por `Id` (Guid v7) é total e estável, mas arbitrária para apresentação.
+A paginação por cursor do Uni+ usa keyset bidirecional sobre `Id` (ADR-0089) embrulhado num cursor opaco AES-GCM (ADR-0026). A ordem por `Id` (Guid v7) é total e estável, mas arbitrária para apresentação.
 
 Os endpoints de reference data de estados/cidades do `Geo` ([ADR-0090](0090-modulo-geo-localidades.md)) precisam alimentar combos (`select` de UF e cidade) em ordem **alfabética por nome**, não por `Id`. Ordenar no cliente não dá ordem global correta sob paginação (cada página é reordenada isoladamente). É preciso um keyset **multi-coluna** — chave de ordenação (nome) + `Id` de desempate — preservando a estabilidade do cursor.
 
@@ -82,5 +82,5 @@ A pergunta é **construir** o seek SQL multi-coluna à mão (estender o `CursorK
 
 ## Mais informações
 
-- Refina [ADR-0026](0026-paginacao-cursor-opaco-cifrado.md) e [ADR-0089](0089-navegacao-bidirecional-cursor-keyset-reverso.md); a regra de chave não-nula está na [ADR-0095](0095-chave-de-ordenacao-keyset-nao-nula.md).
+- Refina ADR-0026 e ADR-0089; a regra de chave não-nula está na [ADR-0095](0095-chave-de-ordenacao-keyset-nao-nula.md).
 - Origem: story #700 (ordenação alfabética server-side de estados/cidades), follow-up da revisão do PR #699.

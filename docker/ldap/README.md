@@ -6,7 +6,7 @@ Este diretório contém a configuração do **OpenLDAP local** usada no ambiente
 
 ## Por que existe
 
-A validação em homologação do Identity Brokering com gov.br ([ADR-029](https://github.com/unifesspa-edu-br/uniplus-docs/blob/main/docs/adrs/ADR-029-identity-brokering-govbr-ldap-google.md)) revelou que parte dos `brPersonCPF` no LDAP institucional está armazenada com 10 dígitos (zero à esquerda truncado por carga histórica). gov.br retorna sempre 11 dígitos no claim `sub`, e isso quebra qualquer matching ingênuo de CPF entre os dois sistemas.
+A validação em homologação do Identity Brokering com gov.br (ADR-029) revelou que parte dos `brPersonCPF` no LDAP institucional está armazenada com 10 dígitos (zero à esquerda truncado por carga histórica). gov.br retorna sempre 11 dígitos no claim `sub`, e isso quebra qualquer matching ingênuo de CPF entre os dois sistemas.
 
 A solução arquitetural é desenvolver um Authenticator customizado em Java SPI que faça matching tolerante (ver [issue #217](https://github.com/unifesspa-edu-br/uniplus-api/issues/217)). Para desenvolver e testar esse SPI sem expor PII institucional, este OpenLDAP local com dados sintéticos foi criado.
 
@@ -131,6 +131,6 @@ Senhas armazenadas em texto plano no LDIF (ambiente dev). Não usar nada similar
 ## Referências
 
 - [Issue uniplus-api#217](https://github.com/unifesspa-edu-br/uniplus-api/issues/217) — Story que originou este ambiente
-- [ADR-029](https://github.com/unifesspa-edu-br/uniplus-docs/blob/main/docs/adrs/ADR-029-identity-brokering-govbr-ldap-google.md) — Identity Brokering gov.br + LDAP via Keycloak
+- ADR-029 — Identity Brokering gov.br + LDAP via Keycloak
 - [PR uniplus-api#216](https://github.com/unifesspa-edu-br/uniplus-api/pull/216) — Configuração inicial do gov.br como IdP
 - [osixia/openldap](https://hub.docker.com/r/osixia/openldap) — imagem Docker utilizada

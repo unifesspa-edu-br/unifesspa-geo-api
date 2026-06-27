@@ -23,7 +23,7 @@ dumps .sql  ──psql -f──▶  dne_staging (15 tabelas varchar)
 ### Por que staging-DB (e não parsear os .sql em C#)
 
 - **Streaming nativo:** o `DbDataReader` do Npgsql resolve os ~382 MB de logradouro sem carregar o arquivo em memória — sem reimplementar um parser de `INSERT` textual (frágil com escaping/acentos/`NULL`).
-- **Resolução de FK:** as FKs internas da DNE (`id_cidade`, `distrito_id`, `bairro_id`, inteiros **instáveis entre releases**) ficam disponíveis para JOIN no staging. O domínio nunca usa esses inteiros como identidade — usa Guid v7 ([ADR-0032](adrs/0032-guid-v7-como-identidade.md)) + chave natural.
+- **Resolução de FK:** as FKs internas da DNE (`id_cidade`, `distrito_id`, `bairro_id`, inteiros **instáveis entre releases**) ficam disponíveis para JOIN no staging. O domínio nunca usa esses inteiros como identidade — usa Guid v7 (ADR-0032) + chave natural.
 - **Recarga idempotente:** ver abaixo.
 
 ## Restauração do staging (dev)

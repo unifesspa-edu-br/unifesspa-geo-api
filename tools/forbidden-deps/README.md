@@ -20,7 +20,7 @@ Exit code != 0 quando houver pelo menos uma ocorrência ativa.
 
 | Pacote | Motivo | Referência |
 |--------|--------|-----------|
-| `FluentAssertions` | Biblioteca de assertions Xceed comercial paga a partir da v8. Usar [`AwesomeAssertions`](https://www.nuget.org/packages/AwesomeAssertions) (Apache-2.0). | [ADR-0021](../../docs/adrs/0021-adocao-awesomeassertions-como-biblioteca-de-assertions.md) |
+| `FluentAssertions` | Biblioteca de assertions Xceed comercial paga a partir da v8. Usar [`AwesomeAssertions`](https://www.nuget.org/packages/AwesomeAssertions) (Apache-2.0). | ADR-0021 |
 
 ## Como adicionar nova proibição
 
@@ -43,4 +43,4 @@ O check roda como job dedicado em [`.github/workflows/ci.yml`](../../.github/wor
 
 ## Relação com a *Confirmação* do ADR-0021
 
-A seção *Confirmação* do [ADR-0021](../../docs/adrs/0021-adocao-awesomeassertions-como-biblioteca-de-assertions.md) documenta um grep amplo (`grep -rn "FluentAssertions" ...`) como mecanismo de verificação manual. Esta lint rule é a **implementação automatizada** desse mecanismo, com uma diferença deliberada: usa regex restritos (`using` efetivo, `Include="..."`) em vez do match genérico do nome. Isso elimina falsos positivos em comentários de código e strings literais, sem perder cobertura dos vetores reais de reintrodução. Os dois mecanismos são complementares — o grep amplo serve para auditoria humana exploratória, a lint rule serve como guarda contínua no CI.
+A seção *Confirmação* do ADR-0021 documenta um grep amplo (`grep -rn "FluentAssertions" ...`) como mecanismo de verificação manual. Esta lint rule é a **implementação automatizada** desse mecanismo, com uma diferença deliberada: usa regex restritos (`using` efetivo, `Include="..."`) em vez do match genérico do nome. Isso elimina falsos positivos em comentários de código e strings literais, sem perder cobertura dos vetores reais de reintrodução. Os dois mecanismos são complementares — o grep amplo serve para auditoria humana exploratória, a lint rule serve como guarda contínua no CI.

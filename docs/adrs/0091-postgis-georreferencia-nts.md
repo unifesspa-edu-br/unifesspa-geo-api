@@ -84,5 +84,5 @@ A decisão precisa fixar (a) o tipo de coluna canônico para coordenadas, (b) co
 ## Mais informações
 
 - Habilita o eixo geoespacial do módulo `Geo` ([ADR-0090](0090-modulo-geo-localidades.md)).
-- Segue a convenção de naming/migrations da [ADR-0054](0054-naming-convention-e-strategy-migrations.md).
+- Segue a convenção de naming/migrations da ADR-0054.
 - Documentação do Npgsql sobre o plugin NetTopologySuite (mapeamento `geometry`/`geography`).

@@ -1,9 +1,8 @@
 namespace Unifesspa.Geo.Kernel.Domain.Interfaces;
 
 /// <summary>
-/// Marca entidades append-only de evidência forense per
-/// <see href="../../../docs/adrs/0063-entidades-forensics-isentas-de-soft-delete.md">
-/// ADR-0063</see>. Linhas de tabelas <see cref="IForensicEntity"/> só são
+/// Marca entidades append-only de evidência forense per ADR-0063.
+/// Linhas de tabelas <see cref="IForensicEntity"/> só são
 /// inseridas; qualquer <c>UPDATE</c>/<c>DELETE</c> em produção é tratado
 /// como incidente operacional (corrupção de evidência).
 /// </summary>
