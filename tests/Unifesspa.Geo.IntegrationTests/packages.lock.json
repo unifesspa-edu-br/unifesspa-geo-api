@@ -792,11 +792,6 @@
           "Microsoft.IdentityModel.Logging": "8.0.1"
         }
       },
-      "Microsoft.OpenApi": {
-        "type": "Transitive",
-        "resolved": "2.0.0",
-        "contentHash": "GGYLfzV/G/ct80OZ45JxnWP7NvMX1BCugn/lX7TH5o0lcVaviavsLMTxmFV2AybXWjbi3h6FF1vgZiTK6PXndw=="
-      },
       "Microsoft.TestPlatform.ObjectModel": {
         "type": "Transitive",
         "resolved": "18.7.0",
@@ -1140,6 +1135,7 @@
         "dependencies": {
           "FluentValidation": "[12.1.1, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.7, )",
+          "Microsoft.OpenApi": "[2.7.5, )",
           "Serilog.AspNetCore": "[10.0.0, )",
           "Unifesspa.Geo.Application": "[1.0.0, )",
           "Unifesspa.Geo.Infrastructure": "[1.0.0, )",
@@ -1211,6 +1207,7 @@
           "Microsoft.AspNetCore.OpenApi": "[10.0.7, )",
           "Microsoft.EntityFrameworkCore": "[10.0.9, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.9, )",
+          "Microsoft.OpenApi": "[2.7.5, )",
           "Npgsql": "[10.0.3, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.2, )",
           "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.16.0, )",
@@ -1330,6 +1327,12 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.9"
         }
+      },
+      "Microsoft.OpenApi": {
+        "type": "CentralTransitive",
+        "requested": "[2.7.5, )",
+        "resolved": "2.7.5",
+        "contentHash": "0FA67RSnRM4tcBKqiqVu/HPdZ9+QOKbmeRjxRUGTCjPU4C0bmUhd97Dso7Yild5P7nOV6GxJ2xrK0Kv/O9xp0w=="
       },
       "MR.EntityFrameworkCore.KeysetPagination": {
         "type": "CentralTransitive",
