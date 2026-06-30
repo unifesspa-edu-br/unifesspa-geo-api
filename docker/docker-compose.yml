@@ -30,33 +30,6 @@ services:
       timeout: 5s
       retries: 5
 
-  kafka:
-    image: apache/kafka:4.2.0
-    restart: unless-stopped
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
-    ports:
-      - "9092:9092"
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-cluster.sh cluster-id --bootstrap-server localhost:9092 | grep -q Cluster"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   openldap:
     # OpenLDAP local com dados sintéticos (4devs) para reproduzir o cenário
     # do LDAP institucional Unifesspa em ambiente de desenvolvimento.
@@ -129,34 +102,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
-
-  apicurio:
-    # Apicurio Schema Registry — modo Confluent-compat para os clients .NET
-    # (Confluent.SchemaRegistry + Wolverine.Kafka.Serialization). Storage em
-    # memória para dev local — não é durável entre restarts; em standalone/HML/PROD
-    # o Postgres data-host é usado (apps/apicurio-registry chart no uniplus-infra).
-    # Endpoint Confluent-compat: http://localhost:8081/apis/ccompat/v7
-    # Auth desligada em dev (APICURIO_AUTH_ENABLED=false) — APIs locais usam
-    # SchemaRegistry__AuthType=None. ADR-0051.
-    image: apicurio/apicurio-registry:3.2.4
-    restart: unless-stopped
-    environment:
-      QUARKUS_HTTP_PORT: "8081"
-      APICURIO_STORAGE_KIND: "sql"
-      APICURIO_STORAGE_SQL_KIND: "h2"
-      APICURIO_AUTH_ENABLED: "false"
-      QUARKUS_OIDC_ENABLED: "false"
-    ports:
-      - "8081:8081"
-    healthcheck:
-      # Apicurio 3.x não expõe /q/health/ready nem /health — verificamos a API
-      # principal (/apis/registry/v3/system/info) que só retorna 200 quando
-      # storage SQL está pronto e o servidor está aceitando requests.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8081 && echo -e 'GET /apis/registry/v3/system/info HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 1 cat <&3 | grep -q '200 OK'"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
 
 volumes:
   postgres_data:

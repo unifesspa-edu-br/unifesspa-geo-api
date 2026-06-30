@@ -82,7 +82,7 @@ public sealed partial class CorrelationIdMiddleware
     //
     // Pattern exposto como `internal const` para ser consumido também pelo
     // CorrelationIdEnvelopeMiddleware (Wolverine, ADR-0052): ambos os boundaries
-    // (HTTP e Kafka) precisam validar com a MESMA regra ou a invariante de wire
+    // (HTTP e mensageria) precisam validar com a MESMA regra ou a invariante de wire
     // format uniforme quebra silenciosamente em refactors.
     internal const string FormatoValidoPattern = @"^[A-Za-z0-9\-_.]{1,128}$";
 

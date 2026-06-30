@@ -42,16 +42,6 @@
           "WolverineFx.RDBMS": "5.39.5"
         }
       },
-      "Confluent.SchemaRegistry.Serdes.Json": {
-        "type": "Transitive",
-        "resolved": "2.14.0",
-        "contentHash": "rymTRDrwEIzfFCDEcoV6ZvDatlVrwmMWXT93sERMLHZiEOhOCR53Jiwa9bk/OyjIRqRxiIFHOwys2qJgfN6rQQ==",
-        "dependencies": {
-          "Confluent.Kafka": "2.14.0",
-          "Confluent.SchemaRegistry": "2.14.0",
-          "NJsonSchema.NewtonsoftJson": "11.0.2"
-        }
-      },
       "DistributedLock.Core": {
         "type": "Transitive",
         "resolved": "1.0.8",
@@ -142,11 +132,6 @@
         "type": "Transitive",
         "resolved": "1.1.0",
         "contentHash": "yIOaiA/OrlXQLGPjxFDubHnOU8MCzPTz465xBGRITMm4fDf7DbWKogb2SZC2jYLWEj27q3smTz1Z7lU4h1KkOQ=="
-      },
-      "librdkafka.redist": {
-        "type": "Transitive",
-        "resolved": "2.14.2",
-        "contentHash": "8GRCTOKqCfwAyMSWmJ8c/wJc4PYm1lXAnRUWKQhaUtkz+JJUnDygxwtWPDqBMgS2YMxcrkaubFPTkhddt3RPOQ=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -371,11 +356,6 @@
         "resolved": "1.6.0",
         "contentHash": "uMUw8PKG8C5chT3Yu5bPIsSZIBSLhvSwVOM02jQ8P6ZOwaDg/l+AsYHccom1lG9/ye85N0ZPbHTcbpXHs42O0A=="
       },
-      "Namotion.Reflection": {
-        "type": "Transitive",
-        "resolved": "3.1.1",
-        "contentHash": "Qn0wM7u9TpSpja2x8UVexr2bLHb1DGMNhD2TCz3woklxaY1oH+Sitrw9fg/4YbNoNtczeH2jf+yPdXMQlgvFlQ=="
-      },
       "NetTopologySuite.IO.PostGis": {
         "type": "Transitive",
         "resolved": "2.1.0",
@@ -393,30 +373,6 @@
         "type": "Transitive",
         "resolved": "13.0.3",
         "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
-      },
-      "NJsonSchema": {
-        "type": "Transitive",
-        "resolved": "11.0.2",
-        "contentHash": "BOgw+TOd1w7BSRIEWwkiSgHlKWC2eu0DHsSsb1LIwlC1Hq26A0ARZiMjsCsqfXqXdr7hLf1m4M84Z7LW1wmCGA==",
-        "dependencies": {
-          "NJsonSchema.Annotations": "11.0.2",
-          "Namotion.Reflection": "3.1.1",
-          "Newtonsoft.Json": "13.0.3"
-        }
-      },
-      "NJsonSchema.Annotations": {
-        "type": "Transitive",
-        "resolved": "11.0.2",
-        "contentHash": "VbA0fmxVyqloGXYz863g6QHyojM1tgejwPQr9LjXdubs9YJt5YfRPCQOV/hnzpP2Bqd7nZFpDn9MCImmLAmqCw=="
-      },
-      "NJsonSchema.NewtonsoftJson": {
-        "type": "Transitive",
-        "resolved": "11.0.2",
-        "contentHash": "tTVG8h7qfw6anxlhXGx3oUz7f3ig+t9jO3yrho73ypvMZ7DCyFtiaF5gG3GqBDZXM49ONogDmTZ+8HTG6AKaNQ==",
-        "dependencies": {
-          "NJsonSchema": "11.0.2",
-          "Newtonsoft.Json": "13.0.3"
-        }
       },
       "Npgsql.NetTopologySuite": {
         "type": "Transitive",
@@ -537,8 +493,8 @@
       },
       "System.CodeDom": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "WTlRjL6KWIMr/pAaq3rYqh0TJlzpouaQ/W1eelssHgtlwHAH25jXTkUphTYx9HaIIf7XA6qs/0+YhtLEQRkJ+Q=="
+        "resolved": "6.0.0",
+        "contentHash": "CPc6tWO1LAer3IzfZufDBRL+UZQcj5uS207NHALQzP84Vp/z6wF0Aa0YZImOQY8iStY0A2zI/e3ihKNPfUm8XA=="
       },
       "System.Composition": {
         "type": "Transitive",
@@ -696,10 +652,6 @@
       "unifesspa.geo.infrastructure.core": {
         "type": "Project",
         "dependencies": {
-          "Apache.Avro": "[1.12.1, )",
-          "Confluent.Kafka": "[2.14.2, )",
-          "Confluent.SchemaRegistry": "[2.14.2, )",
-          "Confluent.SchemaRegistry.Serdes.Avro": "[2.14.2, )",
           "EFCore.NamingConventions": "[10.0.1, )",
           "FluentValidation": "[12.1.1, )",
           "MR.EntityFrameworkCore.KeysetPagination": "[1.6.0, )",
@@ -724,52 +676,11 @@
           "VaultSharp": "[1.17.5.1, )",
           "WolverineFx": "[5.39.5, )",
           "WolverineFx.EntityFrameworkCore": "[5.39.5, )",
-          "WolverineFx.Kafka": "[5.39.5, )",
           "WolverineFx.Postgresql": "[5.39.5, )"
         }
       },
       "unifesspa.geo.kernel": {
         "type": "Project"
-      },
-      "Apache.Avro": {
-        "type": "CentralTransitive",
-        "requested": "[1.12.1, )",
-        "resolved": "1.12.1",
-        "contentHash": "OTn0ShyXdMnbJ/1LLNOjvQhwE6Q8LiNtM9B/k51UJa7viuotKhDEnmLIof87XfjUt2UJZFhjF366+B3cKs3k4g==",
-        "dependencies": {
-          "Newtonsoft.Json": "13.0.1",
-          "System.CodeDom": "8.0.0"
-        }
-      },
-      "Confluent.Kafka": {
-        "type": "CentralTransitive",
-        "requested": "[2.14.2, )",
-        "resolved": "2.14.2",
-        "contentHash": "ngjb+jon9UvPig2zLWW2pQHZhWUUWgOdEdyK72UXGDs9waLghNC90mn4dd/ODESfHvBqW0s9+nUP6eb+/5HtBQ==",
-        "dependencies": {
-          "librdkafka.redist": "2.14.2"
-        }
-      },
-      "Confluent.SchemaRegistry": {
-        "type": "CentralTransitive",
-        "requested": "[2.14.2, )",
-        "resolved": "2.14.2",
-        "contentHash": "tIy1DwZ0On58uaENl3c9z8/23ztauvTXlO8vwhtJQsaiQrgoZKp5TmIgt5/piTgjxqTnaLRtmvZ9PwnjQ4gPiQ==",
-        "dependencies": {
-          "Confluent.Kafka": "2.14.2",
-          "Newtonsoft.Json": "13.0.1"
-        }
-      },
-      "Confluent.SchemaRegistry.Serdes.Avro": {
-        "type": "CentralTransitive",
-        "requested": "[2.14.2, )",
-        "resolved": "2.14.2",
-        "contentHash": "8nrOhpYEtldOeAq6TERZ6vj4el5d4tJBB5Q6wOyPXsT9YSRy8IXSfB83JaTsZEN2hOJO5+As5HhqlP4LD+aJSQ==",
-        "dependencies": {
-          "Apache.Avro": "1.12.1",
-          "Confluent.Kafka": "2.14.2",
-          "Confluent.SchemaRegistry": "2.14.2"
-        }
       },
       "EFCore.NamingConventions": {
         "type": "CentralTransitive",
@@ -984,17 +895,6 @@
           "Microsoft.EntityFrameworkCore.Relational": "10.0.2",
           "Weasel.EntityFrameworkCore": "8.15.1",
           "WolverineFx.RDBMS": "5.39.5"
-        }
-      },
-      "WolverineFx.Kafka": {
-        "type": "CentralTransitive",
-        "requested": "[5.39.5, )",
-        "resolved": "5.39.5",
-        "contentHash": "6QT36/IJNiAQxkbj2bEU+QI1ckOZtRbH5ppfsTpa2iQjI72hgLs8JfBKh0xzNrenGMcNMZRoBwrwaz2/dM/28A==",
-        "dependencies": {
-          "Confluent.SchemaRegistry.Serdes.Avro": "2.14.0",
-          "Confluent.SchemaRegistry.Serdes.Json": "2.14.0",
-          "WolverineFx": "5.39.5"
         }
       }
     }

@@ -138,7 +138,7 @@ builder.Services.AddWolverineMessaging();
 builder.Services.AddCorsConfiguration(builder.Configuration, builder.Environment);
 builder.Services.AddGeoCache(builder.Configuration, builder.Environment);
 
-// Health checks: Postgres + Redis + Kafka + OIDC.
+// Health checks: Postgres + Redis + OIDC.
 builder.Services.AddGeoHealthChecks(builder.Configuration, connectionStringName: "GeoDb");
 
 WebApplication app = builder.Build();
