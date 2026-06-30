@@ -31,10 +31,6 @@ updates:
           - Serilog*
         exclude-patterns:
           - Serilog.Sinks.OpenTelemetry
-      kafka:
-        patterns:
-          - Confluent.*
-          - Apache.Avro
       testing:
         patterns:
           - xunit*
