@@ -45,10 +45,10 @@ bash tools/forbidden-deps/check-geo-independence.sh .     # zero deps Unifesspa.
 dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj \
   --filter "FullyQualifiedName~CepEndpointTests"
 
-# Subir a infra local (PostGIS, Redis, Kafka/Apicurio, Keycloak)
+# Subir a infra local (PostGIS, Redis, Keycloak)
 cp docker/.env.example docker/.env
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d \
-  postgres redis kafka apicurio keycloak
+  postgres redis keycloak
 
 # Imagem do container (Dockerfile dedicado, não na raiz)
 docker build -f docker/Dockerfile.geo -t unifesspa-geo-api:local .
