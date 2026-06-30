@@ -44,6 +44,10 @@ public sealed class DneStagingFonteTests
 
         List<CidadeCru> cidades = await ColetarAsync(fonte.LerCidadesAsync);
         cidades.Should().ContainSingle(c => c.CodigoIbge == CodigoMaraba && c.Uf == "PA");
+
+        // #14: a fonte real só expõe id_cidade na tabela de faixa, não cidade_ibge.
+        List<CidadeFaixaCru> cidadeFaixas = await ColetarAsync(fonte.LerCidadeFaixasAsync);
+        cidadeFaixas.Should().ContainSingle(f => f.IdCidade == 1 && f.FaixaIni == "68500000" && f.FaixaFim == "68519999");
     }
 
     [Fact(DisplayName = "Importador roda fim-a-fim sobre o staging (SELECT streamado → upsert), com parse tolerante")]
@@ -70,6 +74,12 @@ public sealed class DneStagingFonteTests
 
         CidadeIndicador indicador = await leitura.CidadeIndicadores.SingleAsync(i => i.CidadeId == maraba.Id);
         indicador.MortalidadeInfantil.Should().BeNull(); // '-' no staging degradou para null
+
+        // #14: carga de cidade_faixa contra o schema real (id_cidade, sem cidade_ibge) —
+        // antes da correção, a carga inteira dava rollback ao chegar aqui.
+        CidadeFaixaCep faixa = await leitura.CidadeFaixasCep.SingleAsync(f => f.CidadeId == maraba.Id);
+        faixa.CepInicial.Should().Be("68500000");
+        faixa.CepFinal.Should().Be("68519999");
     }
 
     [Fact(DisplayName = "Folhas: lê id_cidade/cidade_id como int e distrito_id NULL do logradouro (≠ projeção text-only da #672)")]
@@ -207,9 +217,11 @@ public sealed class DneStagingFonteTests
         INSERT INTO dne_staging."tbl_cep_202601_n_cidade_ibge" VALUES
             ('1500402','marabaense','PREFEITO','15128.27','283542','18.7','96.5','0.668','-','1234567.89','1000000.00','25000.00','05/04');
 
+        -- Schema real (#14): só id_cidade, cidade, estado, faixa_ini, faixa_fim — sem
+        -- cidade_ibge. id_cidade=1 casa com o id_cidade da tabela "cidade" acima.
         CREATE TABLE dne_staging."tbl_cep_202601_n_cidade_faixa" (
-            cidade_ibge text, faixa_ini text, faixa_fim text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_cidade_faixa" VALUES ('1500402','68500000','68519999');
+            id_cidade int, cidade text, estado text, faixa_ini text, faixa_fim text);
+        INSERT INTO dne_staging."tbl_cep_202601_n_cidade_faixa" VALUES (1,'Marabá','PA','68500000','68519999');
         """;
 
     private const string StagingFolhasSql = """

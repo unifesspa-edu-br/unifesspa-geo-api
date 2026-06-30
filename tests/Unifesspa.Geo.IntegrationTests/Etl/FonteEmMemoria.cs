@@ -147,8 +147,8 @@ internal static class DadosDne
             DensidadeDemografica: null, Escolarizacao6a14: null, Idh: null, mortalidadeInfantil,
             Receitas: null, Despesas: null, PibPerCapita: null, aniversario);
 
-    public static CidadeFaixaCru CidadeFaixa(string codigoIbge, string faixaIni, string faixaFim) =>
-        new(codigoIbge, faixaIni, faixaFim);
+    public static CidadeFaixaCru CidadeFaixa(int idCidade, string faixaIni, string faixaFim) =>
+        new(idCidade, faixaIni, faixaFim);
 
     public static CidadeIdCru CidadeId(int idCidade, string codigoIbge) =>
         new(idCidade, codigoIbge);

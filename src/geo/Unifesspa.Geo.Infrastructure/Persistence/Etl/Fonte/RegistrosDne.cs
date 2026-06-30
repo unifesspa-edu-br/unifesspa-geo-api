@@ -88,9 +88,13 @@ internal sealed record CidadeIndicadorCru(
     string? PibPerCapita,
     string? Aniversario);
 
-/// <summary>Faixa de CEP do município (fonte <c>cidade_faixa</c>, casa por <c>cidade_ibge</c>).</summary>
+/// <summary>
+/// Faixa de CEP do município (fonte <c>cidade_faixa</c>): a tabela real só expõe o
+/// <c>id_cidade</c> (int4, PK da fonte) — não tem <c>cidade_ibge</c> — então a FK casa
+/// pelo id, igual a <c>distrito_faixa</c>/<c>bairro_faixa</c> (issue #14).
+/// </summary>
 internal sealed record CidadeFaixaCru(
-    string? CodigoIbge,
+    int? IdCidade,
     string? FaixaIni,
     string? FaixaFim);
 

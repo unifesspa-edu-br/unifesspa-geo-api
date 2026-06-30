@@ -78,10 +78,20 @@ internal sealed partial class GeoImportadorPaisEstadoCidade : IGeoImportador
             Dictionary<string, Guid> cidadesPorCodigo =
                 await ImportarCidadesAsync(fonte, estadosPorUf, territorios, relatorio, cancellationToken).ConfigureAwait(false);
 
+            // A fonte de cidade_faixa só expõe id_cidade (int4 da DNE), não cidade_ibge
+            // (#14) — resolve a FK contra o cidadesPorCodigo já carregado, sem nova
+            // consulta ao banco (mesmo padrão de Distrito/Bairro, #673).
+            Dictionary<int, Guid> cidadesPorIdDne =
+                await ResolverIdsDneParaGuidAsync(
+                    fonte.LerCidadeIdsAsync(cancellationToken),
+                    cru => cru.IdCidade,
+                    cru => cru.CodigoIbge,
+                    cidadesPorCodigo).ConfigureAwait(false);
+
             Dictionary<string, CidadeIndicadorCru> indicadoresCidade =
                 await AgregarContandoAsync(fonte.LerCidadeIndicadoresAsync(cancellationToken), i => ChaveCodigo(i.CodigoIbge), relatorio.Tabela("cidade_indicador")).ConfigureAwait(false);
             await ImportarCidadeIndicadoresAsync(cidadesPorCodigo, indicadoresCidade, fonte.Versao, relatorio, cancellationToken).ConfigureAwait(false);
-            await ImportarCidadeFaixasAsync(fonte, cidadesPorCodigo, fonte.Versao, relatorio, cancellationToken).ConfigureAwait(false);
+            await ImportarCidadeFaixasAsync(fonte, cidadesPorIdDne, fonte.Versao, relatorio, cancellationToken).ConfigureAwait(false);
 
             await transacao.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -422,7 +432,7 @@ internal sealed partial class GeoImportadorPaisEstadoCidade : IGeoImportador
 
     private async Task ImportarCidadeFaixasAsync(
         IGeoFonteDados fonte,
-        Dictionary<string, Guid> cidadesPorCodigo,
+        Dictionary<int, Guid> cidadesPorIdDne,
         string versao,
         RelatorioImportacao relatorio,
         CancellationToken cancellationToken)
@@ -431,7 +441,7 @@ internal sealed partial class GeoImportadorPaisEstadoCidade : IGeoImportador
 
         // Upsert por chave natural (cidade_id, cep_inicial, cep_final) — UNIQUE — com
         // dedup intra-fonte (ver estado_faixa): preserva Id e não estoura a UNIQUE.
-        Guid[] cidadeIds = [.. cidadesPorCodigo.Values];
+        Guid[] cidadeIds = [.. cidadesPorIdDne.Values];
         Dictionary<string, CidadeFaixaCep> existentes =
             (await _contexto.CidadeFaixasCep.Where(f => cidadeIds.Contains(f.CidadeId)).ToListAsync(cancellationToken).ConfigureAwait(false))
             .ToDictionary(f => ChaveFaixa(f.CidadeId, f.CepInicial, f.CepFinal), StringComparer.Ordinal);
@@ -440,10 +450,9 @@ internal sealed partial class GeoImportadorPaisEstadoCidade : IGeoImportador
         await foreach (CidadeFaixaCru cru in fonte.LerCidadeFaixasAsync(cancellationToken).ConfigureAwait(false))
         {
             contador.ContarLido();
-            string? codigo = ChaveCodigo(cru.CodigoIbge);
-            if (codigo is null || !cidadesPorCodigo.TryGetValue(codigo, out Guid cidadeId))
+            if (cru.IdCidade is not int idCidade || !cidadesPorIdDne.TryGetValue(idCidade, out Guid cidadeId))
             {
-                contador.ContarOrfao(codigo ?? "(sem codigo)");
+                contador.ContarOrfao(cru.IdCidade?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(sem id)");
                 continue;
             }
 
