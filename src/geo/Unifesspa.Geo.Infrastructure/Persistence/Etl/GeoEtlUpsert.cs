@@ -112,6 +112,33 @@ internal static class GeoEtlUpsert
         return mapa;
     }
 
+    /// <summary>
+    /// Resolve {id4 da fonte → Guid intra-banco} casando pelo código natural já resolvido
+    /// (ex.: <c>id_cidade → cidade_ibge → Cidade.Id</c>) contra um mapa código→Guid
+    /// carregado pelo chamador. Extraído da carga de Distrito/Bairro (#673) para reuso na
+    /// carga de faixas de Cidade (#672, issue #14) — a fonte DNE não expõe o código
+    /// natural nas tabelas de faixa, só o id4 interno (PK da fonte).
+    /// </summary>
+    public static async Task<Dictionary<int, Guid>> ResolverIdsDneParaGuidAsync<T>(
+        IAsyncEnumerable<T> fonte,
+        Func<T, int?> id,
+        Func<T, string?> codigo,
+        Dictionary<string, Guid> codigoParaGuid)
+    {
+        Dictionary<int, Guid> mapa = [];
+        await foreach (T item in fonte.ConfigureAwait(false))
+        {
+            string? chave = ChaveCodigo(codigo(item));
+            if (id(item) is int idFonte && chave is not null
+                && codigoParaGuid.TryGetValue(chave, out Guid guid))
+            {
+                mapa[idFonte] = guid; // last-wins (id da fonte é PK)
+            }
+        }
+
+        return mapa;
+    }
+
     /// <summary>Chave natural alfabética (sigla/UF): trim + maiúsculas; vazio → <see langword="null"/>.</summary>
     public static string? ChaveSigla(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : valor.Trim().ToUpperInvariant();

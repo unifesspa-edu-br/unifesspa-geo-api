@@ -121,8 +121,8 @@ internal sealed class DneStagingFonte : IGeoFonteDados
 
     public IAsyncEnumerable<CidadeFaixaCru> LerCidadeFaixasAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT cidade_ibge, faixa_ini, faixa_fim FROM {Tabela("cidade_faixa")}",
-            static r => new CidadeFaixaCru(Texto(r, 0), Texto(r, 1), Texto(r, 2)),
+            $"SELECT id_cidade, faixa_ini, faixa_fim FROM {Tabela("cidade_faixa")}",
+            static r => new CidadeFaixaCru(Inteiro(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
     public IAsyncEnumerable<CidadeIdCru> LerCidadeIdsAsync(CancellationToken cancellationToken) =>

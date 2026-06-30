@@ -136,18 +136,11 @@ internal sealed class GeoImportadorDistritoBairro
         Dictionary<string, Guid> ibgeParaGuid =
             await _contexto.Cidades.ToDictionaryAsync(c => c.CodigoIbge, c => c.Id, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
 
-        Dictionary<int, Guid> mapa = [];
-        await foreach (CidadeIdCru cru in fonte.LerCidadeIdsAsync(cancellationToken).ConfigureAwait(false))
-        {
-            string? codigoIbge = ChaveCodigo(cru.CodigoIbge);
-            if (cru.IdCidade is int idCidade && codigoIbge is not null
-                && ibgeParaGuid.TryGetValue(codigoIbge, out Guid cidadeGuid))
-            {
-                mapa[idCidade] = cidadeGuid; // last-wins (id_cidade é PK na fonte)
-            }
-        }
-
-        return mapa;
+        return await ResolverIdsDneParaGuidAsync(
+            fonte.LerCidadeIdsAsync(cancellationToken),
+            cru => cru.IdCidade,
+            cru => cru.CodigoIbge,
+            ibgeParaGuid).ConfigureAwait(false);
     }
 
     private async Task<Dictionary<int, LocalidadeResolvida>> ImportarLocalidadesAsync<T>(

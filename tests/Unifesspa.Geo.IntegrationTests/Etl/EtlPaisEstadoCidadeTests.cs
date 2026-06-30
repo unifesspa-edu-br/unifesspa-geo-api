@@ -240,7 +240,12 @@ public sealed class EtlPaisEstadoCidadeTests
         fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(CodigoMaraba, mortalidadeInfantil: "-", populacao: "283542", aniversario: "05/04"));
         fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(CodigoSaoPaulo, mortalidadeInfantil: "11.5", populacao: "11451245"));
 
-        fonte.CidadeFaixas.Add(DadosDne.CidadeFaixa(CodigoMaraba, "68500000", "68519999"));
+        // id_cidade (int4 da fonte) → cidade_ibge: a faixa de CEP do município só expõe
+        // o id na tabela real, não o código IBGE (#14) — resolvido via LerCidadeIdsAsync.
+        fonte.CidadeIds.Add(DadosDne.CidadeId(1, CodigoMaraba));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(2, CodigoSaoPaulo));
+
+        fonte.CidadeFaixas.Add(DadosDne.CidadeFaixa(1, "68500000", "68519999"));
 
         return fonte;
     }
