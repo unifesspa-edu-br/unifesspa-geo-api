@@ -34,14 +34,14 @@ public static class MessagingMiddlewarePolicies
 
     /// <summary>
     /// Registra o <see cref="CorrelationIdEnvelopeMiddleware"/> em TODOS os chains
-    /// Wolverine (commands, queries, eventos cascading, mensagens consumidas de Kafka
-    /// que não são command/query). Implementa o terceiro componente da ADR-0052
+    /// Wolverine (commands, queries, eventos cascading, mensagens consumidas da queue
+    /// durável que não são command/query). Implementa o terceiro componente da ADR-0052
     /// (rastreabilidade cross-service via <c>uniplus.correlation-id</c>).
     /// </summary>
     /// <remarks>
     /// <para>Aplicado sem filtro <see cref="IsCommandOrQueryChain"/> de propósito:
     /// o <c>CorrelationId</c> precisa fluir também em handlers de eventos publicados
-    /// via outbox/Kafka, que não implementam <c>ICommand&lt;T&gt;</c>/<c>IQuery&lt;T&gt;</c>
+    /// via outbox, que não implementam <c>ICommand&lt;T&gt;</c>/<c>IQuery&lt;T&gt;</c>
     /// — caso contrário, o consumer perderia a âncora de negócio assim que o span pai
     /// fosse descartado pelo sampler de 10% em produção (ADR-0018).</para>
     /// <para>Deve ser registrado <em>antes</em> de <see cref="AddCommandQueryMiddleware"/>:

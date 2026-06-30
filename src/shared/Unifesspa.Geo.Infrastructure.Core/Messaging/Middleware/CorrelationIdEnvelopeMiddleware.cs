@@ -13,9 +13,9 @@ using Wolverine.Attributes;
 /// <summary>
 /// Middleware Wolverine que propaga <c>CorrelationId</c> ponta a ponta em
 /// mensagens trocadas pelo backbone CQRS (commands, queries, eventos
-/// publicados via outbox/Kafka). Implementa o terceiro componente da ADR-0052
+/// publicados via outbox). Implementa o terceiro componente da ADR-0052
 /// — taparia a lacuna em que o <c>X-Correlation-Id</c> HTTP morre no boundary
-/// Kafka, deixando o consumer sem âncora de negócio quando o span pai é
+/// de mensageria, deixando o consumer sem âncora de negócio quando o span pai é
 /// descartado pelo sampling head-based de 10% em produção.
 /// </summary>
 /// <remarks>
@@ -50,14 +50,14 @@ using Wolverine.Attributes;
 /// existe no Wolverine, mas o ADR-0052 (Opção A') optou pelo header explícito
 /// <c>uniplus.correlation-id</c> propagado via
 /// <see cref="IPolicies.PropagateIncomingHeaderToOutgoing(string)"/> — wire format
-/// uniforme em qualquer broker, sem depender da serialização específica do transport
-/// (Kafka, PG queue, gRPC). Drift entre o built-in e a property Serilog
+/// uniforme em qualquer transport, sem depender da serialização específica
+/// (PG queue, gRPC). Drift entre o built-in e a property Serilog
 /// <c>CorrelationId</c> deixa de existir porque há apenas um valor canônico.</para>
 /// </remarks>
 public static partial class CorrelationIdEnvelopeMiddleware
 {
     /// <summary>
-    /// Nome do header propagado em envelopes Wolverine (outbox → Kafka, PG queue, gRPC etc.).
+    /// Nome do header propagado em envelopes Wolverine (outbox → PG queue, gRPC etc.).
     /// Prefixo <c>uniplus.</c> deixa explícito que é um header de domínio do projeto,
     /// fora do espaço W3C / OTel.
     /// </summary>
@@ -77,7 +77,7 @@ public static partial class CorrelationIdEnvelopeMiddleware
     /// <summary>
     /// Nome do span attribute (Activity tag) — espelha
     /// <see cref="CorrelationIdMiddleware.ActivityTagName"/> para drill-down Loki → Tempo
-    /// uniforme entre fluxos HTTP-only e fluxos que atravessam Kafka.
+    /// uniforme entre fluxos HTTP-only e fluxos que atravessam o transport de mensageria.
     /// </summary>
     public const string ActivityTagName = CorrelationIdMiddleware.ActivityTagName;
 
@@ -91,14 +91,14 @@ public static partial class CorrelationIdEnvelopeMiddleware
     /// <c>CorrelationId</c> de um handler:</para>
     /// <list type="number">
     ///   <item><description><b>Header explícito</b> <c>uniplus.correlation-id</c> no envelope —
-    ///   fluxo cross-host (Kafka via outbox): o produtor já gerou/validou e o consumer
+    ///   fluxo cross-host (transport via outbox): o produtor já gerou/validou e o consumer
     ///   preserva identicamente. Validado contra <c>CorrelationIdMiddleware.FormatoValidoPattern</c>.</description></item>
     ///   <item><description><b>Ambient via <see cref="ICorrelationIdAccessor"/></b> (AsyncLocal
     ///   populado pelo <see cref="CorrelationIdMiddleware"/> HTTP) — fluxo in-process:
     ///   controller chama <c>ICommandBus.Send</c>, Wolverine cria envelope local sem o header
     ///   mas o AsyncLocal flui através do <c>await</c>. Submetido à mesma validação regex.</description></item>
     ///   <item><description><b>GUID novo</b> (formato <c>"D"</c>) — último recurso para handlers
-    ///   sem origem HTTP nem header de Kafka (scheduler interno, retry de mensagem que perdeu
+    ///   sem origem HTTP nem header de mensageria (scheduler interno, retry de mensagem que perdeu
     ///   o header). Garante que todo handler emita logs com pelo menos um id estável.</description></item>
     /// </list>
     /// </remarks>
@@ -152,7 +152,7 @@ public static partial class CorrelationIdEnvelopeMiddleware
     private static string ObterOuGerarCorrelationId(Envelope envelope, ICorrelationIdAccessor accessor)
     {
         // 1. Header explícito no envelope é a fonte canônica para fluxos cross-host
-        //    (consumer recebendo de Kafka via outbox). O valor já foi gerado/validado
+        //    (consumer recebendo da queue durável via outbox). O valor já foi gerado/validado
         //    pelo produtor — preservamos identicamente.
         if (envelope.Headers.TryGetValue(HeaderName, out string? valor)
             && !string.IsNullOrEmpty(valor)
@@ -174,7 +174,7 @@ public static partial class CorrelationIdEnvelopeMiddleware
             return ambient;
         }
 
-        // 3. Último recurso: handler invocado sem origem HTTP nem header de Kafka
+        // 3. Último recurso: handler invocado sem origem HTTP nem header de mensageria
         //    (ex.: scheduler interno, retry de mensagem que perdeu o header). Gera GUID
         //    novo para que o handler tenha pelo menos um id estável durante sua execução.
         return Guid.NewGuid().ToString("D");
@@ -182,7 +182,7 @@ public static partial class CorrelationIdEnvelopeMiddleware
 
     // Pattern consumido também por CorrelationIdMiddleware (HTTP) via
     // CorrelationIdMiddleware.FormatoValidoPattern — single source of truth garante
-    // que ambos os boundaries (HTTP e Kafka) validem com a MESMA regra. Sem isto,
+    // que ambos os boundaries (HTTP e mensageria) validem com a MESMA regra. Sem isto,
     // refactor em um lado deixaria drift silencioso no wire format do uniplus.correlation-id.
     [GeneratedRegex(CorrelationIdMiddleware.FormatoValidoPattern)]
     private static partial Regex FormatoValido();

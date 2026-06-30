@@ -61,7 +61,7 @@ public static class SmokeEndpointsExtensions
         group.MapPost("/messaging/publish", PublishSmokeMessageAsync)
             .WithName("smokeMessagingPublish")
             .WithSummary("Smoke E2E — Messaging publish")
-            .WithDescription("Publica um SmokePingMessage via Wolverine outbox para validar persistência + transport (PG queue ou Kafka). O handler em Infrastructure.Core registra log do round-trip. Restrito a usuários com role admin.")
+            .WithDescription("Publica um SmokePingMessage via Wolverine outbox para validar persistência + transport (PG queue durável). O handler em Infrastructure.Core registra log do round-trip. Restrito a usuários com role admin.")
             .Produces(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 

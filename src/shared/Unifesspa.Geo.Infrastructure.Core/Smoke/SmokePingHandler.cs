@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// Consumer de <see cref="SmokePingMessage"/> — apenas registra log estruturado para
-/// confirmação visual do round-trip pelo Wolverine outbox + transport (PG queue ou Kafka).
+/// confirmação visual do round-trip pelo Wolverine outbox + transport (PG queue durável).
 /// Discovery por convenção: a classe é estática e o método <c>Handle</c> é resolvido pelo
 /// Wolverine na inicialização do host.
 /// </summary>
