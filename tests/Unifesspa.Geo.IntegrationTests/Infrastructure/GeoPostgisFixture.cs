@@ -27,7 +27,6 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 public sealed class GeoPostgisFixture : IAsyncLifetime
 {
     private const string ConnectionStringEnvVar = "ConnectionStrings__GeoDb";
-    private const string KafkaBootstrapEnvVar = "Kafka__BootstrapServers";
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgis/postgis:18-3.6")
         .WithDatabase("uniplus_geo_tests")
@@ -36,7 +35,6 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
         .Build();
 
     private string? _connectionStringEnvVarPrevio;
-    private string? _kafkaEnvVarPrevio;
     private GeoApiFactory? _factory;
 
     public string ConnectionString => _postgres.GetConnectionString();
@@ -48,19 +46,15 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
     {
         await _postgres.StartAsync().ConfigureAwait(false);
 
-        // Captura os valores prévios para restaurar no DisposeAsync — as env vars são
-        // process-wide e não podem vazar para outras coleções no mesmo processo.
+        // Captura o valor prévio para restaurar no DisposeAsync — a env var é
+        // process-wide e não pode vazar para outras coleções no mesmo processo.
         _connectionStringEnvVarPrevio = Environment.GetEnvironmentVariable(ConnectionStringEnvVar);
-        _kafkaEnvVarPrevio = Environment.GetEnvironmentVariable(KafkaBootstrapEnvVar);
 
         try
         {
-            // Env vars lidas pelo WebApplicationBuilder a tempo (ConfigureAppConfiguration
+            // Env var lida pelo WebApplicationBuilder a tempo (ConfigureAppConfiguration
             // chegaria tarde para a connection string lazy do DbContext/Wolverine).
-            // Kafka em " " (whitespace, não string.Empty) desliga o transporte mantendo
-            // a queue PG — string.Empty removeria a env var em alguns runtimes.
             Environment.SetEnvironmentVariable(ConnectionStringEnvVar, ConnectionString);
-            Environment.SetEnvironmentVariable(KafkaBootstrapEnvVar, " ");
 
             // Aplica o schema (extensão postgis + tabela-sonda + idempotency_cache).
             // Como superusuário do container, o CREATE EXTENSION postgis cria de fato.
@@ -72,7 +66,6 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
         catch
         {
             Environment.SetEnvironmentVariable(ConnectionStringEnvVar, _connectionStringEnvVarPrevio);
-            Environment.SetEnvironmentVariable(KafkaBootstrapEnvVar, _kafkaEnvVarPrevio);
             throw;
         }
     }
@@ -85,7 +78,6 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
         }
 
         Environment.SetEnvironmentVariable(ConnectionStringEnvVar, _connectionStringEnvVarPrevio);
-        Environment.SetEnvironmentVariable(KafkaBootstrapEnvVar, _kafkaEnvVarPrevio);
 
         await _postgres.DisposeAsync().ConfigureAwait(false);
     }
