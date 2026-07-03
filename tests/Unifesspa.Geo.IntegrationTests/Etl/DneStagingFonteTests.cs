@@ -33,7 +33,10 @@ public sealed class DneStagingFonteTests
     public async Task LeRegistros_MapeiaColunas()
     {
         await CriarStagingAsync();
-        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao);
+        // Schema explícito: o dado de teste é criado em "dne_staging" (isolado do
+        // "public" do mesmo Testcontainer, onde vive o domínio) — o default da
+        // classe agora é "public" (banco de staging dedicado real, issue #12).
+        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao, "dne_staging");
 
         List<PaisCru> paises = await ColetarAsync(fonte.LerPaisesAsync);
         paises.Should().HaveCount(2);
@@ -56,7 +59,10 @@ public sealed class DneStagingFonteTests
         await LimparDominioAsync();
         await CriarStagingAsync();
 
-        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao);
+        // Schema explícito: o dado de teste é criado em "dne_staging" (isolado do
+        // "public" do mesmo Testcontainer, onde vive o domínio) — o default da
+        // classe agora é "public" (banco de staging dedicado real, issue #12).
+        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao, "dne_staging");
         await using (GeoDbContext ctx = _fixture.CreateDbContext())
         {
             GeoImportadorPaisEstadoCidade importador = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
@@ -87,7 +93,10 @@ public sealed class DneStagingFonteTests
     {
         await CriarStagingAsync();
         await CriarStagingFolhasAsync();
-        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao);
+        // Schema explícito: o dado de teste é criado em "dne_staging" (isolado do
+        // "public" do mesmo Testcontainer, onde vive o domínio) — o default da
+        // classe agora é "public" (banco de staging dedicado real, issue #12).
+        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao, "dne_staging");
 
         List<CidadeIdCru> ids = await ColetarAsync(fonte.LerCidadeIdsAsync);
         ids.Should().ContainSingle(c => c.IdCidade == 1 && c.CodigoIbge == CodigoMaraba);
