@@ -21,7 +21,10 @@ using Npgsql;
 /// </remarks>
 internal sealed class DneStagingFonte : IGeoFonteDados
 {
-    public const string SchemaPadrao = "dne_staging";
+    // "public" — schema nativo do banco de staging dedicado (issue #12): os dumps
+    // (Navicat) qualificam "public"."tbl_cep_..." explicitamente, então só um banco
+    // próprio (não um schema secundário do domínio) os recebe sem reescrita.
+    public const string SchemaPadrao = "public";
 
     private readonly string _connectionString;
     private readonly string _schema;
