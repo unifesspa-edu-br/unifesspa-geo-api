@@ -18,11 +18,23 @@ public sealed class DneStagingFonteFactoryTests
 {
     private const string Versao = "202601";
 
-    [Theory(DisplayName = "Sem ConnectionStrings:GeoStagingDb (ausente ou vazia como no appsettings.json base), lança mesmo com GeoDb presente")]
+    [Fact(DisplayName = "Construtor não lança sem GeoStagingDb — o controller admin resolve a factory até num GET de status que nunca chama Criar")]
+    public void SemGeoStagingDb_ConstrutorNaoLanca()
+    {
+        IConfiguration configuracao = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = "Host=localhost;Database=uniplus_geo" })
+            .Build();
+
+        Action construir = () => _ = new DneStagingFonteFactory(configuracao, Options.Create(new EtlOpcoes()));
+
+        construir.Should().NotThrow();
+    }
+
+    [Theory(DisplayName = "Sem ConnectionStrings:GeoStagingDb (ausente ou vazia como no appsettings.json base), Criar lança mesmo com GeoDb presente")]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void SemGeoStagingDb_Lanca(string? valorGeoStagingDb)
+    public void SemGeoStagingDb_CriarLanca(string? valorGeoStagingDb)
     {
         Dictionary<string, string?> configValores = new() { ["ConnectionStrings:GeoDb"] = "Host=localhost;Database=uniplus_geo" };
         if (valorGeoStagingDb is not null)
@@ -31,8 +43,9 @@ public sealed class DneStagingFonteFactoryTests
         }
 
         IConfiguration configuracao = new ConfigurationBuilder().AddInMemoryCollection(configValores).Build();
+        DneStagingFonteFactory factory = new(configuracao, Options.Create(new EtlOpcoes()));
 
-        Action criar = () => _ = new DneStagingFonteFactory(configuracao, Options.Create(new EtlOpcoes()));
+        Action criar = () => factory.Criar(Versao);
 
         criar.Should().Throw<InvalidOperationException>()
             .WithMessage("*GeoStagingDb*");
