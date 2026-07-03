@@ -31,11 +31,12 @@ dumps .sql  ──psql -f──▶  uniplus_geo_staging.public (15 tabelas varch
 
 Pré-requisito: o banco `uniplus_geo_staging` (role `uniplus_geo_staging_app`) provisionado por `docker/init-db.sql`. A connection string é `ConnectionStrings:GeoStagingDb` (`appsettings.Development.json` para rodar a API local; valores documentados em `docker/.env.example`).
 
-> `docker/init-db.sql` só roda no **primeiro boot** do volume do Postgres (`/docker-entrypoint-initdb.d`, comportamento padrão da imagem). Quem já tinha a stack rodando antes desta mudança precisa recriar o volume (`docker compose down -v && docker compose up -d postgres`, perde os dados locais existentes) **ou** rodar o provisionamento manualmente, sem perder nada:
+> `docker/init-db.sql` só roda no **primeiro boot** do volume do Postgres (`/docker-entrypoint-initdb.d`, comportamento padrão da imagem). Quem já tinha a stack rodando antes desta mudança precisa recriar o volume (`docker compose down -v && docker compose up -d postgres`, perde os dados locais existentes) **ou** rodar o provisionamento manualmente, sem perder nada — em **dois** comandos `psql -c` separados: `CREATE DATABASE` não pode rodar dentro de bloco de transação, e múltiplos statements num único `-c` são enviados como uma transação implícita:
 > ```bash
 > docker exec -it <container_postgres> psql -U "$POSTGRES_USER" -c \
->   "CREATE ROLE uniplus_geo_staging_app LOGIN PASSWORD 'uniplus_dev';
->    CREATE DATABASE uniplus_geo_staging OWNER uniplus_geo_staging_app;"
+>   "CREATE ROLE uniplus_geo_staging_app LOGIN PASSWORD 'uniplus_dev';"
+> docker exec -it <container_postgres> psql -U "$POSTGRES_USER" -c \
+>   "CREATE DATABASE uniplus_geo_staging OWNER uniplus_geo_staging_app;"
 > ```
 
 ```bash
