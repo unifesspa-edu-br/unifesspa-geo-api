@@ -19,3 +19,12 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 CREATE EXTENSION IF NOT EXISTS unaccent;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Banco de staging da DNE (issue #12): recebe os 15 dumps brutos (Correios/IBGE,
+-- gerados via Navicat) via `psql -f` sem nenhuma reescrita de schema — os dumps
+-- qualificam "public"."tbl_cep_..." explicitamente, então só um "public" NATIVO
+-- (banco próprio, não um schema secundário do uniplus_geo) os recebe de forma
+-- transparente. Role própria (não uniplus_geo_app) por menor privilégio: o app
+-- do domínio nunca precisa enxergar o dataset bruto, e vice-versa.
+CREATE ROLE uniplus_geo_staging_app LOGIN PASSWORD 'uniplus_dev';
+CREATE DATABASE uniplus_geo_staging OWNER uniplus_geo_staging_app;

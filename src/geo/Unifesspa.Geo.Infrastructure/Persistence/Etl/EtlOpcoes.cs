@@ -27,8 +27,14 @@ public sealed class EtlOpcoes
     /// <summary>Versão (AAAAMM) do dataset usada pelo seed de desenvolvimento.</summary>
     public string VersaoSeed { get; set; } = "202601";
 
-    /// <summary>Schema de staging onde os dumps DNE são restaurados (lido pela <c>DneStagingFonte</c>).</summary>
-    public string StagingSchema { get; set; } = "dne_staging";
+    /// <summary>
+    /// Schema onde os dumps DNE são restaurados no banco de staging dedicado
+    /// (<c>ConnectionStrings:GeoStagingDb</c>, issue #12), lido pela <c>DneStagingFonte</c>.
+    /// Default <c>public</c> — os dumps (Navicat) qualificam <c>"public"."tbl_cep_..."</c>
+    /// explicitamente, então o <c>public</c> nativo do banco de staging os recebe sem
+    /// nenhuma reescrita de schema.
+    /// </summary>
+    public string StagingSchema { get; set; } = "public";
 
     /// <summary>
     /// Idade a partir da qual uma execução <c>EmAndamento</c> é considerada abandonada
