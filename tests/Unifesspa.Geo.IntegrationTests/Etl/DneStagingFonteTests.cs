@@ -105,7 +105,7 @@ public sealed class DneStagingFonteTests
         distritos.Should().ContainSingle(d => d.IdDistrito == 10 && d.CidadeIdDne == 1 && d.Nome == "Cidade Nova");
 
         List<LogradouroCru> logradouros = await ColetarAsync(fonte.LerLogradourosAsync);
-        logradouros.Should().HaveCount(2);
+        logradouros.Should().HaveCount(3); // inclui a linha com tipo e sem nome (segue o fluxo de logradouro)
         logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.DistritoIdDne == 10 && l.CidadeIdDne == 1 && l.CepAtivo == "S");
         logradouros.Should().ContainSingle(l => l.Cep == "68500001" && l.DistritoIdDne == null); // distrito_id NULL preservado
 
@@ -116,6 +116,7 @@ public sealed class DneStagingFonteTests
         // Linha sem nome (CEP geral da cidade) não é logradouro: entra só em LerCepGeraisAsync.
         logradouros.Should().NotContain(l => l.Cep == "68525000");
         List<CepGeralCru> cepGerais = await ColetarAsync(fonte.LerCepGeraisAsync);
+        // Linha com tipo mas sem nome NÃO é CEP geral (o contrato exige tipo vazio também).
         cepGerais.Should().ContainSingle()
             .Which.Should().Match<CepGeralCru>(g => g.Cep == "68525000" && g.CidadeIdDne == 1 && g.DistritoIdDne == null && g.Uf == "PA");
 
@@ -260,6 +261,7 @@ public sealed class DneStagingFonteTests
         INSERT INTO dne_staging."tbl_cep_202601_n_logradouro" VALUES
             ('68500000','Rua','A','Rua A',NULL,10,1,'PA','Rua','A','Rua A','-5.36','-49.11','S'),
             ('68500001','Rua','B','Rua B',NULL,NULL,1,'PA','Rua','B','Rua B',NULL,NULL,'N'),
-            ('68525000','','','',NULL,NULL,1,'PA','','','','-5.046','-48.59947','N');
+            ('68525000','','','',NULL,NULL,1,'PA','','','','-5.046','-48.59947','N'),
+            ('68525300','Rua','','',NULL,NULL,1,'PA','Rua','','','-5.0','-48.5','N');
         """;
 }

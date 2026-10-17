@@ -170,10 +170,10 @@ internal sealed class DneStagingFonte : IGeoFonteDados
             static r => new LogradouroComplementoCru(Texto(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
-    // CEP geral de cidade/distrito = linha de logradouro sem nome (nome_logradouro e
+    // CEP geral de cidade/distrito = linha de logradouro sem nome (tipo, nome_logradouro e
     // logradouro vazios). Mesmo predicado, negado, separa os logradouros reais abaixo.
     private const string SemNomeDeLogradouro =
-        "btrim(coalesce(nome_logradouro, '')) = '' AND btrim(coalesce(logradouro, '')) = ''";
+        "btrim(coalesce(tipo, '')) = '' AND btrim(coalesce(nome_logradouro, '')) = '' AND btrim(coalesce(logradouro, '')) = ''";
 
     public IAsyncEnumerable<CepGeralCru> LerCepGeraisAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
