@@ -171,6 +171,20 @@ public sealed class CepEndpointTests
         raiz.GetProperty("distrito").GetString().Should().Be("Nova Marabá");
     }
 
+    [Theory(DisplayName = "Cascata: CEP que também é geral resolve antes como logradouro ou grande usuário")]
+    [InlineData("01001000", "logradouro")]
+    [InlineData("01051900", "grande-usuario")]
+    public async Task Cep_LogradouroEGrandeUsuarioPrecedemCepGeral(string cep, string origemEsperada)
+    {
+        await SemearAsync();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
+
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/cep/{cep}");
+
+        using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("origem").GetString().Should().Be(origemEsperada);
+    }
+
     [Fact(DisplayName = "CEP geral stale (não vigente) não resolve como cep-geral: volta para a faixa")]
     public async Task Cep_CepGeralStale_CaiNaFaixa()
     {
@@ -428,7 +442,11 @@ public sealed class CepEndpointTests
         // fica dentro da faixa do distrito, provando a precedência sobre as faixas.
         ctx.CepGerais.AddRange(
             GeoReferenceSeed.NovoCepGeral("68500000", maraba.Id, "PA"),
-            GeoReferenceSeed.NovoCepGeral("68508900", maraba.Id, "PA", novaMaraba.Id));
+            GeoReferenceSeed.NovoCepGeral("68508900", maraba.Id, "PA", novaMaraba.Id),
+            // Mesmos CEPs de um logradouro (01001000) e de um grande usuário (01051900):
+            // a cascata resolve primeiro por eles.
+            GeoReferenceSeed.NovoCepGeral("01001000", cidadeSp.Id, "SP"),
+            GeoReferenceSeed.NovoCepGeral("01051900", cidadeSp.Id, "SP"));
         await ctx.SaveChangesAsync();
     }
 

@@ -150,4 +150,33 @@ internal static class GeoEtlUpsert
     /// <summary>Chave natural composta de uma faixa de CEP: pai (Guid) + limites — casa com a UNIQUE.</summary>
     public static string ChaveFaixa(Guid pai, string cepInicial, string cepFinal) =>
         $"{pai:N}|{cepInicial}|{cepFinal}";
+
+    /// <summary>
+    /// Resolve o id da fonte de uma localidade opcional (distrito/bairro) para o Guid
+    /// intra-banco, só se ela pertencer à cidade já resolvida; id ausente ou não resolvido
+    /// vira <see langword="null"/>. Divergência de cidade degrada para <see langword="null"/>
+    /// e é registrada no contador — não vincula registro da cidade A a localidade da cidade B.
+    /// </summary>
+    public static Guid? ResolverCoerente(
+        Dictionary<int, LocalidadeResolvida> mapa,
+        int? idDne,
+        Guid cidadeGuid,
+        ContadorTabela contador)
+    {
+        ArgumentNullException.ThrowIfNull(mapa);
+        ArgumentNullException.ThrowIfNull(contador);
+
+        if (idDne is not int id || !mapa.TryGetValue(id, out LocalidadeResolvida resolvida))
+        {
+            return null;
+        }
+
+        if (resolvida.CidadeId != cidadeGuid)
+        {
+            contador.ContarParseDegradado($"fk_localidade_cidade_divergente:{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+            return null;
+        }
+
+        return resolvida.Id;
+    }
 }

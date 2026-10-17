@@ -191,7 +191,7 @@ internal sealed partial class CepReader : ICepReader
 
     // (3) CEP geral oficial de cidade/distrito: resolução exata (não inferida por faixa).
     // Nível distrito quando o registro traz distrito vigente; senão, cidade. A coordenada
-    // é a do próprio CEP geral, com a do distrito/cidade como reserva.
+    // é a do próprio CEP geral; quando ele não a traz, usa a da cidade.
     private async Task<CepResolvidoDto?> ResolverPorCepGeralAsync(string cep, CancellationToken cancellationToken)
     {
         CepGeralLinha? linha = await (

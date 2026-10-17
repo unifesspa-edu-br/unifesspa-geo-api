@@ -268,7 +268,7 @@ internal sealed partial class GeoEtlOrquestrador : IGeoImportacaoService, IGeoIm
 
             // Só após a conclusão estar persistida: sela a versão vigente do cache de CEP,
             // de forma totalmente best-effort (ver SelarCacheVigenteAsync).
-            await SelarCacheVigenteAsync(versao).ConfigureAwait(false);
+            await SelarCacheVigenteAsync(versao, execucaoId).ConfigureAwait(false);
 
             _metricas.RegistrarConclusao(versao, duracaoMs, relatorio.Inseridos + relatorio.Atualizados, relatorio.Degradados);
             LogConcluida(_logger, execucaoId, versao, relatorio.Inseridos, relatorio.Atualizados, relatorio.Degradados);
@@ -344,11 +344,13 @@ internal sealed partial class GeoEtlOrquestrador : IGeoImportacaoService, IGeoIm
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "Selo de cache best-effort após carga concluída: Redis/cache fora (inclusive no Connect resolvido pelo Lazy) não pode escalar para o caminho de falha.")]
-    private async Task SelarCacheVigenteAsync(string versao)
+    // O selo é único por execução concluída ({versao}.{execucaoId}): reaplicar a mesma
+    // versão também troca o selo, então respostas cacheadas antes da recarga não sobrevivem.
+    private async Task SelarCacheVigenteAsync(string versao, Guid execucaoId)
     {
         try
         {
-            await _cacheInvalidador.Value.InvalidarAsync(versao, CancellationToken.None).ConfigureAwait(false);
+            await _cacheInvalidador.Value.InvalidarAsync($"{versao}.{execucaoId:N}", CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception excecao) when (excecao is not OperationCanceledException)
         {

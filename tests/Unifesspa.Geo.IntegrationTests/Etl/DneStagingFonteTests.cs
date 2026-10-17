@@ -113,6 +113,12 @@ public sealed class DneStagingFonteTests
         // não o nome sem o tipo (nome_logradouro, "A") — é ele que alimenta a busca e a chave.
         logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.Nome == "A" && l.LogradouroSemAcento == "Rua A");
 
+        // Linha sem nome (CEP geral da cidade) não é logradouro: entra só em LerCepGeraisAsync.
+        logradouros.Should().NotContain(l => l.Cep == "68525000");
+        List<CepGeralCru> cepGerais = await ColetarAsync(fonte.LerCepGeraisAsync);
+        cepGerais.Should().ContainSingle()
+            .Which.Should().Match<CepGeralCru>(g => g.Cep == "68525000" && g.CidadeIdDne == 1 && g.DistritoIdDne == null && g.Uf == "PA");
+
         // As faixas referenciam o pai pela coluna id_distrito/id_bairro (PK da fonte na
         // própria tabela de faixa), não distrito_id/bairro_id — lê o schema real.
         List<FaixaLocalidadeCru> distritoFaixas = await ColetarAsync(fonte.LerDistritoFaixasAsync);
@@ -253,6 +259,7 @@ public sealed class DneStagingFonteTests
             latitude text, longitude text, cep_ativo text);
         INSERT INTO dne_staging."tbl_cep_202601_n_logradouro" VALUES
             ('68500000','Rua','A','Rua A',NULL,10,1,'PA','Rua','A','Rua A','-5.36','-49.11','S'),
-            ('68500001','Rua','B','Rua B',NULL,NULL,1,'PA','Rua','B','Rua B',NULL,NULL,'N');
+            ('68500001','Rua','B','Rua B',NULL,NULL,1,'PA','Rua','B','Rua B',NULL,NULL,'N'),
+            ('68525000','','','',NULL,NULL,1,'PA','','','','-5.046','-48.59947','N');
         """;
 }

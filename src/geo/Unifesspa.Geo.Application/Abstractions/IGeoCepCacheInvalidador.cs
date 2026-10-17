@@ -12,8 +12,10 @@ namespace Unifesspa.Geo.Application.Abstractions;
 public interface IGeoCepCacheInvalidador
 {
     /// <summary>
-    /// Sela <paramref name="versaoVigente"/> (AAAAMM) como a versão corrente do lookup de
-    /// CEP. Best-effort: uma falha de cache não deve abortar a carga (que já concluiu).
+    /// Sela <paramref name="versaoVigente"/> como a versão corrente do lookup de CEP. O valor é
+    /// um selo opaco, único por execução concluída (<c>{versao}.{execucaoId}</c>): a recarga da
+    /// mesma versão também troca o selo. Não validar formato. Best-effort: uma falha de cache
+    /// não deve abortar a carga (que já concluiu).
     /// </summary>
     Task InvalidarAsync(string versaoVigente, CancellationToken cancellationToken);
 }

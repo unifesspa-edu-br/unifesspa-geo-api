@@ -308,8 +308,8 @@ internal sealed partial class LogradouroCopyImporter
             // hierárquica (o domínio delega ao ETL, ver Logradouro): se a localidade
             // resolvida pertence a outra cidade, degrada para null e conta — não vincula
             // logradouro da cidade A a um distrito/bairro da cidade B.
-            Guid? distritoGuid = ResolverCoerente(resolucao.DistritosPorIdDne, cru.DistritoIdDne, cidadeGuid, contador);
-            Guid? bairroGuid = ResolverCoerente(resolucao.BairrosPorIdDne, cru.BairroIdDne, cidadeGuid, contador);
+            Guid? distritoGuid = GeoEtlUpsert.ResolverCoerente(resolucao.DistritosPorIdDne, cru.DistritoIdDne, cidadeGuid, contador);
+            Guid? bairroGuid = GeoEtlUpsert.ResolverCoerente(resolucao.BairrosPorIdDne, cru.BairroIdDne, cidadeGuid, contador);
 
             // Parse único: deriva lat/lon decimais do Point já validado (PontoFactory
             // limita a ±90/±180), evitando parsear o texto duas vezes (×~1,4M) e duplicar
@@ -503,29 +503,6 @@ internal sealed partial class LogradouroCopyImporter
             comando.CommandText = sql;
             await comando.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    // Resolve a FK opcional (distrito/bairro) garantindo coerência com a cidade do
-    // logradouro: id ausente/não resolvido → null silencioso (FK opcional); resolvido mas
-    // de outra cidade → null + contagem de degradação (inconsistência da fonte).
-    private static Guid? ResolverCoerente(
-        Dictionary<int, LocalidadeResolvida> mapa,
-        int? idDne,
-        Guid cidadeGuid,
-        ContadorTabela contador)
-    {
-        if (idDne is not int id || !mapa.TryGetValue(id, out LocalidadeResolvida resolvida))
-        {
-            return null;
-        }
-
-        if (resolvida.CidadeId != cidadeGuid)
-        {
-            contador.ContarParseDegradado($"fk_localidade_cidade_divergente:{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
-            return null;
-        }
-
-        return resolvida.Id;
     }
 
     private static async Task EscreverTextoAsync(NpgsqlBinaryImporter importer, string? valor, CancellationToken cancellationToken)
