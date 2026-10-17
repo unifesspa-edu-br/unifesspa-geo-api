@@ -26,7 +26,7 @@ public sealed class CepResolverTests
 {
     private const string Selo = "202601";
     private const string Cep = "01001000";
-    private const string ChaveCep = $"geo:cep:v{Selo}:{Cep}";
+    private const string ChaveCep = $"geo:cep:f2:v{Selo}:{Cep}";
 
     private static CepResolvidoDto Endereco() => new(
         Cep, "Praça", "Praça da Sé", null, "Sé", null, "São Paulo", "3550308", "SP",
@@ -84,6 +84,25 @@ public sealed class CepResolverTests
         resultado.Should().Be(resolvido);
         await reader.Received(1).ResolverAsync(Cep, Arg.Any<CancellationToken>());
         await cache.Received(1).DefinirAsync(ChaveCep, resolvido, Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Entrada gravada no formato anterior (mesmo selo) é ignorada: o valor novo não fica preso no cache antigo")]
+    public async Task EntradaDoFormatoAnterior_NaoEDevolvida()
+    {
+        ICacheService cache = Substitute.For<ICacheService>();
+        ICepReader reader = Substitute.For<ICepReader>();
+        using MemoryCache memoria = NovaMemoria();
+        CepResolvidoDto antigo = Endereco() with { Origem = CepResolucao.OrigemFaixaCidade };
+        CepResolvidoDto atual = Endereco() with { Origem = CepResolucao.OrigemCepGeral };
+        cache.ObterAsync<string>(RedisGeoCepCacheInvalidador.ChaveSeloVersaoVigente, Arg.Any<CancellationToken>())
+            .Returns(Selo);
+        cache.ObterAsync<CepResolvidoDto>($"geo:cep:v{Selo}:{Cep}", Arg.Any<CancellationToken>())
+            .Returns(antigo);
+        reader.ResolverAsync(Cep, Arg.Any<CancellationToken>()).Returns(atual);
+
+        CepResolvidoDto? resultado = await Criar(cache, reader, memoria).ResolverAsync(Cep, CancellationToken.None);
+
+        resultado!.Origem.Should().Be(CepResolucao.OrigemCepGeral);
     }
 
     [Fact(DisplayName = "CA-08: reader devolve null (404) — nada é gravado no cache")]

@@ -10,7 +10,7 @@ public sealed class GeoCepCacheOptions
 {
     public const string SectionName = "Geo:Cep:Cache";
 
-    /// <summary>TTL das entradas <c>geo:cep:v{versao}:{cep}</c> no Redis (default 24h).</summary>
+    /// <summary>TTL das entradas <c>geo:cep:{formato}:v{versao}:{cep}</c> no Redis (default 24h).</summary>
     public TimeSpan Ttl { get; init; } = TimeSpan.FromHours(24);
 
     /// <summary>

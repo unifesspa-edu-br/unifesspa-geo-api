@@ -129,6 +129,14 @@ internal static partial class GeoReferenceSeed
     public static CepGrandeUsuario NovoGrandeUsuario(string cep, string nome, bool vigente = true) =>
         GeoTestKeys.Ok(CepGrandeUsuario.Importar(cep, nome, Normalizar(nome), Versao, vigente));
 
+    public static CepGeral NovoCepGeral(
+        string cep,
+        Guid cidadeId,
+        string uf,
+        Guid? distritoId = null,
+        bool vigente = true) =>
+        GeoTestKeys.Ok(CepGeral.Importar(cep, cidadeId, distritoId, uf, null, null, null, Versao, vigente));
+
     public static CidadeFaixaCep NovaCidadeFaixa(Guid cidadeId, string cepInicial, string cepFinal, bool vigente = true) =>
         GeoTestKeys.Ok(CidadeFaixaCep.Importar(cidadeId, cepInicial, cepFinal, Versao, vigente));
 

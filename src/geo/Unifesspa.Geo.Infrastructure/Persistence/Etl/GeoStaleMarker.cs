@@ -22,7 +22,7 @@ using Npgsql;
 /// </remarks>
 internal static class GeoStaleMarker
 {
-    // As 14 tabelas de reference data com proveniência (versao_dataset/vigente). É uma
+    // As 15 tabelas de reference data com proveniência (versao_dataset/vigente). É uma
     // whitelist CONSTANTE (nenhum dado de usuário entra no nome interpolado); os valores
     // (versão, instante) são parametrizados.
     private static readonly string[] Tabelas =
@@ -41,6 +41,7 @@ internal static class GeoStaleMarker
         "logradouro",
         "logradouro_complemento",
         "cep_grande_usuario",
+        "cep_geral",
     ];
 
     [SuppressMessage(

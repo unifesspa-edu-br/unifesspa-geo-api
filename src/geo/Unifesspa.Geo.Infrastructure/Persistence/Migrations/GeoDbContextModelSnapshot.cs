@@ -163,6 +163,88 @@ namespace Unifesspa.Geo.Infrastructure.Persistence.Migrations
                     b.ToTable("bairro_faixa_cep", (string)null);
                 });
 
+            modelBuilder.Entity("Unifesspa.Geo.Domain.Entities.CepGeral", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cep")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cep");
+
+                    b.Property<Guid>("CidadeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cidade_id");
+
+                    b.Property<Point>("Coordenada")
+                        .HasColumnType("geography (Point, 4326)")
+                        .HasColumnName("coordenada");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("DistritoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("distrito_id");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("latitude");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("longitude");
+
+                    b.Property<string>("Uf")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("uf");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VersaoDataset")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("versao_dataset");
+
+                    b.Property<bool>("Vigente")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("vigente");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cep_geral");
+
+                    b.HasIndex("Cep")
+                        .IsUnique()
+                        .HasDatabaseName("ix_cep_geral_cep");
+
+                    b.HasIndex("CidadeId")
+                        .HasDatabaseName("ix_cep_geral_cidade_id");
+
+                    b.HasIndex("Coordenada")
+                        .HasDatabaseName("ix_cep_geral_coordenada");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Coordenada"), "gist");
+
+                    b.HasIndex("DistritoId")
+                        .HasDatabaseName("ix_cep_geral_distrito_id");
+
+                    b.HasIndex("VersaoDataset")
+                        .HasDatabaseName("ix_cep_geral_versao_dataset");
+
+                    b.ToTable("cep_geral", (string)null);
+                });
+
             modelBuilder.Entity("Unifesspa.Geo.Domain.Entities.CepGrandeUsuario", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1279,6 +1361,22 @@ namespace Unifesspa.Geo.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_bairro_faixa_cep_bairro_bairro_id");
+                });
+
+            modelBuilder.Entity("Unifesspa.Geo.Domain.Entities.CepGeral", b =>
+                {
+                    b.HasOne("Unifesspa.Geo.Domain.Entities.Cidade", null)
+                        .WithMany()
+                        .HasForeignKey("CidadeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_cep_geral_cidades_cidade_id");
+
+                    b.HasOne("Unifesspa.Geo.Domain.Entities.Distrito", null)
+                        .WithMany()
+                        .HasForeignKey("DistritoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_cep_geral_distritos_distrito_id");
                 });
 
             modelBuilder.Entity("Unifesspa.Geo.Domain.Entities.Cidade", b =>

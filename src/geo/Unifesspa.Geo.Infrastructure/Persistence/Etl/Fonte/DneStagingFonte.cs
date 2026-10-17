@@ -170,6 +170,17 @@ internal sealed class DneStagingFonte : IGeoFonteDados
             static r => new LogradouroComplementoCru(Texto(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
+    // CEP geral de cidade/distrito = linha de logradouro sem nome (nome_logradouro e
+    // logradouro vazios). Mesmo predicado, negado, separa os logradouros reais abaixo.
+    private const string SemNomeDeLogradouro =
+        "btrim(coalesce(nome_logradouro, '')) = '' AND btrim(coalesce(logradouro, '')) = ''";
+
+    public IAsyncEnumerable<CepGeralCru> LerCepGeraisAsync(CancellationToken cancellationToken) =>
+        ConsultarAsync(
+            $"SELECT cep, cidade_id, distrito_id, estado, latitude, longitude FROM {Tabela("logradouro")} WHERE {SemNomeDeLogradouro}",
+            static r => new CepGeralCru(Texto(r, 0), Inteiro(r, 1), Inteiro(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5)),
+            cancellationToken);
+
     public IAsyncEnumerable<LogradouroCru> LerLogradourosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
             // Coluna de busca/chave = logradouro_sem_acento (texto completo, ex.: "rua a"),
@@ -178,6 +189,7 @@ internal sealed class DneStagingFonte : IGeoFonteDados
              SELECT cep, tipo, nome_logradouro, logradouro, bairro_id, distrito_id, cidade_id,
                     estado, logradouro_sem_acento, latitude, longitude, cep_ativo
              FROM {Tabela("logradouro")}
+             WHERE NOT ({SemNomeDeLogradouro})
              """,
             static r => new LogradouroCru(
                 Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 8),

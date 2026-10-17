@@ -142,6 +142,18 @@ internal sealed record CepGrandeUsuarioCru(
     string? Nome,
     string? NomeSemAcento);
 
+/// <summary>
+/// CEP geral de cidade ou distrito (fonte <c>logradouro</c>, linhas sem nome de logradouro):
+/// FK <c>cidade_id</c> obrigatória, <c>distrito_id</c> opcional (preenchido no CEP geral de distrito).
+/// </summary>
+internal sealed record CepGeralCru(
+    string? Cep,
+    int? CidadeIdDne,
+    int? DistritoIdDne,
+    string? Uf,
+    string? Latitude,
+    string? Longitude);
+
 /// <summary>Complemento por CEP (fonte <c>log_complemento</c>): sem FK a logradouro.</summary>
 internal sealed record LogradouroComplementoCru(
     string? Cep,
