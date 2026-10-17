@@ -136,6 +136,59 @@ public sealed class CepEndpointTests
         raiz.GetProperty("logradouro").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
+    [Fact(DisplayName = "CEP geral da cidade resolve como cep-geral (exato), nível cidade, sem distrito")]
+    public async Task Cep_ResolveCepGeralDaCidade()
+    {
+        await SemearAsync();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
+
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/68500000");
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+        JsonElement raiz = doc.RootElement;
+        raiz.GetProperty("cidade").GetString().Should().Be("Marabá");
+        raiz.GetProperty("origem").GetString().Should().Be("cep-geral");
+        raiz.GetProperty("nivelResolucao").GetString().Should().Be("cidade");
+        raiz.GetProperty("distrito").ValueKind.Should().Be(JsonValueKind.Null);
+        raiz.GetProperty("logradouro").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact(DisplayName = "CEP geral do distrito resolve como cep-geral, nível distrito, com o nome do distrito (antes da faixa-distrito)")]
+    public async Task Cep_ResolveCepGeralDoDistrito()
+    {
+        await SemearAsync();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
+
+        // 68508900 também está na faixa do distrito Nova Marabá: o CEP oficial prevalece.
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/68508900");
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+        JsonElement raiz = doc.RootElement;
+        raiz.GetProperty("origem").GetString().Should().Be("cep-geral");
+        raiz.GetProperty("nivelResolucao").GetString().Should().Be("distrito");
+        raiz.GetProperty("distrito").GetString().Should().Be("Nova Marabá");
+    }
+
+    [Fact(DisplayName = "CEP geral stale (não vigente) não resolve como cep-geral: volta para a faixa")]
+    public async Task Cep_CepGeralStale_CaiNaFaixa()
+    {
+        await SemearAsync();
+        await using (GeoDbContext ctx = _fixture.CreateDbContext())
+        {
+            Cidade maraba = ctx.Cidades.Single(c => c.CodigoIbge == "1500402");
+            ctx.CepGerais.Add(GeoReferenceSeed.NovoCepGeral("68500500", maraba.Id, "PA", vigente: false));
+            await ctx.SaveChangesAsync();
+        }
+
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cep/68500500");
+
+        using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("origem").GetString().Should().Be("faixa-cidade");
+    }
+
     [Fact(DisplayName = "CA-03: faixa de bairro mais específica eleva o nível para bairro")]
     public async Task Cep_ResolvePorFaixaBairro()
     {
@@ -370,6 +423,12 @@ public sealed class CepEndpointTests
         ctx.BairroFaixasCep.Add(faixaCidadeNova);
         ctx.DistritoFaixasCep.Add(faixaNovaMaraba);
         ctx.CepGrandesUsuarios.Add(grandeUsuario);
+
+        // (3') CEP geral oficial: da cidade de Marabá e do distrito Nova Marabá. 68508900
+        // fica dentro da faixa do distrito, provando a precedência sobre as faixas.
+        ctx.CepGerais.AddRange(
+            GeoReferenceSeed.NovoCepGeral("68500000", maraba.Id, "PA"),
+            GeoReferenceSeed.NovoCepGeral("68508900", maraba.Id, "PA", novaMaraba.Id));
         await ctx.SaveChangesAsync();
     }
 

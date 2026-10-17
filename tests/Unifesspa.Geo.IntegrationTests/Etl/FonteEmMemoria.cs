@@ -41,6 +41,8 @@ internal sealed class FonteEmMemoria : IGeoFonteDados
 
     public List<CepGrandeUsuarioCru> CepGrandesUsuarios { get; } = [];
 
+    public List<CepGeralCru> CepGerais { get; } = [];
+
     public List<LogradouroComplementoCru> LogradouroComplementos { get; } = [];
 
     public List<LogradouroCru> Logradouros { get; } = [];
@@ -72,6 +74,8 @@ internal sealed class FonteEmMemoria : IGeoFonteDados
     public IAsyncEnumerable<FaixaLocalidadeCru> LerBairroFaixasAsync(CancellationToken cancellationToken) => ParaAsync(BairroFaixas, cancellationToken);
 
     public IAsyncEnumerable<CepGrandeUsuarioCru> LerCepGrandesUsuariosAsync(CancellationToken cancellationToken) => ParaAsync(CepGrandesUsuarios, cancellationToken);
+
+    public IAsyncEnumerable<CepGeralCru> LerCepGeraisAsync(CancellationToken cancellationToken) => ParaAsync(CepGerais, cancellationToken);
 
     public IAsyncEnumerable<LogradouroComplementoCru> LerLogradouroComplementosAsync(CancellationToken cancellationToken) => ParaAsync(LogradouroComplementos, cancellationToken);
 
@@ -179,6 +183,15 @@ internal static class DadosDne
     public static CepGrandeUsuarioCru GrandeUsuario(string cep, string nome, string? nomeSemAcento = null) =>
         new(cep, nome, nomeSemAcento ?? nome);
 
+    public static CepGeralCru CepGeral(
+        string cep,
+        int cidadeIdDne,
+        int? distritoIdDne = null,
+        string uf = "PA",
+        string? latitude = null,
+        string? longitude = null) =>
+        new(cep, cidadeIdDne, distritoIdDne, uf, latitude, longitude);
+
     public static LogradouroComplementoCru Complemento(string cep, string complemento, string? complementoSemAcento = null) =>
         new(cep, complemento, complementoSemAcento ?? complemento);
 
@@ -243,6 +256,8 @@ internal sealed class FonteComFalhaNasCidades : IGeoFonteDados
     public IAsyncEnumerable<FaixaLocalidadeCru> LerBairroFaixasAsync(CancellationToken cancellationToken) => _interna.LerBairroFaixasAsync(cancellationToken);
 
     public IAsyncEnumerable<CepGrandeUsuarioCru> LerCepGrandesUsuariosAsync(CancellationToken cancellationToken) => _interna.LerCepGrandesUsuariosAsync(cancellationToken);
+
+    public IAsyncEnumerable<CepGeralCru> LerCepGeraisAsync(CancellationToken cancellationToken) => _interna.LerCepGeraisAsync(cancellationToken);
 
     public IAsyncEnumerable<LogradouroComplementoCru> LerLogradouroComplementosAsync(CancellationToken cancellationToken) => _interna.LerLogradouroComplementosAsync(cancellationToken);
 

@@ -120,6 +120,8 @@ internal sealed class GeoImportadorDistritoBairro
 
             await ImportarGrandesUsuariosAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
 
+            await ImportarCepGeraisAsync(fonte, cidadesPorIdDne, distritosPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
+
             await transacao.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             return new ResolucaoLocalidades(cidadesPorIdDne, distritosPorIdDne, bairrosPorIdDne);
@@ -290,6 +292,68 @@ internal sealed class GeoImportadorDistritoBairro
                 () => CepGrandeUsuario.Importar(cep, nome, nomeNorm, fonte.Versao),
                 e => e.Atualizar(nome, nomeNorm, fonte.Versao),
                 _contexto.CepGrandesUsuarios,
+                contador);
+        }
+
+        await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // CEP geral de cidade/distrito (linha de logradouro sem nome na fonte). Chave natural =
+    // CEP; reexecutar atualiza in place. Cidade obrigatória (órfão descartado e contado);
+    // distrito só vale se pertencer à mesma cidade — senão degrada para CEP geral da cidade.
+    private async Task ImportarCepGeraisAsync(
+        IGeoFonteDados fonte,
+        Dictionary<int, Guid> cidadesPorIdDne,
+        Dictionary<int, LocalidadeResolvida> distritosPorIdDne,
+        RelatorioImportacao relatorio,
+        CancellationToken cancellationToken)
+    {
+        ContadorTabela contador = relatorio.Tabela("cep_geral");
+        Dictionary<string, CepGeral> existentes =
+            await _contexto.CepGerais.ToDictionaryAsync(g => g.Cep, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
+        Dictionary<string, CepGeral> jaVistos = new(StringComparer.Ordinal);
+
+        await foreach (CepGeralCru cru in fonte.LerCepGeraisAsync(cancellationToken).ConfigureAwait(false))
+        {
+            contador.ContarLido();
+            string? cep = ChaveCodigo(cru.Cep);
+            if (cep is null)
+            {
+                contador.ContarIgnoradoSemChave();
+                continue;
+            }
+
+            if (cru.CidadeIdDne is not int idCidade || !cidadesPorIdDne.TryGetValue(idCidade, out Guid cidadeGuid))
+            {
+                contador.ContarOrfao(cep);
+                continue;
+            }
+
+            Guid? distritoGuid = null;
+            if (cru.DistritoIdDne is int idDistrito && distritosPorIdDne.TryGetValue(idDistrito, out LocalidadeResolvida distrito))
+            {
+                if (distrito.CidadeId == cidadeGuid)
+                {
+                    distritoGuid = distrito.Id;
+                }
+                else
+                {
+                    contador.ContarParseDegradado($"fk_localidade_cidade_divergente:{idDistrito.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                }
+            }
+
+            Point? coordenada = PontoFactory.Criar(cru.Latitude, cru.Longitude);
+            decimal? latitude = coordenada is null ? null : (decimal)coordenada.Y;
+            decimal? longitude = coordenada is null ? null : (decimal)coordenada.X;
+            string uf = cru.Uf ?? string.Empty;
+
+            Upsert(
+                cep,
+                jaVistos,
+                existentes,
+                () => CepGeral.Importar(cep, cidadeGuid, distritoGuid, uf, latitude, longitude, coordenada, fonte.Versao),
+                e => e.Atualizar(cidadeGuid, distritoGuid, uf, latitude, longitude, coordenada, fonte.Versao),
+                _contexto.CepGerais,
                 contador);
         }
 

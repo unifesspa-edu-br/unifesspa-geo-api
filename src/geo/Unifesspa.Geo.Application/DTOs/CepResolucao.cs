@@ -14,9 +14,11 @@ public static class CepResolucao
     public const string NivelDistrito = "distrito";
     public const string NivelCidade = "cidade";
 
-    // Origem — ramo da cascata que resolveu (logradouro > grande usuário > faixa).
+    // Origem — ramo da cascata que resolveu (logradouro > grande usuário > CEP geral > faixa).
     public const string OrigemLogradouro = "logradouro";
     public const string OrigemGrandeUsuario = "grande-usuario";
+    // CEP geral oficial de cidade/distrito (DNE): resolução exata, ao contrário das faixas.
+    public const string OrigemCepGeral = "cep-geral";
     public const string OrigemFaixaCidade = "faixa-cidade";
     public const string OrigemFaixaBairro = "faixa-bairro";
     public const string OrigemFaixaDistrito = "faixa-distrito";

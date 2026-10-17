@@ -74,9 +74,9 @@ O relatório da execução (passo 2) traz contadores por tabela (lidos/inseridos
 
 ## Carga em lote das folhas — Distrito, Bairro e Logradouro (Story #673)
 
-As folhas da hierarquia (`distrito`/`bairro` + faixas, `cep_grande_usuario`, `logradouro_complemento` e os ~1,4M `logradouro`) entram por um pipeline próprio (`GeoImportadorLocalidades`), porque o volume e a criação de índices inviabilizam a transação única do topo (País/Estado/Cidade). O pipeline tem duas fases que **commitam separadamente**:
+As folhas da hierarquia (`distrito`/`bairro` + faixas, `cep_grande_usuario`, `cep_geral`, `logradouro_complemento` e os ~1,4M `logradouro`) entram por um pipeline próprio (`GeoImportadorLocalidades`), porque o volume e a criação de índices inviabilizam a transação única do topo (País/Estado/Cidade). O pipeline tem duas fases que **commitam separadamente**:
 
-1. **Upsert (`GeoImportadorDistritoBairro`)** — `distrito`/`bairro` (+faixas) e `cep_grande_usuario`, por chave natural, numa transação. Esta fase também **resolve as FKs**: monta os dicionários `id_cidade → Cidade.Id (Guid)` (via JOIN do staging com o domínio pelo código IBGE) e `id_distrito`/`id_bairro → Guid` (os ids da DNE são as PKs da fonte, únicos dentro de uma release; homônimos em cidades distintas viram entidades distintas).
+1. **Upsert (`GeoImportadorDistritoBairro`)** — `distrito`/`bairro` (+faixas), `cep_grande_usuario` e `cep_geral`, por chave natural, numa transação. O `cep_geral` guarda o CEP oficial de cidade ou distrito, que a DNE entrega como linha de `logradouro` sem nome (tipo e nomes vazios); essas linhas saem do COPY de logradouros e não contam como ignoradas. Chave natural: `cep`. Esta fase também **resolve as FKs**: monta os dicionários `id_cidade → Cidade.Id (Guid)` (via JOIN do staging com o domínio pelo código IBGE) e `id_distrito`/`id_bairro → Guid` (os ids da DNE são as PKs da fonte, únicos dentro de uma release; homônimos em cidades distintas viram entidades distintas).
 2. **COPY em lote (`LogradouroCopyImporter`)** — `logradouro_complemento` e `logradouro`, via COPY binário streamado.
 
 ### Estratégia de bulk (COPY → staging → merge)

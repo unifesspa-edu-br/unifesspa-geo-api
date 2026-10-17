@@ -48,6 +48,9 @@ internal interface IGeoFonteDados
 
     IAsyncEnumerable<CepGrandeUsuarioCru> LerCepGrandesUsuariosAsync(CancellationToken cancellationToken);
 
+    /// <summary>CEP geral de cidade/distrito: linhas da fonte de logradouro sem nome (tipo e nomes vazios).</summary>
+    IAsyncEnumerable<CepGeralCru> LerCepGeraisAsync(CancellationToken cancellationToken);
+
     IAsyncEnumerable<LogradouroComplementoCru> LerLogradouroComplementosAsync(CancellationToken cancellationToken);
 
     IAsyncEnumerable<LogradouroCru> LerLogradourosAsync(CancellationToken cancellationToken);

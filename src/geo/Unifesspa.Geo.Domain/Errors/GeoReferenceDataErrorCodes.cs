@@ -87,4 +87,9 @@ public static class GeoReferenceDataErrorCodes
     public const string CepGrandeUsuarioCepObrigatorio = "CepGrandeUsuario.CepObrigatorio";
     public const string CepGrandeUsuarioNomeObrigatorio = "CepGrandeUsuario.NomeObrigatorio";
     public const string CepGrandeUsuarioVersaoDatasetObrigatoria = "CepGrandeUsuario.VersaoDatasetObrigatoria";
+
+    // CEP geral (cidade ou distrito)
+    public const string CepGeralCepObrigatorio = "CepGeral.CepObrigatorio";
+    public const string CepGeralCidadeObrigatoria = "CepGeral.CidadeObrigatoria";
+    public const string CepGeralVersaoDatasetObrigatoria = "CepGeral.VersaoDatasetObrigatoria";
 }

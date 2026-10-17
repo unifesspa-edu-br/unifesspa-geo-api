@@ -5,7 +5,7 @@ using Unifesspa.Geo.Application.DTOs;
 /// <summary>
 /// Leitor read-side da resolução de CEP sobre o <c>GeoDbContext</c>. Aplica a
 /// cascata determinística (1) <c>Logradouro</c> → (2) <c>CepGrandeUsuario</c> →
-/// (3) faixa (cidade/bairro/distrito) → (4) nada (<see langword="null"/>),
+/// (3) <c>CepGeral</c> (cidade/distrito oficial) → (4) faixa (cidade/bairro/distrito) → (5) nada (<see langword="null"/>),
 /// projetando direto em <see cref="CepResolvidoDto"/> (sem <c>_links</c>). Só expõe
 /// reference data vigente (ADR-0092). A abstração trafega primitivas + DTOs (nunca
 /// <c>IQueryable</c>/<c>DbContext</c>), mantendo Application independente de EF Core.

@@ -78,6 +78,46 @@ public sealed class EtlLocalidadesTests
         ruaB.Ativo.Should().BeFalse();         // cep_ativo 'N'
     }
 
+    [Fact(DisplayName = "CEP geral: linha sem nome vira cep_geral de cidade ou de distrito, com coordenada e FKs resolvidas")]
+    public async Task CargaInicial_PopulaCepGeral()
+    {
+        FonteEmMemoria fonte = FonteComCepGeral();
+        await PrepararTopoAsync(fonte);
+
+        RelatorioImportacao relatorio = await ExecutarLocalidadesAsync(fonte, ModoCarga.Inicial);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
+        Guid distritoId = (await leitura.Distritos.OrderBy(d => d.Nome).FirstAsync(d => d.IdOrigemDne == "10")).Id;
+
+        CepGeral cidade = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000");
+        cidade.CidadeId.Should().Be(marabaId);
+        cidade.DistritoId.Should().BeNull();
+        cidade.Coordenada.Should().NotBeNull();
+        cidade.Coordenada!.SRID.Should().Be(4326);
+
+        CepGeral distrito = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525100");
+        distrito.DistritoId.Should().Be(distritoId);
+
+        (await leitura.CepGerais.CountAsync()).Should().Be(2);
+        relatorio.Tabela("cep_geral").Inseridos.Should().Be(2);
+    }
+
+    [Fact(DisplayName = "CEP geral: recarga é idempotente — não duplica e conta como atualizado")]
+    public async Task CepGeral_RecargaIdempotente()
+    {
+        FonteEmMemoria fonte = FonteComCepGeral();
+        await PrepararTopoAsync(fonte);
+        await ExecutarLocalidadesAsync(fonte, ModoCarga.Inicial);
+
+        RelatorioImportacao relatorio = await ExecutarLocalidadesAsync(fonte, ModoCarga.Recarga);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        (await leitura.CepGerais.CountAsync()).Should().Be(2);
+        relatorio.Tabela("cep_geral").Inseridos.Should().Be(0);
+        relatorio.Tabela("cep_geral").Atualizados.Should().Be(2);
+    }
+
     [Fact(DisplayName = "CA-03/04: na carga inicial os índices trigram/GIST são recriados via CONCURRENTLY (fora de transação) e ficam válidos")]
     public async Task CargaInicial_RecriaIndicesPesadosForaDeTransacao()
     {
@@ -469,6 +509,15 @@ public sealed class EtlLocalidadesTests
         fonte.Logradouros.Add(DadosDne.Logradouro("68500000", "Rua A", IdCidadeMaraba, tipo: "Rua", bairroIdDne: 100, distritoIdDne: 10, latitude: "-5.36867", longitude: "-49.11731", cepAtivo: "S"));
         fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", IdCidadeMaraba, distritoIdDne: null, cepAtivo: "N"));
 
+        return fonte;
+    }
+
+    private static FonteEmMemoria FonteComCepGeral()
+    {
+        // FonteCompleta já traz o distrito 10 (Marabá) e logradouros reais.
+        FonteEmMemoria fonte = FonteCompleta();
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525000", IdCidadeMaraba, latitude: "-5.046", longitude: "-48.59947"));
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525100", IdCidadeMaraba, distritoIdDne: 10));
         return fonte;
     }
 }

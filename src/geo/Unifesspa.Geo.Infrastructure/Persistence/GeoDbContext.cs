@@ -71,6 +71,9 @@ public sealed class GeoDbContext : DbContext, IUnitOfWork
     /// <summary>CEPs exclusivos de grandes usuários (órgãos/empresas).</summary>
     public DbSet<CepGrandeUsuario> CepGrandesUsuarios => Set<CepGrandeUsuario>();
 
+    /// <summary>CEPs gerais oficiais de cidade ou distrito (logradouro sem nome na DNE).</summary>
+    public DbSet<CepGeral> CepGerais => Set<CepGeral>();
+
     /// <summary>Trilha de execuções do ETL DNE — versão, quem disparou, status e relatório (Story #674).</summary>
     public DbSet<GeoImportacaoExecucao> ImportacaoExecucoes => Set<GeoImportacaoExecucao>();
 

@@ -16,6 +16,7 @@ using Unifesspa.Geo.Infrastructure.Cep;
 /// <list type="number">
 /// <item><c>Logradouro</c> pelo CEP — primário (desempate estável) + alternativos;</item>
 /// <item><c>CepGrandeUsuario</c> — nome do órgão + cidade/UF da faixa CEP;</item>
+/// <item><c>CepGeral</c> — CEP oficial da cidade ou do distrito (resolução exata);</item>
 /// <item>faixa de cidade (e bairro/distrito mais específicos) que contém o CEP;</item>
 /// <item>nada casa → <see langword="null"/> (404 no controller).</item>
 /// </list>
@@ -62,6 +63,7 @@ internal sealed partial class CepReader : ICepReader
 
         return await ResolverPorLogradouroAsync(cep, cancellationToken).ConfigureAwait(false)
             ?? await ResolverPorGrandeUsuarioAsync(cep, cancellationToken).ConfigureAwait(false)
+            ?? await ResolverPorCepGeralAsync(cep, cancellationToken).ConfigureAwait(false)
             ?? await ResolverPorFaixaAsync(cep, cancellationToken).ConfigureAwait(false);
     }
 
@@ -187,7 +189,50 @@ internal sealed partial class CepReader : ICepReader
             Origem: CepResolucao.OrigemGrandeUsuario);
     }
 
-    // (3) Faixa: cidade que contém o CEP; enriquece com bairro/distrito quando houver
+    // (3) CEP geral oficial de cidade/distrito: resolução exata (não inferida por faixa).
+    // Nível distrito quando o registro traz distrito vigente; senão, cidade. A coordenada
+    // é a do próprio CEP geral, com a do distrito/cidade como reserva.
+    private async Task<CepResolvidoDto?> ResolverPorCepGeralAsync(string cep, CancellationToken cancellationToken)
+    {
+        CepGeralLinha? linha = await (
+            from g in _dbContext.CepGerais.AsNoTracking()
+            where g.Vigente && g.Cep == cep
+            join c in _dbContext.Cidades.AsNoTracking().Where(c => c.Vigente) on g.CidadeId equals c.Id
+            select new CepGeralLinha(
+                c.CodigoIbge,
+                c.Nome,
+                c.Uf,
+                g.Latitude ?? c.Latitude,
+                g.Longitude ?? c.Longitude,
+                _dbContext.Distritos
+                    .Where(d => d.Vigente && d.Id == g.DistritoId)
+                    .Select(d => (string?)d.Nome)
+                    .FirstOrDefault()))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (linha is null)
+        {
+            return null;
+        }
+
+        return new CepResolvidoDto(
+            Cep: cep,
+            Tipo: null,
+            Logradouro: null,
+            Complemento: null,
+            Bairro: null,
+            Distrito: linha.DistritoNome,
+            Cidade: linha.CidadeNome,
+            CodigoIbge: linha.CodigoIbge,
+            Uf: linha.Uf,
+            Latitude: linha.Latitude,
+            Longitude: linha.Longitude,
+            NivelResolucao: linha.DistritoNome is null ? CepResolucao.NivelCidade : CepResolucao.NivelDistrito,
+            Origem: CepResolucao.OrigemCepGeral);
+    }
+
+    // (4) Faixa: cidade que contém o CEP; enriquece com bairro/distrito quando houver
     // faixa mais específica. Nível/origem refletem o mais específico (bairro > distrito
     // > cidade). Logradouro ausente é esperado (CEP geral), não erro.
     private async Task<CepResolvidoDto?> ResolverPorFaixaAsync(string cep, CancellationToken cancellationToken)
@@ -282,6 +327,14 @@ internal sealed partial class CepReader : ICepReader
         string Uf,
         string? DistritoNome,
         string? BairroNome);
+
+    private sealed record CepGeralLinha(
+        string CodigoIbge,
+        string CidadeNome,
+        string Uf,
+        decimal? Latitude,
+        decimal? Longitude,
+        string? DistritoNome);
 
     private sealed record CepTerritorioCidade(
         Guid Id,

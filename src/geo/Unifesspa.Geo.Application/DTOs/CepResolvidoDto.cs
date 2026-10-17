@@ -11,8 +11,10 @@ using System.Text.Json.Serialization;
 /// <remarks>
 /// <para><see cref="NivelResolucao"/> (<c>logradouro|bairro|distrito|cidade</c>)
 /// indica até onde a resolução chegou; <see cref="Origem"/>
-/// (<c>logradouro|faixa-cidade|faixa-bairro|faixa-distrito|grande-usuario</c>)
-/// distingue a estratégia. Ver <see cref="CepResolucao"/>.</para>
+/// (<c>logradouro|grande-usuario|cep-geral|faixa-cidade|faixa-bairro|faixa-distrito</c>)
+/// distingue a estratégia. <c>cep-geral</c> é o CEP oficial da cidade ou do distrito
+/// (resolução exata, <see cref="NivelResolucao"/> <c>cidade</c> ou <c>distrito</c>); as
+/// <c>faixa-*</c> apenas inferem o território de um número que cai na faixa. Ver <see cref="CepResolucao"/>.</para>
 /// <para>Na resolução por <strong>grande usuário</strong>, o nome do órgão/empresa
 /// é exposto em <see cref="Logradouro"/> (o DTO não tem campo dedicado) e
 /// <see cref="Cidade"/>/<see cref="CodigoIbge"/>/<see cref="Uf"/> vêm da faixa CEP,

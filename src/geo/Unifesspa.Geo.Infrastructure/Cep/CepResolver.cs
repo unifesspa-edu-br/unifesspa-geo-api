@@ -14,7 +14,7 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 /// <summary>
 /// Resolve CEP com cache-aside (Redis) sobre o <see cref="ICepReader"/>. A chave
 /// compõe-se com o selo de versão vigente (<see cref="RedisGeoCepCacheInvalidador.ChaveSeloVersaoVigente"/>,
-/// #674): <c>geo:cep:v{versao}:{cep}</c>. Quando o ETL sela uma nova release, o selo
+/// #674) e com a versão do formato da resolução: <c>geo:cep:{formato}:v{versao}:{cep}</c>. Quando o ETL sela uma nova release, o selo
 /// muda e as entradas antigas viram inalcançáveis (invalidação O(1), sem SCAN). Só
 /// resolução positiva (200) é cacheada; 404 nunca — a ausência não pode congelar
 /// caso a base seja recarregada/enriquecida.
@@ -34,6 +34,12 @@ internal sealed partial class CepResolver : ICepResolver
 {
     // Chave da memoização em processo do selo de versão vigente (#703). Única (um selo
     // global por instância de cache em memória), distinta das chaves de CEP do Redis.
+    // Versão do formato/vocabulário da resolução cacheada. Incrementar quando a cascata
+    // ou o vocabulário de origem mudar: as entradas gravadas pelo código anterior (mesmo
+    // selo de dataset) ficam inalcançáveis e a próxima consulta resolve de novo no banco.
+    // f2: introdução da origem "cep-geral".
+    private const string FormatoResolucao = "f2";
+
     private const string ChaveMemoSelo = "geo:cep:selo-vigente-memo";
 
     private readonly Lazy<ICacheService> _cache;
@@ -120,7 +126,7 @@ internal sealed partial class CepResolver : ICepResolver
     private async Task<string?> ResolverChaveAsync(ICacheService cache, string cep, CancellationToken cancellationToken)
     {
         string? selo = await ObterSeloVigenteAsync(cache, cancellationToken).ConfigureAwait(false);
-        return string.IsNullOrWhiteSpace(selo) ? null : $"geo:cep:v{selo}:{cep}";
+        return string.IsNullOrWhiteSpace(selo) ? null : $"geo:cep:{FormatoResolucao}:v{selo}:{cep}";
     }
 
     // Memoiza o selo em processo (IMemoryCache) por uma janela curta (SeloTtl, #703): o
