@@ -115,6 +115,59 @@ public sealed class EtlAtualizacaoPeriodicaTests
         (await leitura.CepGerais.SingleAsync(g => g.Cep == "01000999")).Vigente.Should().BeFalse();
     }
 
+    [Fact(DisplayName = "Recarga da MESMA versão sem uma linha a marca como stale (vigente=false); a linha revista continua vigente")]
+    public async Task RecargaMesmaVersao_MarcaStaleLinhaAusente()
+    {
+        await LimparAsync();
+        IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
+        FonteEmMemoria completa = FonteCompleta("202601");
+        completa.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        completa.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
+        FonteEmMemoria semSaoPaulo = FonteSomenteMaraba("202601");
+        semSaoPaulo.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        FonteFactoryFake primeira = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal) { ["202601"] = completa });
+        FonteFactoryFake segunda = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal) { ["202601"] = semSaoPaulo });
+
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), primeira, cache);
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), segunda, cache);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        (await leitura.CepGerais.SingleAsync(g => g.Cep == "01000999")).Vigente.Should().BeFalse();
+        (await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000")).Vigente.Should().BeTrue();
+        (await leitura.Logradouros.SingleAsync(l => l.Cep == CepSaoPaulo)).Vigente.Should().BeFalse();
+        (await leitura.Logradouros.SingleAsync(l => l.Cep == CepMaraba)).Vigente.Should().BeTrue();
+        (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == SaoPaulo)).Vigente.Should().BeFalse();
+        (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba)).Vigente.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "Recarga idêntica da MESMA versão não marca nenhuma linha como stale em nenhuma tabela")]
+    public async Task RecargaIdenticaMesmaVersao_NaoMarcaStale()
+    {
+        await LimparAsync();
+        IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
+        FonteEmMemoria fonte = FonteCompleta("202601");
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525100", 1, distritoIdDne: 10));
+        fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(Maraba, populacao: "100"));
+        FonteFactoryFake fabrica = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal) { ["202601"] = fonte });
+
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), fabrica, cache);
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), fabrica, cache);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        int stale =
+            await leitura.Paises.CountAsync(e => !e.Vigente)
+            + await leitura.Estados.CountAsync(e => !e.Vigente)
+            + await leitura.EstadoIndicadores.CountAsync(e => !e.Vigente)
+            + await leitura.Cidades.CountAsync(e => !e.Vigente)
+            + await leitura.CidadeIndicadores.CountAsync(e => !e.Vigente)
+            + await leitura.Distritos.CountAsync(e => !e.Vigente)
+            + await leitura.Logradouros.CountAsync(e => !e.Vigente)
+            + await leitura.CepGerais.CountAsync(e => !e.Vigente);
+        stale.Should().Be(0, "toda linha foi revista na recarga idêntica");
+        (await leitura.CepGerais.CountAsync()).Should().Be(2);
+    }
+
     [Fact(DisplayName = "Recarga da MESMA versão troca o selo do cache: resposta cacheada antes da recarga deixa de ser servida")]
     public async Task RecargaMesmaVersao_InvalidaEntradasCacheadas()
     {

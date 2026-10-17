@@ -240,6 +240,7 @@ internal sealed partial class GeoImportadorPaisEstadoCidade : IGeoImportador
             if (existentes.TryGetValue(estadoId, out EstadoIndicador? existente))
             {
                 existente.Atualizar(cru.Gentilico, cru.Governador, area, populacao, densidade, matriculas, idh, receitas, despesas, rendimento, veiculos, versao);
+                GeoEtlUpsert.Tocar(_contexto, existente);
                 contador.ContarAtualizado();
             }
             else
@@ -410,6 +411,7 @@ internal sealed partial class GeoImportadorPaisEstadoCidade : IGeoImportador
             if (existentes.TryGetValue(cidadeId, out CidadeIndicador? existente))
             {
                 existente.Atualizar(cru.Gentilico, cru.Prefeito, area, populacao, densidade, escolarizacao, idh, mortalidade, receitas, despesas, pib, cru.Aniversario, versao);
+                GeoEtlUpsert.Tocar(_contexto, existente);
                 contador.ContarAtualizado();
             }
             else

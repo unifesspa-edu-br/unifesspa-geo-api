@@ -8,11 +8,12 @@ using Npgsql;
 
 /// <summary>
 /// Política de linhas obsoletas (stale) da recarga periódica (Story #674, CA-04): ao
-/// aplicar uma nova versão, as linhas de reference data cuja <c>versao_dataset</c> ficou
-/// <strong>anterior</strong> à versão recém-aplicada (não foram revistas nesta release)
-/// são marcadas <c>vigente = false</c> — sem remoção física (rastreabilidade de CEP/
-/// logradouro retirado). A comparação <c>versao_dataset &lt; @versao</c> é lexicográfica,
-/// válida porque o formato AAAAMM tem comprimento fixo.
+/// aplicar uma versão, as linhas de reference data que <strong>não foram revistas nesta
+/// carga</strong> são marcadas <c>vigente = false</c> — sem remoção física (rastreabilidade
+/// de CEP/logradouro retirado). Não revista é: <c>versao_dataset</c> anterior à aplicada
+/// (comparação lexicográfica, válida porque AAAAMM tem comprimento fixo) ou, na recarga da
+/// <em>mesma</em> versão, <c>updated_at</c>/<c>created_at</c> anterior ao início da carga —
+/// os importadores gravam <c>updated_at</c> em toda linha que revisam.
 /// </summary>
 /// <remarks>
 /// O predicado pressupõe versões <strong>não-decrescentes</strong>: aplicar uma release
@@ -47,10 +48,11 @@ internal static class GeoStaleMarker
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",
-        Justification = "O nome da tabela vem de whitelist constante; versão e instante são parametrizados (@versao/@agora).")]
+        Justification = "O nome da tabela vem de whitelist constante; versão, instante e início da carga são parametrizados (@versao/@agora/@inicio).")]
     public static async Task<int> MarcarStaleAsync(
         GeoDbContext contexto,
         string versaoAplicada,
+        DateTimeOffset inicioCarga,
         DateTimeOffset agora,
         CancellationToken cancellationToken)
     {
@@ -64,16 +66,18 @@ internal static class GeoStaleMarker
             // múltiplos comandos.
             NpgsqlParameter pAgora = new("agora", agora);
             NpgsqlParameter pVersao = new("versao", versaoAplicada);
+            NpgsqlParameter pInicio = new("inicio", inicioCarga);
 
             // Concatenação (não interpolação) para o nome da tabela — evita o EF1002, que
             // só dispara em strings interpoladas; os valores seguem parametrizados.
             string sql = "UPDATE " + tabela
                 + " SET vigente = false, updated_at = @agora"
-                + " WHERE versao_dataset < @versao AND vigente = true";
+                + " WHERE vigente = true AND (versao_dataset < @versao"
+                + " OR (versao_dataset = @versao AND coalesce(updated_at, created_at) < @inicio))";
 
             total += await contexto.Database.ExecuteSqlRawAsync(
                 sql,
-                [pAgora, pVersao],
+                [pAgora, pVersao, pInicio],
                 cancellationToken).ConfigureAwait(false);
         }
 

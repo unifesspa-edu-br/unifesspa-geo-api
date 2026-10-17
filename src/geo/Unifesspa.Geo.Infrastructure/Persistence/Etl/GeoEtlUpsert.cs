@@ -1,7 +1,10 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 
+using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
@@ -32,6 +35,11 @@ internal static class GeoEtlUpsert
         {
             contador.ContarDuplicado(chave);
             Result reatualizacao = atualizar(jaVista);
+            if (reatualizacao.IsSuccess)
+            {
+                Tocar(dbSet, jaVista);
+            }
+
             return reatualizacao.IsSuccess ? jaVista : null;
         }
 
@@ -44,6 +52,7 @@ internal static class GeoEtlUpsert
                 return null;
             }
 
+            Tocar(dbSet, existente);
             jaVistas[chave] = existente;
             contador.ContarAtualizado();
             return existente;
@@ -178,5 +187,26 @@ internal static class GeoEtlUpsert
         }
 
         return resolvida.Id;
+    }
+
+    /// <summary>
+    /// Registra que a linha foi revista nesta carga, mesmo sem mudança de valor: força o
+    /// <c>updated_at</c> a ser gravado. É o que permite à política de stale distinguir, numa
+    /// recarga da mesma versão, a linha revista da que deixou de ser emitida.
+    /// </summary>
+    public static void Tocar<T>(DbSet<T> dbSet, T entidade)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(dbSet);
+        DbContext contexto = ((IInfrastructure<IServiceProvider>)dbSet).Instance
+            .GetRequiredService<Microsoft.EntityFrameworkCore.Infrastructure.ICurrentDbContext>().Context;
+        Tocar(contexto, entidade);
+    }
+
+    /// <inheritdoc cref="Tocar{T}(DbSet{T}, T)"/>
+    public static void Tocar(DbContext contexto, object entidade)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        contexto.Entry(entidade).Property(nameof(EntityBase.UpdatedAt)).IsModified = true;
     }
 }
