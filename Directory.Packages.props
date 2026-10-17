@@ -72,6 +72,10 @@
     <PackageVersion Include="AwesomeAssertions" Version="9.4.0" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
+    <!-- SSH.NET entra transitivo por Testcontainers 4.12.0 na 2025.1.0, com vulnerabilidade alta
+         (GHSA-mggc-4xg6-vcxf, GHSA-q939-rpr3-3284 / NU1903). Referenciado direto nos projetos
+         de teste para elevar a versão; remover quando o Testcontainers trouxer versão corrigida. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="Testcontainers" Version="4.12.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.12.0" />
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.3" />
