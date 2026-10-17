@@ -9,7 +9,7 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 
 /// <summary>
 /// Invalida o cache local de lookup de CEP por <strong>selo de versão</strong> (Story
-/// #674, CA-05): grava a versão vigente numa única chave (<see cref="ChaveSeloVersaoVigente"/>).
+/// #674, CA-05): grava o selo da execução vigente numa única chave (<see cref="ChaveSeloVersaoVigente"/>).
 /// O lookup de CEP (F4, #676) compõe a chave de cache com esse selo; trocar o selo torna
 /// todas as entradas de versões anteriores um <em>miss</em> (recomputadas do banco já na
 /// nova versão), que expiram por TTL. É O(1) e não varre o keyspace (<c>SCAN</c>/<c>KEYS</c>

@@ -16,6 +16,9 @@ using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Infrastructure.Caching;
+using Unifesspa.Geo.Infrastructure.Cep;
+using Unifesspa.Geo.Infrastructure.Core.Caching;
 using Unifesspa.Geo.Infrastructure.Core.Observability;
 using Unifesspa.Geo.Infrastructure.Observability;
 using Unifesspa.Geo.Infrastructure.Persistence;
@@ -85,7 +88,61 @@ public sealed class EtlAtualizacaoPeriodicaTests
         ruaA.VersaoDataset.Should().Be("202602");
         ruaA.Vigente.Should().BeTrue();
 
-        await cache.Received(1).InvalidarAsync("202602", Arg.Any<CancellationToken>());
+        await cache.Received(1).InvalidarAsync(Arg.Is<string>(v => v.StartsWith("202602.", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Recarga marca como stale o CEP geral ausente da nova release e mantém o presente")]
+    public async Task Recarga_MarcaStaleCepGeralAusente()
+    {
+        await LimparAsync();
+        IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
+        FonteEmMemoria primeira = FonteCompleta("202601");
+        primeira.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        primeira.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
+        FonteEmMemoria segunda = FonteSomenteMaraba("202602");
+        segunda.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        {
+            ["202601"] = primeira,
+            ["202602"] = segunda,
+        });
+
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), fonteFactory, cache);
+        await ExecutarAsync(await CriarExecucaoAsync("202602"), fonteFactory, cache);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        (await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000")).Vigente.Should().BeTrue();
+        (await leitura.CepGerais.SingleAsync(g => g.Cep == "01000999")).Vigente.Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "Recarga da MESMA versão troca o selo do cache: resposta cacheada antes da recarga deixa de ser servida")]
+    public async Task RecargaMesmaVersao_InvalidaEntradasCacheadas()
+    {
+        await LimparAsync();
+        MemoriaCacheFake cache = new();
+        IGeoCepCacheInvalidador invalidador = new RedisGeoCepCacheInvalidador(cache, NullLogger<RedisGeoCepCacheInvalidador>.Instance);
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        {
+            ["202601"] = FonteCompleta("202601"),
+        });
+        ICepReader reader = Substitute.For<ICepReader>();
+        reader.ResolverAsync(CepMaraba, Arg.Any<CancellationToken>()).Returns(
+            new CepResolvidoDto(CepMaraba, null, null, null, null, null, "Marabá", Maraba, "PA", null, null, CepResolucao.NivelCidade, CepResolucao.OrigemFaixaCidade));
+        using Microsoft.Extensions.Caching.Memory.MemoryCache memoria = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        CepResolver resolver = new(
+            new Lazy<ICacheService>(() => cache), reader, memoria, TimeProvider.System,
+            Microsoft.Extensions.Options.Options.Create(new GeoCepCacheOptions { SeloTtl = TimeSpan.Zero }),
+            NullLogger<CepResolver>.Instance);
+
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), fonteFactory, invalidador);
+        await resolver.ResolverAsync(CepMaraba, CancellationToken.None);
+        await resolver.ResolverAsync(CepMaraba, CancellationToken.None);
+        await reader.Received(1).ResolverAsync(CepMaraba, Arg.Any<CancellationToken>());
+
+        await ExecutarAsync(await CriarExecucaoAsync("202601"), fonteFactory, invalidador);
+        await resolver.ResolverAsync(CepMaraba, CancellationToken.None);
+
+        await reader.Received(2).ResolverAsync(CepMaraba, Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "CA-07/08: a carga conclui registrando status, relatório por tabela (contadores) e disparador — sem PII")]
@@ -561,6 +618,29 @@ public sealed class EtlAtualizacaoPeriodicaTests
         fonte.Logradouros.Add(DadosDne.Logradouro(CepMaraba, "Rua A", 1, distritoIdDne: 10));
 
         return fonte;
+    }
+
+    private sealed class MemoriaCacheFake : ICacheService
+    {
+        private readonly Dictionary<string, object?> _dados = [];
+
+        public Task<T?> ObterAsync<T>(string chave, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_dados.TryGetValue(chave, out object? valor) ? (T?)valor : default);
+
+        public Task DefinirAsync<T>(string chave, T valor, TimeSpan? expiracao = null, CancellationToken cancellationToken = default)
+        {
+            _dados[chave] = valor;
+            return Task.CompletedTask;
+        }
+
+        public Task RemoverAsync(string chave, CancellationToken cancellationToken = default)
+        {
+            _dados.Remove(chave);
+            return Task.CompletedTask;
+        }
+
+        public Task<IAsyncDisposable?> AcquireLeaseAsync(string chave, TimeSpan ttl, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IAsyncDisposable?>(null);
     }
 
     private sealed class FonteFactoryFake : IGeoFonteDadosFactory

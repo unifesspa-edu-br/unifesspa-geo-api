@@ -32,14 +32,12 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
     Justification = "Instanciada via DI em GeoInfrastructureRegistration.")]
 internal sealed partial class CepResolver : ICepResolver
 {
-    // Chave da memoização em processo do selo de versão vigente (#703). Única (um selo
-    // global por instância de cache em memória), distinta das chaves de CEP do Redis.
-    // Versão do formato/vocabulário da resolução cacheada. Incrementar quando a cascata
-    // ou o vocabulário de origem mudar: as entradas gravadas pelo código anterior (mesmo
-    // selo de dataset) ficam inalcançáveis e a próxima consulta resolve de novo no banco.
-    // f2: introdução da origem "cep-geral".
+    // Versão do formato/vocabulário da resolução cacheada: faz parte da chave, então mudar a
+    // cascata ou o vocabulário de origem torna inalcançáveis as entradas do formato anterior.
     private const string FormatoResolucao = "f2";
 
+    // Chave da memoização em processo do selo de versão vigente (#703). Única (um selo
+    // global por instância de cache em memória), distinta das chaves de CEP do Redis.
     private const string ChaveMemoSelo = "geo:cep:selo-vigente-memo";
 
     private readonly Lazy<ICacheService> _cache;

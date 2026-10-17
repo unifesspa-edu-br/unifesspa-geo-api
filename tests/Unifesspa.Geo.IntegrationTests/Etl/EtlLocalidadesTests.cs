@@ -103,6 +103,24 @@ public sealed class EtlLocalidadesTests
         relatorio.Tabela("cep_geral").Inseridos.Should().Be(2);
     }
 
+    [Fact(DisplayName = "CEP geral com distrito de outra cidade é rebaixado a CEP geral da cidade e a degradação é contada")]
+    public async Task CepGeral_DistritoDeOutraCidade_RebaixaParaCidade()
+    {
+        FonteEmMemoria fonte = FonteCompleta();
+        // Distrito 20 pertence a São Paulo; o CEP geral declara Marabá.
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525200", IdCidadeMaraba, distritoIdDne: 20));
+        await PrepararTopoAsync(fonte);
+
+        RelatorioImportacao relatorio = await ExecutarLocalidadesAsync(fonte, ModoCarga.Inicial);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
+        CepGeral geral = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525200");
+        geral.CidadeId.Should().Be(marabaId);
+        geral.DistritoId.Should().BeNull();
+        relatorio.Tabela("cep_geral").ParsesDegradados.Should().Be(1);
+    }
+
     [Fact(DisplayName = "CEP geral: recarga é idempotente — não duplica e conta como atualizado")]
     public async Task CepGeral_RecargaIdempotente()
     {

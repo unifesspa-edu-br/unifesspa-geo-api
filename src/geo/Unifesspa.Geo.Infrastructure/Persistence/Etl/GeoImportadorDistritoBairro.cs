@@ -329,18 +329,7 @@ internal sealed class GeoImportadorDistritoBairro
                 continue;
             }
 
-            Guid? distritoGuid = null;
-            if (cru.DistritoIdDne is int idDistrito && distritosPorIdDne.TryGetValue(idDistrito, out LocalidadeResolvida distrito))
-            {
-                if (distrito.CidadeId == cidadeGuid)
-                {
-                    distritoGuid = distrito.Id;
-                }
-                else
-                {
-                    contador.ContarParseDegradado($"fk_localidade_cidade_divergente:{idDistrito.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
-                }
-            }
+            Guid? distritoGuid = ResolverCoerente(distritosPorIdDne, cru.DistritoIdDne, cidadeGuid, contador);
 
             Point? coordenada = PontoFactory.Criar(cru.Latitude, cru.Longitude);
             decimal? latitude = coordenada is null ? null : (decimal)coordenada.Y;
