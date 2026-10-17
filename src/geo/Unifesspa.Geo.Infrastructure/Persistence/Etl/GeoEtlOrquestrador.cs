@@ -201,6 +201,7 @@ internal sealed partial class GeoEtlOrquestrador : IGeoImportacaoService, IGeoIm
 
         string versao = execucao.VersaoDataset;
         long inicio = _relogio.GetTimestamp();
+        DateTimeOffset inicioCarga = _relogio.GetUtcNow();
 
         try
         {
@@ -248,10 +249,11 @@ internal sealed partial class GeoEtlOrquestrador : IGeoImportacaoService, IGeoIm
             // cache nem interromper a marcação de stale no meio.
 
             // Política de stale: só na recarga (a inicial parte de base vazia). Marca
-            // vigente=false nas linhas não revistas nesta versão (versao_dataset anterior).
+            // vigente=false nas linhas não revistas nesta carga: de versão anterior, ou da
+            // mesma versão com updated_at/created_at anterior ao início da carga.
             if (modo == ModoCarga.Recarga)
             {
-                await GeoStaleMarker.MarcarStaleAsync(_contexto, versao, _relogio.GetUtcNow(), CancellationToken.None).ConfigureAwait(false);
+                await GeoStaleMarker.MarcarStaleAsync(_contexto, versao, inicioCarga, _relogio.GetUtcNow(), CancellationToken.None).ConfigureAwait(false);
             }
 
             RelatorioImportacaoDto relatorio = CombinarRelatorios(versao, relTopo, relFolhas);
