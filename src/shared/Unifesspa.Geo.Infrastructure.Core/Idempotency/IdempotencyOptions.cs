@@ -10,14 +10,10 @@ public sealed record IdempotencyOptions
     public const string SectionName = "Geo:Idempotency";
 
     /// <summary>
-    /// Nome de chave usada para cifrar response body via IGeoEncryptionService.
-    /// Default alinhado com a key canônica provisionada pelo chart
-    /// <c>platform/vault-transit-bootstrap</c> do uniplus-infra (uniplus-infra#219):
-    /// <c>uniplus-idempotency-aesgcm</c>. A policy <c>uniplus-api-transit</c> da
-    /// role <c>uniplus-api</c> só permite update em encrypt/decrypt desta chave
-    /// específica — qualquer nome diferente retorna 403 permission denied.
+    /// Chave do Transit que cifra o response body armazenado da idempotência.
+    /// A política do Vault do Geo precisa conceder encrypt/decrypt nesta chave.
     /// </summary>
-    public const string EncryptionKeyName = "uniplus-idempotency-aesgcm";
+    public const string EncryptionKeyName = "geo-idempotency-aesgcm";
 
     /// <summary>TTL da entrada do cache. ADR-0027 fixa 24h como teto.</summary>
     public TimeSpan Ttl { get; init; } = TimeSpan.FromHours(24);
