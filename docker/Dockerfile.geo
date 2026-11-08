@@ -20,7 +20,9 @@ RUN dotnet publish src/geo/Unifesspa.Geo.API/Unifesspa.Geo.API.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# A base atrasa correções de segurança do Ubuntu: os pacotes são atualizados no build.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r appuser && useradd -r -g appuser -s /sbin/nologin appuser
 
