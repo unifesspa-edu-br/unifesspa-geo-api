@@ -45,6 +45,25 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Fact(DisplayName = "Dependência de prontidão fora do ar reprova a prontidão mesmo com o provedor de identidade no ar")]
+    public async Task Prontidao_DependenciaDeProntidaoForaDoAr_Reprova()
+    {
+        _factory.ProvedorDeIdentidade.Status = HttpStatusCode.OK;
+        _factory.DependenciaDeProntidao.Disponivel = false;
+        try
+        {
+            using HttpClient client = _factory.CreateClient();
+
+            using HttpResponseMessage resposta = await client.GetAsync(new Uri("/health/ready", UriKind.Relative));
+
+            resposta.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        }
+        finally
+        {
+            _factory.DependenciaDeProntidao.Disponivel = true;
+        }
+    }
+
     [Fact(DisplayName = "Provedor de identidade fora do ar aparece como degradado no health completo")]
     public async Task HealthCompleto_ProvedorDeIdentidadeForaDoAr_ReportaDegradado()
     {
@@ -81,15 +100,28 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
             HealthCheckService servico = _factory.Services.GetRequiredService<HealthCheckService>();
             Stopwatch cronometro = Stopwatch.StartNew();
 
-            HealthReport relatorio = await servico.CheckHealthAsync(r => r.Name == VerificacaoDoProvedor);
+            using CancellationTokenSource prazoExterno = new(TimeSpan.FromSeconds(10));
+
+            HealthReport relatorio = await servico.CheckHealthAsync(
+                r => r.Name == VerificacaoDoProvedor,
+                prazoExterno.Token);
 
             relatorio.Entries[VerificacaoDoProvedor].Status.Should().Be(HealthStatus.Degraded);
-            cronometro.Elapsed.Should().BeLessThan(OidcDiscoveryHealthCheck.LimiteDeEspera + TimeSpan.FromSeconds(2));
+            cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3.5));
         }
         finally
         {
             _factory.ProvedorDeIdentidade.Pendurado = false;
         }
+    }
+
+    [Fact(DisplayName = "O HttpClient da verificação do provedor de identidade espera no máximo 2 segundos")]
+    public void VerificacaoDoProvedor_HttpClient_LimitaAEsperaADoisSegundos()
+    {
+        using HttpClient cliente = _factory.Services.GetRequiredService<IHttpClientFactory>()
+            .CreateClient(nameof(OidcDiscoveryHealthCheck));
+
+        cliente.Timeout.Should().Be(TimeSpan.FromSeconds(2));
     }
 
     [Fact(DisplayName = "A verificação do provedor de identidade não integra a prontidão")]
@@ -101,7 +133,7 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
         opcoes.Registrations
             .Where(r => r.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag))
             .Select(r => r.Name)
-            .Should().NotContain(VerificacaoDoProvedor);
+            .Should().BeEquivalentTo([GeoProntidaoApiFactory.VerificacaoDeProntidao]);
         opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
     }
 }
