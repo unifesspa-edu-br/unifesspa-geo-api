@@ -1,0 +1,107 @@
+namespace Unifesspa.Geo.IntegrationTests.Api;
+
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Net;
+using System.Text.Json;
+
+using AwesomeAssertions;
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
+
+using Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
+using Unifesspa.Geo.Infrastructure.Core.HealthChecks;
+using Unifesspa.Geo.IntegrationTests.Infrastructure;
+
+/// <summary>
+/// O provedor de identidade só afeta as rotas autenticadas, que já recusam a requisição sozinhas;
+/// retirá-lo da prontidão mantém no ar as rotas públicas, e o estado dele segue visível no health completo.
+/// </summary>
+[SuppressMessage(
+    "Performance",
+    "CA1515:Consider making public types internal",
+    Justification = "xUnit exige classe de teste pública.")]
+public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoProntidaoApiFactory>
+{
+    private const string VerificacaoDoProvedor = "oidc-discovery";
+
+    private readonly GeoProntidaoApiFactory _factory;
+
+    public ProntidaoSemProvedorDeIdentidadeTests(GeoProntidaoApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact(DisplayName = "Provedor de identidade fora do ar não reprova a prontidão")]
+    public async Task Prontidao_ProvedorDeIdentidadeForaDoAr_ContinuaApta()
+    {
+        _factory.ProvedorDeIdentidade.Status = HttpStatusCode.ServiceUnavailable;
+        using HttpClient client = _factory.CreateClient();
+
+        using HttpResponseMessage resposta = await client.GetAsync(new Uri("/health/ready", UriKind.Relative));
+
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact(DisplayName = "Provedor de identidade fora do ar aparece como degradado no health completo")]
+    public async Task HealthCompleto_ProvedorDeIdentidadeForaDoAr_ReportaDegradado()
+    {
+        _factory.ProvedorDeIdentidade.Status = HttpStatusCode.ServiceUnavailable;
+        using HttpClient client = _factory.CreateClient();
+
+        using HttpResponseMessage resposta = await client.GetAsync(new Uri("/health", UriKind.Relative));
+
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        using JsonDocument corpo = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+        corpo.RootElement.GetProperty("verificacoes").GetProperty(VerificacaoDoProvedor).GetProperty("status")
+            .GetString().Should().Be("Degraded");
+    }
+
+    [Fact(DisplayName = "Provedor de identidade que responde aparece como saudável no health completo")]
+    public async Task HealthCompleto_ProvedorDeIdentidadeRespondendo_ReportaSaudavel()
+    {
+        _factory.ProvedorDeIdentidade.Status = HttpStatusCode.OK;
+        using HttpClient client = _factory.CreateClient();
+
+        using HttpResponseMessage resposta = await client.GetAsync(new Uri("/health", UriKind.Relative));
+
+        using JsonDocument corpo = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
+        corpo.RootElement.GetProperty("verificacoes").GetProperty(VerificacaoDoProvedor).GetProperty("status")
+            .GetString().Should().Be("Healthy");
+    }
+
+    [Fact(DisplayName = "Provedor de identidade sem resposta degrada o health completo dentro do limite de espera")]
+    public async Task HealthCompleto_ProvedorDeIdentidadeSemResposta_DegradaDentroDoLimite()
+    {
+        _factory.ProvedorDeIdentidade.Pendurado = true;
+        try
+        {
+            HealthCheckService servico = _factory.Services.GetRequiredService<HealthCheckService>();
+            Stopwatch cronometro = Stopwatch.StartNew();
+
+            HealthReport relatorio = await servico.CheckHealthAsync(r => r.Name == VerificacaoDoProvedor);
+
+            relatorio.Entries[VerificacaoDoProvedor].Status.Should().Be(HealthStatus.Degraded);
+            cronometro.Elapsed.Should().BeLessThan(OidcDiscoveryHealthCheck.LimiteDeEspera + TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            _factory.ProvedorDeIdentidade.Pendurado = false;
+        }
+    }
+
+    [Fact(DisplayName = "A verificação do provedor de identidade não integra a prontidão")]
+    public void Prontidao_Inventario_NaoContemOProvedorDeIdentidade()
+    {
+        HealthCheckServiceOptions opcoes = _factory.Services
+            .GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
+
+        opcoes.Registrations
+            .Where(r => r.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag))
+            .Select(r => r.Name)
+            .Should().NotContain(VerificacaoDoProvedor);
+        opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
+    }
+}

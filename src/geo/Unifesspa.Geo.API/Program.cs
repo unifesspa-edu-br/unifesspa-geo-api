@@ -15,6 +15,7 @@ using Unifesspa.Geo.Infrastructure.Core.Cors;
 using Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
+using Unifesspa.Geo.Infrastructure.Core.HealthChecks;
 using Unifesspa.Geo.Infrastructure.Core.Logging;
 using Unifesspa.Geo.Infrastructure.Core.Messaging;
 using Unifesspa.Geo.Infrastructure.Core.Middleware;
@@ -138,7 +139,7 @@ builder.Services.AddWolverineMessaging();
 builder.Services.AddCorsConfiguration(builder.Configuration, builder.Environment);
 builder.Services.AddGeoCache(builder.Configuration, builder.Environment);
 
-// Health checks: Postgres + Redis + OIDC.
+// Health checks: Postgres + Redis na prontidão; OIDC só no /health completo (Degraded).
 builder.Services.AddGeoHealthChecks(builder.Configuration, connectionStringName: "GeoDb");
 
 WebApplication app = builder.Build();
@@ -163,7 +164,10 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 {
     Predicate = h => h.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag),
 });
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = RelatorioDeSaudeWriter.Escrever,
+});
 
 await app.RunAsync();
 

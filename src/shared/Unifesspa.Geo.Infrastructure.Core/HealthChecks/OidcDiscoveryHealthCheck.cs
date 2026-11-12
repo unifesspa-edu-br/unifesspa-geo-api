@@ -9,12 +9,16 @@ using Microsoft.Extensions.Options;
 
 /// <summary>
 /// Probes the OIDC discovery endpoint (<c>/.well-known/openid-configuration</c>, RFC 8414).
-/// Fails the readiness check when the authority is unreachable so Kubernetes does not route
-/// traffic to a pod that cannot validate access tokens. Provider-agnostic — works against
+/// Reports <see cref="HealthStatus.Degraded"/> when the authority is unreachable: the state stays visible in
+/// <c>/health</c>, but it is not part of the readiness probe, so an identity provider outage does not take
+/// out routes that need no authentication. Provider-agnostic — works against
 /// Keycloak, Auth0, Okta, Azure AD, Gov.br or any OIDC-compliant IdP.
 /// </summary>
 public sealed class OidcDiscoveryHealthCheck : IHealthCheck
 {
+    /// <summary>Espera máxima pelo provedor, para o health completo responder antes de qualquer timeout de sonda.</summary>
+    public static readonly TimeSpan LimiteDeEspera = TimeSpan.FromSeconds(2);
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptionsMonitor<AuthOptions> _authOptions;
 
@@ -29,7 +33,7 @@ public sealed class OidcDiscoveryHealthCheck : IHealthCheck
     [SuppressMessage(
         "Design",
         "CA1031:Do not catch general exception types",
-        Justification = "Health check must isolate downstream failures and report Unhealthy instead of propagating exceptions to the readiness pipeline.")]
+        Justification = "Health check must isolate downstream failures and report Degraded instead of propagating exceptions to the readiness pipeline.")]
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         AuthOptions options = _authOptions.CurrentValue;
@@ -42,11 +46,11 @@ public sealed class OidcDiscoveryHealthCheck : IHealthCheck
 
             return response.IsSuccessStatusCode
                 ? HealthCheckResult.Healthy($"OIDC discovery respondeu {(int)response.StatusCode}.")
-                : HealthCheckResult.Unhealthy($"OIDC discovery respondeu {(int)response.StatusCode}.");
+                : HealthCheckResult.Degraded($"OIDC discovery respondeu {(int)response.StatusCode}.");
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Unhealthy("OIDC discovery inacessível.", ex);
+            return HealthCheckResult.Degraded("OIDC discovery inacessível.", ex);
         }
     }
 }
