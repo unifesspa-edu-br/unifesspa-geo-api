@@ -9,7 +9,7 @@ using Unifesspa.Geo.Infrastructure.Core.HealthChecks;
 /// <summary>
 /// Registra health checks agregados para Postgres e Redis. Pareado com a
 /// configuração existente de <see cref="Authentication.OidcAuthenticationConfiguration"/>
-/// (que já registra <c>OidcDiscoveryHealthCheck</c>) para compor o readiness probe completo
+/// (que já registra <c>OidcDiscoveryHealthCheck</c>) para compor o health completo (o OIDC fica fora do readiness probe)
 /// das APIs Uni+.
 /// </summary>
 public static class HealthChecksServiceCollectionExtensions
