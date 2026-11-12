@@ -6,7 +6,9 @@ using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
+using Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 using Unifesspa.Geo.Infrastructure.Core.HealthChecks;
 using Unifesspa.Geo.IntegrationTests.Fixtures.Hosting;
 
@@ -21,7 +23,11 @@ using Unifesspa.Geo.IntegrationTests.Fixtures.Hosting;
     Justification = "xUnit IClassFixture<T> exige tipo público para a fixture compartilhada.")]
 public sealed class GeoProntidaoApiFactory : ApiFactoryBase<Program>
 {
+    public const string VerificacaoDeProntidao = "dependencia-de-prontidao";
+
     public ProvedorDeIdentidadeSimulado ProvedorDeIdentidade { get; } = new();
+
+    public DependenciaDeProntidaoSimulada DependenciaDeProntidao { get; } = new();
 
     protected override IEnumerable<KeyValuePair<string, string?>> GetConfigurationOverrides() =>
     [
@@ -39,8 +45,17 @@ public sealed class GeoProntidaoApiFactory : ApiFactoryBase<Program>
         base.ConfigureWebHost(builder);
 
         builder.ConfigureTestServices(services =>
+        {
             services.AddHttpClient(nameof(OidcDiscoveryHealthCheck))
-                .ConfigurePrimaryHttpMessageHandler(() => new RespostaDoProvedorHandler(ProvedorDeIdentidade)));
+                .ConfigurePrimaryHttpMessageHandler(() => new RespostaDoProvedorHandler(ProvedorDeIdentidade));
+
+            // Verificação de prontidão controlável, no lugar de Postgres e Redis: prova que a sonda segue
+            // avaliando o que integra a prontidão, e não apenas devolvendo 200.
+            services.AddHealthChecks().AddCheck(
+                VerificacaoDeProntidao,
+                new DependenciaDeProntidaoVerificacao(DependenciaDeProntidao),
+                tags: [HealthChecksServiceCollectionExtensions.ReadyTag]);
+        });
     }
 
     private sealed class RespostaDoProvedorHandler(ProvedorDeIdentidadeSimulado provedor) : HttpMessageHandler
@@ -68,4 +83,19 @@ public sealed class ProvedorDeIdentidadeSimulado
     public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
 
     public bool Pendurado { get; set; }
+}
+
+[SuppressMessage(
+    "Performance",
+    "CA1515:Consider making public types internal",
+    Justification = "Exposto pela fixture pública.")]
+public sealed class DependenciaDeProntidaoSimulada
+{
+    public bool Disponivel { get; set; } = true;
+}
+
+internal sealed class DependenciaDeProntidaoVerificacao(DependenciaDeProntidaoSimulada dependencia) : IHealthCheck
+{
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        Task.FromResult(dependencia.Disponivel ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy());
 }
