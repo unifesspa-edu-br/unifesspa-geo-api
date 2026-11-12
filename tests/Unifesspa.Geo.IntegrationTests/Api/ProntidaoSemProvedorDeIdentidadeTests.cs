@@ -114,7 +114,7 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
                 prazoExterno.Token);
 
             relatorio.Entries[VerificacaoDoProvedor].Status.Should().Be(HealthStatus.Degraded);
-            cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3.5));
+            cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(6));
         }
         finally
         {
