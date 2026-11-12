@@ -7,10 +7,17 @@ using System.Text.Json;
 
 using AwesomeAssertions;
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
+using NSubstitute;
+
+using StackExchange.Redis;
+
+using Unifesspa.Geo.Infrastructure.Core.Authentication;
 using Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 using Unifesspa.Geo.Infrastructure.Core.HealthChecks;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
@@ -134,6 +141,33 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
             .Where(r => r.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag))
             .Select(r => r.Name)
             .Should().BeEquivalentTo([GeoProntidaoApiFactory.VerificacaoDeProntidao]);
+        opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
+    }
+
+    [Fact(DisplayName = "Postgres e Redis seguem na prontidão e o OIDC fica de fora quando todas as dependências estão configuradas")]
+    public void Prontidao_RegistrosProdutivos_MantemPostgresERedisSemOProvedor()
+    {
+        IConfiguration configuracao = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:GeoDb"] = "Host=localhost;Database=geo",
+                ["Redis:ConnectionString"] = "localhost:6379",
+                ["Auth:Authority"] = "http://provedor.invalido/test-realm",
+                ["Auth:Audience"] = "uniplus",
+            })
+            .Build();
+        ServiceCollection servicos = new();
+        servicos.AddSingleton(Substitute.For<IConnectionMultiplexer>());
+        servicos.AddOidcAuthentication(configuracao, Substitute.For<IHostEnvironment>());
+        servicos.AddGeoHealthChecks(configuracao, "GeoDb");
+        using ServiceProvider provedor = servicos.BuildServiceProvider();
+
+        HealthCheckServiceOptions opcoes = provedor.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
+
+        opcoes.Registrations
+            .Where(r => r.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag))
+            .Select(r => r.Name)
+            .Should().BeEquivalentTo(["postgres", "redis"]);
         opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
     }
 }
