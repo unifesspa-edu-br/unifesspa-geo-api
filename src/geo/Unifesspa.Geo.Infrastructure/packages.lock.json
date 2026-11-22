@@ -67,6 +67,16 @@
           "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.16.0, 2.0.0)"
         }
       },
+      "WolverineFx.Postgresql": {
+        "type": "Direct",
+        "requested": "[5.41.0, )",
+        "resolved": "5.41.0",
+        "contentHash": "aoi2m3WXfZBwscJ32hLsvlVlVJdlayplxFuugouK2EUSvHITaTIjPF1qwrR2+wlq3QohETdWmM8fZB08+rxeHQ==",
+        "dependencies": {
+          "Weasel.Postgresql": "8.15.1",
+          "WolverineFx.RDBMS": "5.41.0"
+        }
+      },
       "DistributedLock.Core": {
         "type": "Transitive",
         "resolved": "1.0.8",
@@ -933,11 +943,11 @@
       },
       "WolverineFx.RDBMS": {
         "type": "Transitive",
-        "resolved": "5.39.5",
-        "contentHash": "j/gViP6Dk07oiGhb0q4kCTpMcYkp0RDcfhRcjZAIprLFnK4sIHPNVtLmCKT08/8JFVKQHhtkvaHA32LoUOFacw==",
+        "resolved": "5.41.0",
+        "contentHash": "zTsPDGjJH8StHQOwC0oIU/W6mA+MsLgzvMSk8g+7z2iEVkNT/1Dx72fu8VluRR7Eu3+ziKmxNF0iK5Ki+TkQIw==",
         "dependencies": {
           "Weasel.Core": "8.15.1",
-          "WolverineFx": "5.39.5"
+          "WolverineFx": "5.41.0"
         }
       },
       "unifesspa.geo.application": {
@@ -1008,9 +1018,9 @@
           "Unifesspa.Geo.Governance.Contracts": "[1.0.0, )",
           "Unifesspa.Geo.Kernel": "[1.0.0, )",
           "VaultSharp": "[1.17.5.1, )",
-          "WolverineFx": "[5.39.5, )",
-          "WolverineFx.EntityFrameworkCore": "[5.39.5, )",
-          "WolverineFx.Postgresql": "[5.39.5, )"
+          "WolverineFx": "[5.41.0, )",
+          "WolverineFx.EntityFrameworkCore": "[5.41.0, )",
+          "WolverineFx.Postgresql": "[5.41.0, )"
         }
       },
       "unifesspa.geo.kernel": {
@@ -1205,9 +1215,9 @@
       },
       "WolverineFx": {
         "type": "CentralTransitive",
-        "requested": "[5.39.5, )",
-        "resolved": "5.39.5",
-        "contentHash": "rnyz+ZConabOTi/U8N7UQAOaMc9P03hHyFrXZ6///6X0qtsHQ+VKDZtHe87AZJmY7By2w9As9puY6/jGCg5ZCA==",
+        "requested": "[5.41.0, )",
+        "resolved": "5.41.0",
+        "contentHash": "bOFNyk+q2uUOV5bgRNrRK78EjiV+BiM0W7/HSOubGlJ0rTpmyjxfYBApxPUMnLUMFJHebXEhYSfON71VxowNtA==",
         "dependencies": {
           "JasperFx": "1.31.0",
           "JasperFx.Events": "1.36.0",
@@ -1228,25 +1238,15 @@
       },
       "WolverineFx.EntityFrameworkCore": {
         "type": "CentralTransitive",
-        "requested": "[5.39.5, )",
-        "resolved": "5.39.5",
-        "contentHash": "HW0f2XTA05OkhogwnKT3vWOVaI6NzE5RUxrn3pRVda7bKKuhUIPP5yi5Wql5tI+/nelaBpkNsB94+4hnpRwgeg==",
+        "requested": "[5.41.0, )",
+        "resolved": "5.41.0",
+        "contentHash": "GTog2RQ1ukDMtFA0LUOX7593NJgqciQx1olFU0vJKfykcFyyS/WX+OZeb8GxxxX8k44E+wn4odC4mvtuJSDl0A==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.2",
           "Microsoft.EntityFrameworkCore.Design": "10.0.2",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.2",
           "Weasel.EntityFrameworkCore": "8.15.1",
-          "WolverineFx.RDBMS": "5.39.5"
-        }
-      },
-      "WolverineFx.Postgresql": {
-        "type": "CentralTransitive",
-        "requested": "[5.39.5, )",
-        "resolved": "5.39.5",
-        "contentHash": "/ApeWn+4dpLLXvmTzCspKxXHdh5WTrn01Y3YG/p3IxCLtbn2EmkBOIM2Kvu3xHVvY8sV/mMPi4NpplFDY9PZfA==",
-        "dependencies": {
-          "Weasel.Postgresql": "8.15.1",
-          "WolverineFx.RDBMS": "5.39.5"
+          "WolverineFx.RDBMS": "5.41.0"
         }
       }
     }
