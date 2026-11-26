@@ -104,6 +104,7 @@ internal sealed partial class LogradouroCopyImporter
     private const string ConnectionStringName = "GeoDb";
 
     private readonly string _connectionString;
+    private readonly int _tempoLimiteDosComandosEmSegundos;
     private readonly TimeProvider _clock;
     private readonly ILogger<LogradouroCopyImporter> _logger;
 
@@ -116,8 +117,22 @@ internal sealed partial class LogradouroCopyImporter
         _connectionString = configuration.GetConnectionString(ConnectionStringName)
             ?? throw new InvalidOperationException(
                 $"ConnectionStrings:{ConnectionStringName} não configurada para o COPY do ETL Geo.");
+        _tempoLimiteDosComandosEmSegundos = LerTempoLimiteDosComandosEmSegundos(configuration);
         _clock = clock;
         _logger = logger;
+    }
+
+    private static int LerTempoLimiteDosComandosEmSegundos(IConfiguration configuration)
+    {
+        EtlOpcoes opcoes = configuration.GetSection(EtlOpcoes.SectionName).Get<EtlOpcoes>() ?? new EtlOpcoes();
+        if (opcoes.TempoLimiteDosComandosDaCarga <= TimeSpan.Zero
+            || opcoes.TempoLimiteDosComandosDaCarga.TotalSeconds > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TempoLimiteDosComandosDaCarga)} deve ser maior que zero e caber em segundos inteiros.");
+        }
+
+        return (int)Math.Ceiling(opcoes.TempoLimiteDosComandosDaCarga.TotalSeconds);
     }
 
     public async Task ImportarAsync(
@@ -435,7 +450,7 @@ internal sealed partial class LogradouroCopyImporter
     // os inseridos; o resto, os atualizados; e staged − afetadas, as duplicatas removidas
     // pelo DISTINCT ON. O split assume execução exclusiva do ETL (single-writer) — não há
     // DML concorrente entre as contagens; é métrica de relatório, não controle de dados.
-    private static async Task MergearContandoAsync(
+    private async Task MergearContandoAsync(
         NpgsqlConnection conexao,
         ContadorTabela contador,
         string tabelaAlvo,
@@ -447,7 +462,7 @@ internal sealed partial class LogradouroCopyImporter
         long antes = await ContarAsync(conexao, tabelaAlvo, cancellationToken).ConfigureAwait(false);
 
         long afetadas;
-        NpgsqlCommand comando = conexao.CreateCommand();
+        NpgsqlCommand comando = CriarComando(conexao);
         await using (comando.ConfigureAwait(false))
         {
             comando.CommandText = mergeSql;
@@ -466,9 +481,9 @@ internal sealed partial class LogradouroCopyImporter
         contador.ContarDuplicados((int)Math.Max(0, duplicados));
     }
 
-    private static async Task<long> ContarAsync(NpgsqlConnection conexao, string tabela, CancellationToken cancellationToken)
+    private async Task<long> ContarAsync(NpgsqlConnection conexao, string tabela, CancellationToken cancellationToken)
     {
-        NpgsqlCommand comando = conexao.CreateCommand();
+        NpgsqlCommand comando = CriarComando(conexao);
         await using (comando.ConfigureAwait(false))
         {
             // Nome de tabela é literal de código (lista fixa), não entrada de usuário.
@@ -478,7 +493,7 @@ internal sealed partial class LogradouroCopyImporter
         }
     }
 
-    private static async Task DroparIndicesPesadosAsync(NpgsqlConnection conexao, CancellationToken cancellationToken)
+    private async Task DroparIndicesPesadosAsync(NpgsqlConnection conexao, CancellationToken cancellationToken)
     {
         await ExecutarAsync(conexao, "DROP INDEX IF EXISTS ix_logradouro_nome_trgm;", cancellationToken).ConfigureAwait(false);
         await ExecutarAsync(conexao, "DROP INDEX IF EXISTS ix_logradouro_coordenada;", cancellationToken).ConfigureAwait(false);
@@ -487,7 +502,7 @@ internal sealed partial class LogradouroCopyImporter
     // CREATE INDEX CONCURRENTLY não pode rodar em transação: esta conexão está em
     // autocommit (nunca abrimos BeginTransaction nela). DROP IF EXISTS antes de cada
     // CREATE limpa eventual índice INVALID deixado por uma recriação anterior abortada.
-    private static async Task RecriarIndicesPesadosAsync(NpgsqlConnection conexao, CancellationToken cancellationToken)
+    private async Task RecriarIndicesPesadosAsync(NpgsqlConnection conexao, CancellationToken cancellationToken)
     {
         await ExecutarAsync(conexao, "DROP INDEX IF EXISTS ix_logradouro_nome_trgm;", cancellationToken).ConfigureAwait(false);
         await ExecutarAsync(conexao, "CREATE INDEX CONCURRENTLY ix_logradouro_nome_trgm ON logradouro USING gin (nome_normalizado gin_trgm_ops);", cancellationToken).ConfigureAwait(false);
@@ -495,9 +510,16 @@ internal sealed partial class LogradouroCopyImporter
         await ExecutarAsync(conexao, "CREATE INDEX CONCURRENTLY ix_logradouro_coordenada ON logradouro USING gist (coordenada);", cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task ExecutarAsync(NpgsqlConnection conexao, string sql, CancellationToken cancellationToken)
+    private NpgsqlCommand CriarComando(NpgsqlConnection conexao)
     {
         NpgsqlCommand comando = conexao.CreateCommand();
+        comando.CommandTimeout = _tempoLimiteDosComandosEmSegundos;
+        return comando;
+    }
+
+    private async Task ExecutarAsync(NpgsqlConnection conexao, string sql, CancellationToken cancellationToken)
+    {
+        NpgsqlCommand comando = CriarComando(conexao);
         await using (comando.ConfigureAwait(false))
         {
             comando.CommandText = sql;
