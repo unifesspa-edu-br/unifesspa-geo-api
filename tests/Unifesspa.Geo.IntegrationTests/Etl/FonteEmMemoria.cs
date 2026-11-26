@@ -47,6 +47,9 @@ internal sealed class FonteEmMemoria : IGeoFonteDados
 
     public List<LogradouroCru> Logradouros { get; } = [];
 
+    /// <summary>Quando definida, a leitura dos logradouros devolve os itens da lista e então lança esta falha.</summary>
+    public Exception? FalhaAoLerLogradouros { get; init; }
+
     public IAsyncEnumerable<PaisCru> LerPaisesAsync(CancellationToken cancellationToken) => ParaAsync(Paises, cancellationToken);
 
     public IAsyncEnumerable<EstadoCru> LerEstadosAsync(CancellationToken cancellationToken) => ParaAsync(Estados, cancellationToken);
@@ -79,7 +82,20 @@ internal sealed class FonteEmMemoria : IGeoFonteDados
 
     public IAsyncEnumerable<LogradouroComplementoCru> LerLogradouroComplementosAsync(CancellationToken cancellationToken) => ParaAsync(LogradouroComplementos, cancellationToken);
 
-    public IAsyncEnumerable<LogradouroCru> LerLogradourosAsync(CancellationToken cancellationToken) => ParaAsync(Logradouros, cancellationToken);
+    public IAsyncEnumerable<LogradouroCru> LerLogradourosAsync(CancellationToken cancellationToken) =>
+        FalhaAoLerLogradouros is null
+            ? ParaAsync(Logradouros, cancellationToken)
+            : ParaAsyncEntaoFalhar(Logradouros, FalhaAoLerLogradouros, cancellationToken);
+
+    private static async IAsyncEnumerable<T> ParaAsyncEntaoFalhar<T>(IEnumerable<T> itens, Exception falha, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (T item in ParaAsync(itens, cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
+
+        throw falha;
+    }
 
     private static async IAsyncEnumerable<T> ParaAsync<T>(IEnumerable<T> itens, [EnumeratorCancellation] CancellationToken cancellationToken)
     {

@@ -1,5 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
+using Unifesspa.Geo.Kernel.Results;
+
 /// <summary>
 /// Acumula o resultado de uma carga do ETL DNE por tabela (ADR-0092): contadores
 /// (lidos/inseridos/atualizados/órfãos/duplicados/ignorados/degradados) e amostras
@@ -88,14 +90,36 @@ internal sealed class ContadorTabela
 
     public void ContarAtualizado() => Atualizados++;
 
-    /// <summary>Registra um lote de inserções (caminho COPY/merge, onde o split vem de uma contagem agregada, não linha-a-linha).</summary>
-    public void ContarInseridos(int quantidade) => Inseridos += quantidade;
+    /// <summary>
+    /// Reparte o resultado da mesclagem da carga em lote: o crescimento da tabela de destino
+    /// dá os inseridos, o que a mesclagem afetou além disso dá os atualizados e o que foi
+    /// copiado e não afetado dá as duplicadas da própria fonte. Só a carga grava na tabela
+    /// entre as duas contagens; é métrica de relatório, não controle de dados.
+    /// </summary>
+    public void ContarMesclagem(long copiadas, long afetadas, long crescimentoDaTabela)
+    {
+        Inseridos += (int)Math.Max(0, crescimentoDaTabela);
+        Atualizados += (int)Math.Max(0, afetadas - crescimentoDaTabela);
+        Duplicados += (int)Math.Max(0, copiadas - afetadas);
+    }
 
-    /// <summary>Registra um lote de atualizações (caminho COPY/merge).</summary>
-    public void ContarAtualizados(int quantidade) => Atualizados += quantidade;
+    /// <summary>
+    /// Devolve o valor do resultado de uma conversão recusada pelo domínio como <see langword="null"/>,
+    /// contando a linha como ignorada.
+    /// </summary>
+    public T? AceitarOuContarIgnorado<T>(Result<T> resultado)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
 
-    /// <summary>Registra um lote de duplicatas intra-fonte removidas (dedup via DISTINCT ON no merge).</summary>
-    public void ContarDuplicados(int quantidade) => Duplicados += quantidade;
+        if (resultado.IsFailure)
+        {
+            ContarIgnoradoSemChave();
+            return null;
+        }
+
+        return resultado.Value;
+    }
 
     public void ContarIgnoradoSemChave() => IgnoradosSemChave++;
 
