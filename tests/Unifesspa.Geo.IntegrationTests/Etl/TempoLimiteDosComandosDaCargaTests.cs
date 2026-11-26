@@ -34,29 +34,17 @@ public sealed class TempoLimiteDosComandosDaCargaTests
     [Fact(DisplayName = "Com a tabela de destino bloqueada, a carga falha pelo prazo configurado do comando")]
     public async Task TabelaBloqueada_FalhaPeloPrazoConfigurado()
     {
-        NpgsqlConnection bloqueio = new(_fixture.ConnectionString);
-        await using (bloqueio.ConfigureAwait(false))
+        BloqueioDeGravacaoDosComplementos bloqueio = await BloqueioDeGravacaoDosComplementos.AdquirirAsync(_fixture.ConnectionString);
+        await using (bloqueio)
         {
-            await bloqueio.OpenAsync();
-            NpgsqlTransaction transacao = await bloqueio.BeginTransactionAsync();
-            await using (transacao.ConfigureAwait(false))
-            {
-                NpgsqlCommand trava = new("LOCK TABLE logradouro_complemento IN SHARE MODE", bloqueio, transacao);
-                await using (trava.ConfigureAwait(false))
-                {
-                    await trava.ExecuteNonQueryAsync();
-                }
+            Func<Task> carga = () => ExecutarCargaVaziaAsync("00:00:02");
 
-                Func<Task> carga = () => ExecutarCargaVaziaAsync("00:00:02");
+            Stopwatch cronometro = Stopwatch.StartNew();
+            NpgsqlException falha = (await carga.Should().ThrowAsync<NpgsqlException>()).Which;
+            cronometro.Stop();
 
-                Stopwatch cronometro = Stopwatch.StartNew();
-                NpgsqlException falha = (await carga.Should().ThrowAsync<NpgsqlException>()).Which;
-                cronometro.Stop();
-
-                falha.InnerException.Should().BeOfType<TimeoutException>();
-                cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(20));
-                await transacao.RollbackAsync();
-            }
+            falha.InnerException.Should().BeOfType<TimeoutException>();
+            cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(20));
         }
     }
 
