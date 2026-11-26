@@ -44,4 +44,12 @@ public sealed class EtlOpcoes
     /// — a reconciliação só toca execuções antigas o bastante para serem seguramente órfãs.
     /// </summary>
     public TimeSpan LimiteAbandono { get; set; } = TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// Prazo de cada comando longo da carga em lote (mesclagem dos logradouros e dos complementos,
+    /// contagens e criação de índices). Vale só para os comandos da carga, na conexão própria dela:
+    /// as consultas normais da API seguem com o prazo padrão da conexão. Padrão de 30 minutos; deve
+    /// ser maior que zero e caber em segundos inteiros.
+    /// </summary>
+    public TimeSpan TempoLimiteDosComandosDaCarga { get; set; } = TimeSpan.FromMinutes(30);
 }
