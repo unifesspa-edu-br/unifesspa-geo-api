@@ -16,7 +16,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// <remarks>
 /// Chave natural <see cref="CodigoIbge"/> (7 dígitos, UNIQUE) — homônimos em UFs
 /// distintas coexistem (a chave é o código, não o nome). <see cref="NomeNormalizado"/>
-/// preserva o <c>cidade_sem_acento</c> da fonte e ganha índice trigram para o
+/// guarda o nome do município sem acento e sem apóstrofo, e ganha índice trigram para o
 /// autocomplete acento-insensível da F4 — não compõe a chave (fica nullable).
 /// </remarks>
 public sealed class Cidade : EntityBase
@@ -32,7 +32,7 @@ public sealed class Cidade : EntityBase
 
     public string Nome { get; private set; } = string.Empty;
 
-    /// <summary>Nome sem acentos (origem <c>cidade_sem_acento</c>) — base do autocomplete (F4).</summary>
+    /// <summary>Nome sem acentos e sem apóstrofo (gerado na carga a partir do nome oficial) — base do autocomplete (F4).</summary>
     public string? NomeNormalizado { get; private set; }
 
     /// <summary>

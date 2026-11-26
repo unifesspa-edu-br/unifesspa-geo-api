@@ -17,6 +17,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lista dos 5.571 municípios do IBGE, gerada pelo comando descrito em
+         docs/geo-etl-dataset-dne.md; a carga lê o nome oficial dela, por código IBGE. -->
+    <EmbeddedResource Include="Persistence/Etl/NomesOficiais/municipios-ibge.tsv"
+                      LogicalName="Unifesspa.Geo.Infrastructure.Persistence.Etl.NomesOficiais.municipios-ibge.tsv" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Expõe internals (ETL: importador, fonte, parse) aos testes de integração —
          mesmo padrão dos demais módulos. -->
     <InternalsVisibleTo Include="Unifesspa.Geo.IntegrationTests" />
