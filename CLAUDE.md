@@ -140,9 +140,10 @@ Sem `Co-Authored-By` e sem qualquer atribuição de IA em commits ou PRs (regra 
 
 ## ADRs
 
-Decisões do módulo em `docs/adrs/` (0090–0096): contexto dedicado (0090), PostGIS/NTS (0091),
+Decisões do módulo em `docs/adrs/` (0090–0097): contexto dedicado (0090), PostGIS/NTS (0091),
 ETL DNE (0092), rate limiting na borda (0093), keyset via MR sob cursor opaco (0094), chave de
-ordenação não-nula (0095), endereço como referência estruturada (0096).
+ordenação não-nula (0095), endereço como referência estruturada (0096), nome do município pelo
+IBGE (0097).
 
 ADRs com numeração `00xx` fora dessa faixa (ex.: 0029, 0054, 0063) pertencem ao acervo do
 `uniplus-api`/`uniplus-docs` e **não existem neste repo**. Referencie-os apenas como menção
