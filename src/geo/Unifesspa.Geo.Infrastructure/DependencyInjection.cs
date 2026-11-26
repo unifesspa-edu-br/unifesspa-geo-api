@@ -27,7 +27,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Readers;
 /// </summary>
 public static class GeoInfrastructureRegistration
 {
-    private const string ConnectionStringName = "GeoDb";
+    internal const string ConnectionStringName = "GeoDb";
 
     public static IServiceCollection AddGeoInfrastructure(this IServiceCollection services)
     {
