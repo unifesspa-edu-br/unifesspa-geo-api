@@ -1,6 +1,6 @@
 # ETL do Geo — ingestão do dataset DNE
 
-Guia operacional da carga de reference data do módulo `Geo` (localidades, endereçamento e georreferência nacional) a partir do dataset **DNE Correios + IBGE**. Decisões em [ADR-0090](adrs/0090-modulo-geo-localidades.md), [ADR-0091](adrs/0091-postgis-georreferencia-nts.md) e [ADR-0092](adrs/0092-etl-carga-dne-reference-data.md).
+Guia operacional da carga de reference data do módulo `Geo` (localidades, endereçamento e georreferência nacional) a partir do dataset **DNE Correios + IBGE**. Decisões em [ADR-0090](adrs/0090-modulo-geo-localidades.md), [ADR-0091](adrs/0091-postgis-georreferencia-nts.md), [ADR-0092](adrs/0092-etl-carga-dne-reference-data.md) e [ADR-0097](adrs/0097-nome-do-municipio-pelo-ibge.md).
 
 ## Estratégia: banco de staging dedicado + SELECT streamado
 
@@ -115,6 +115,40 @@ A DNE é atualizada mensalmente. Para aplicar uma nova release (ex.: `202602`):
 3. O ETL faz **upsert por chave natural** — `sigla_iso`/`uf`/`codigo_ibge` são estáveis entre releases: insere o novo, atualiza o que mudou, grava `versao_dataset=202602` em cada linha tocada. Reaplicar a **mesma** versão é no-op (idempotente).
 
 A política de *stale* (marcar `vigente=false` as chaves ausentes na nova release) e o gatilho operacional (seed em dev + endpoint admin `POST /api/admin/geo/importacoes`) são entregues na Story de atualização periódica do Epic.
+
+## Nome oficial do município (IBGE)
+
+A DNE e o IBGE não escrevem todos os nomes de município do mesmo jeito (86 divergem; 47 por causa do apóstrofo, como «Pau DArco» no lugar de «Pau D'Arco»). O Uni+ usa o nome oficial do IBGE, e a carga o aplica por código ([ADR-0097](adrs/0097-nome-do-municipio-pelo-ibge.md)):
+
+- A lista dos 5.571 municípios (`codigo_ibge`, `uf`, `nome`, separados por tabulação, em UTF-8, ordenada por código, com o texto exato do IBGE) fica em `src/geo/Unifesspa.Geo.Infrastructure/Persistence/Etl/NomesOficiais/municipios-ibge.tsv` e é embutida no assembly. Para cada cidade da DNE, a carga grava o nome da lista pelo código IBGE, com a caixa do IBGE.
+- O `nome_normalizado` é derivado do nome gravado (sem acento, caixa nem apóstrofo); a coluna `cidade_sem_acento` da DNE não é mais lida.
+- Código que a lista não tem não aborta a carga: o município mantém o nome da DNE e o relatório da tabela `cidade` registra a amostra `nome_oficial_ibge_ausente:{codigo}` (conta como parse degradado).
+- Recarregar a mesma versão mantém o nome e o Guid de cada município.
+
+### Como gerar a lista de novo
+
+A lista nunca é editada à mão. Gera-se só com este comando, rodado na raiz do repositório (a extração de 26/11/2026 trouxe 5.571 municípios; nenhum dado do projeto é enviado ao IBGE):
+
+```bash
+{ printf 'codigo_ibge\tuf\tnome\n'; \
+  curl -fsS 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios?view=nivelado' \
+  | jq -r '.[]|[(."municipio-id"|tostring),."UF-sigla",."municipio-nome"]|@tsv' \
+  | LC_ALL=C sort; } \
+  > src/geo/Unifesspa.Geo.Infrastructure/Persistence/Etl/NomesOficiais/municipios-ibge.tsv
+```
+
+Depois de gerar, confira `git diff` (só devem mudar municípios criados ou renomeados pelo IBGE), rode os testes de `NomesOficiaisDosMunicipiosTests` e registre a data da extração na mensagem do commit. Como a lista vai embutida no assembly, atualizá-la exige commit e imagem nova.
+
+### Busca por nome
+
+- Busca de **município**: ignora acento, caixa e apóstrofo (`'`, `’`, `‘`, `´`, `` ` ``, `ʼ`); «pau d'arco», «pau darco» e «PAU D’ARCO» encontram o mesmo município. Pau D'Arco do Pará e do Tocantins são registros distintos, e o filtro `uf` separa os dois.
+- Busca de **bairro, distrito, logradouro, grande usuário e complemento**: segue o texto sem acento da DNE, que mantém `´` e `` ` ``; digita-se o termo como a DNE o escreve.
+
+As duas formas existem porque as colunas vêm de fontes diferentes: o nome do município é gerado na carga a partir do nome oficial, e os demais textos vêm prontos da DNE.
+
+### Ambiente que já tem cidades carregadas
+
+Os nomes só mudam quando a carga roda. Ao atualizar a imagem do Geo num ambiente que já tem cidades (HML, produção, base local), o seed não recarrega e a API continua devolvendo os nomes antigos, e a busca pela grafia oficial não encontra o município. Depois de publicar a imagem nova, dispare a importação da mesma versão da DNE (`POST /api/admin/geo/importacoes`, seção anterior) e confira o resultado, por exemplo: `GET /api/cidades/1505551` deve devolver «Pau D'Arco». A recarga mantém o identificador de cada município.
 
 ## Parse tolerante (anti-frágil)
 

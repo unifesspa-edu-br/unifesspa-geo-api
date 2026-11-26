@@ -59,7 +59,7 @@ A pergunta é como garantir que a chave de ordenação seja sempre não-nula par
 
 ### Neutras
 
-- Para estado/cidade a fonte normalmente traz `*_sem_acento`; o fallback cobre dados legados, incompletos ou importações tolerantes sem reescrever `nome_normalizado`.
+- Para estado a fonte normalmente traz `*_sem_acento`, e o `nome_normalizado` da cidade é derivado do nome gravado na carga ([ADR-0097](0097-nome-do-municipio-pelo-ibge.md)); o fallback cobre dados legados, incompletos ou importações tolerantes sem reescrever `nome_normalizado`.
 
 ## Confirmação
 
