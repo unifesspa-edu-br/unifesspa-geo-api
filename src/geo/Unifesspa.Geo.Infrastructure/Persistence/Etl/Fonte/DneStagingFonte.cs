@@ -91,8 +91,8 @@ internal sealed class DneStagingFonte : IGeoFonteDados
 
     public IAsyncEnumerable<CidadeCru> LerCidadesAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT cidade_ibge, cidade, cidade_sem_acento, estado, ddd, latitude, longitude FROM {Tabela("cidade")}",
-            static r => new CidadeCru(Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6)),
+            $"SELECT cidade_ibge, cidade, estado, ddd, latitude, longitude FROM {Tabela("cidade")}",
+            static r => new CidadeCru(Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5)),
             cancellationToken);
 
     public IAsyncEnumerable<CidadeTerritorioCru> LerCidadeTerritoriosAsync(CancellationToken cancellationToken) =>

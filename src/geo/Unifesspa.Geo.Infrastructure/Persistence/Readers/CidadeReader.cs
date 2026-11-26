@@ -15,7 +15,7 @@ using Unifesspa.Geo.Kernel.Pagination;
 /// Leitor read-side de <see cref="Cidade"/> sobre o <see cref="GeoDbContext"/>.
 /// Só expõe reference data vigente (ADR-0092). Listagem por keyset bidirecional
 /// ordenado alfabeticamente por nome (<see cref="KeysetOrdenadoCursor"/>, ADR-0094)
-/// com filtro por UF e busca textual acento/caixa-insensível sobre
+/// com filtro por UF e busca textual insensível a acento, caixa e apóstrofo sobre
 /// <c>nome_normalizado</c> (índice trigram <c>gin_trgm_ops</c>).
 /// </summary>
 [SuppressMessage(
@@ -56,15 +56,14 @@ internal sealed class CidadeReader : ICidadeReader
 
         if (filtro.TemBusca)
         {
-            // Busca acento/caixa-insensível: nome_normalizado já vem sem acento da
-            // fonte (cidade_sem_acento) — NÃO há immutable_unaccent em runtime. O termo
-            // é normalizado no app (NFD + remoção de NonSpacingMark) e comparado via
-            // ILIKE (cuida da caixa). Os curingas %, _ e \ são escapados para serem
-            // tratados como texto literal; o escape char é passado explicitamente
-            // (a sobrecarga de 2 args do ILike emite ESCAPE '', desligando o \).
-            // Guard NomeNormalizado != null: ILIKE NULL não casa — cidades sem
-            // nome_normalizado simplesmente não aparecem na busca (aparecem sem filtro).
-            string pattern = BuscaTextualNormalizada.CriarPadraoContem(filtro.Termo!);
+            // Busca insensível a acento, caixa e apóstrofo: a carga grava nome_normalizado já
+            // sem acento nem apóstrofo (NormalizarNomeDoMunicipio) — NÃO há immutable_unaccent
+            // em runtime. O termo recebe a mesma normalização no app e é comparado via ILIKE.
+            // Os curingas %, _ e \ são escapados para serem tratados como texto literal; o
+            // escape char é passado explicitamente (a sobrecarga de 2 args do ILike emite
+            // ESCAPE '', desligando o \). Guard NomeNormalizado != null: ILIKE NULL não casa —
+            // cidades sem nome_normalizado simplesmente não aparecem na busca (aparecem sem filtro).
+            string pattern = BuscaTextualNormalizada.CriarPadraoContemNomeDoMunicipio(filtro.Termo!);
             query = query.Where(c =>
                 c.NomeNormalizado != null &&
                 EF.Functions.ILike(c.NomeNormalizado, pattern, BuscaTextualNormalizada.Escape));

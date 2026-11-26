@@ -24,6 +24,14 @@ internal sealed class RelatorioImportacao
 
     public IReadOnlyDictionary<string, ContadorTabela> Tabelas => _tabelas;
 
+    public int TotalInseridos => _tabelas.Values.Sum(t => t.Inseridos);
+
+    public int TotalAtualizados => _tabelas.Values.Sum(t => t.Atualizados);
+
+    public int TotalOrfaos => _tabelas.Values.Sum(t => t.Orfaos);
+
+    public int TotalParsesDegradados => _tabelas.Values.Sum(t => t.ParsesDegradados);
+
     /// <summary>Obtém (criando se necessário) o contador da tabela informada.</summary>
     public ContadorTabela Tabela(string nome)
     {

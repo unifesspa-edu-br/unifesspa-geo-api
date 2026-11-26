@@ -46,17 +46,10 @@ internal sealed partial class GeoImportadorLocalidades : IGeoImportadorLocalidad
 
         await _logradouro.ImportarAsync(fonte, modo, resolucao, relatorio, cancellationToken).ConfigureAwait(false);
 
-        int inseridos = Total(relatorio, t => t.Inseridos);
-        int atualizados = Total(relatorio, t => t.Atualizados);
-        int orfaos = Total(relatorio, t => t.Orfaos);
-        int degradados = Total(relatorio, t => t.ParsesDegradados);
-        LogCargaConcluida(_logger, fonte.Versao, inseridos, atualizados, orfaos, degradados);
+        LogCargaConcluida(_logger, fonte.Versao, relatorio.TotalInseridos, relatorio.TotalAtualizados, relatorio.TotalOrfaos, relatorio.TotalParsesDegradados);
 
         return relatorio;
     }
-
-    private static int Total(RelatorioImportacao relatorio, Func<ContadorTabela, int> seletor) =>
-        relatorio.Tabelas.Values.Sum(seletor);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "ETL Geo: carga das folhas iniciada (versão {Versao}, modo {Modo}).")]
     private static partial void LogCargaIniciada(ILogger logger, string versao, ModoCarga modo);

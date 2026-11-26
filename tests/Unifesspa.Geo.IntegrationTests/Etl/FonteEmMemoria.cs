@@ -133,7 +133,7 @@ internal static class DadosDne
         string? ddd = null,
         string? latitude = null,
         string? longitude = null) =>
-        new(codigoIbge, nome, NomeSemAcento: nome, uf, ddd, latitude, longitude);
+        new(codigoIbge, nome, uf, ddd, latitude, longitude);
 
     public static CidadeTerritorioCru CidadeTerritorio(
         string codigoIbge,

@@ -54,7 +54,6 @@ internal sealed record EstadoFaixaCru(
 internal sealed record CidadeCru(
     string? CodigoIbge,
     string? Nome,
-    string? NomeSemAcento,
     string? Uf,
     string? Ddd,
     string? Latitude,
