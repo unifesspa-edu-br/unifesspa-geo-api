@@ -42,6 +42,6 @@ internal static class ParseTolerante
         }
 
         string limpo = valor.Trim();
-        return limpo == "-" ? null : limpo;
+        return string.Equals(limpo, "-", StringComparison.Ordinal) ? null : limpo;
     }
 }

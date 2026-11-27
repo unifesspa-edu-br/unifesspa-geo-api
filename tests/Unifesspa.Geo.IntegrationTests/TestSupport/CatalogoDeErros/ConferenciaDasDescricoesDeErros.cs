@@ -36,19 +36,19 @@ internal static class ConferenciaDasDescricoesDeErros
 
     private static IEnumerable<string> ConferirPares(HashSet<string> esperados, string[] descritos)
     {
-        foreach (string codigo in esperados.Except(descritos).Order(StringComparer.Ordinal))
+        foreach (string codigo in esperados.Except(descritos, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
             yield return $"{codigo}: código sem descrição.";
         }
 
-        foreach (string codigo in descritos.Except(esperados).Where(static c => c.Length > 0).Order(StringComparer.Ordinal))
+        foreach (string codigo in descritos.Except(esperados, StringComparer.Ordinal).Where(static c => c.Length > 0).Order(StringComparer.Ordinal))
         {
             yield return codigo.StartsWith(PrefixoDoGeo, StringComparison.Ordinal)
                 ? $"{codigo}: descrição sem código."
                 : $"{codigo}: descrição de código que não é do Geo; os códigos comuns são descritos pela API.";
         }
 
-        foreach (IGrouping<string, string> repetido in descritos.GroupBy(static c => c).Where(static g => g.Key.Length > 0 && g.Skip(1).Any()))
+        foreach (IGrouping<string, string> repetido in descritos.GroupBy(static c => c, StringComparer.Ordinal).Where(static g => g.Key.Length > 0 && g.Skip(1).Any()))
         {
             yield return $"{repetido.Key}: descrição repetida.";
         }

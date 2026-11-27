@@ -62,7 +62,7 @@ public sealed class CidadeHierarquiaEndpointTests
         nomes.Should().NotContain("Sé");
         ConferirLinksDeBairros(itens.EnumerateArray().First().GetProperty("_links"));
         itens.EnumerateArray()
-            .Single(b => b.GetProperty("nome").GetString() == "Saúde")
+            .Single(b => string.Equals(b.GetProperty("nome").GetString(), "Saúde", StringComparison.Ordinal))
             .GetProperty("latitude").GetDecimal().Should().Be(-23.61811m);
     }
 

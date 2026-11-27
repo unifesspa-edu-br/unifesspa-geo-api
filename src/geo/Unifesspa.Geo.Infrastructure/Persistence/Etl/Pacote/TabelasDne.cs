@@ -10,7 +10,7 @@ using System.Collections.Frozen;
 internal static class TabelasDne
 {
     private static readonly FrozenDictionary<string, IReadOnlyList<ColunaDne>> Esquemas =
-        new Dictionary<string, IReadOnlyList<ColunaDne>>
+        new Dictionary<string, IReadOnlyList<ColunaDne>>(StringComparer.Ordinal)
         {
             ["paises_ibge"] = Colunas("sigla_iso sigla nome_pt pais_bcb pais_rbf pais_sped pais_siscomex"),
             ["estado"] = Colunas("sigla estado estado_sem_acento regiao capital faixa_ini faixa_fim latitude longitude"),

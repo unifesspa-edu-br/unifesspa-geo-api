@@ -218,7 +218,8 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private void ConferirNome(Match comando)
     {
-        if (comando.Groups["versao"].Value != _versao || comando.Groups["tabela"].Value != _tabela)
+        if (!string.Equals(comando.Groups["versao"].Value, _versao, StringComparison.Ordinal)
+            || !string.Equals(comando.Groups["tabela"].Value, _tabela, StringComparison.Ordinal))
         {
             throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.NomeDivergente);
         }
@@ -234,13 +235,13 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private bool TentarFecharColunas(string linha)
     {
-        if (linha == FechamentoEmUmaLinha)
+        if (string.Equals(linha, FechamentoEmUmaLinha, StringComparison.Ordinal))
         {
             FecharCriacaoDaTabela();
             return true;
         }
 
-        if (linha != ")")
+        if (!string.Equals(linha, ")", StringComparison.Ordinal))
         {
             return false;
         }
@@ -263,7 +264,7 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private void ProcessarPontoEVirgula(string linha)
     {
-        if (linha != ";")
+        if (!string.Equals(linha, ";", StringComparison.Ordinal))
         {
             throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.ComandoForaDaGramatica);
         }
@@ -335,7 +336,7 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private void ProcessarLinhaDoIndice(string linha)
     {
-        if (linha == FechamentoEmUmaLinha && _colunasDoIndice > 0)
+        if (string.Equals(linha, FechamentoEmUmaLinha, StringComparison.Ordinal) && _colunasDoIndice > 0)
         {
             _estado = EstadoDoArquivoSql.AposCreateTable;
             return;

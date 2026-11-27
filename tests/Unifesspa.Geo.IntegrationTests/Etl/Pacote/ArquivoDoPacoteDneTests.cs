@@ -232,7 +232,8 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
     private static Dictionary<string, byte[]> EntradasDoPacote(string versao) =>
         TabelasDne.Nomes.ToDictionary(
             tabela => NomeDaTabelaDne.Entrada(versao, tabela),
-            tabela => ConteudoDaTabela(tabela, versao));
+            tabela => ConteudoDaTabela(tabela, versao),
+            StringComparer.Ordinal);
 
     private static Dictionary<string, byte[]> EntradasNaPasta(string versao, string pasta, bool comEntradaDePasta)
     {

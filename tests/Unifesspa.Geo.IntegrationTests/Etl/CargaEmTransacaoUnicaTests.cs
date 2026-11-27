@@ -50,7 +50,7 @@ public sealed class CargaEmTransacaoUnicaTests
         await montagem.ExecutarAsync(id, new FabricaDeFonteFixa(VersoesFicticias.Anterior()), contexto);
 
         observacoes.Should().HaveCount(3, "topo, folhas (com a cópia em lote) e confirmação");
-        observacoes.Select(o => o.Transacao).Distinct().Should().HaveCount(1);
+        observacoes.Select(o => o.Transacao).Distinct(StringComparer.Ordinal).Should().HaveCount(1);
         observacoes.Should().OnlyContain(o => o.LinhasVisiveisParaOutraConexao == 0, "nada é visível fora da transação antes do commit");
         await ConferirPublicadoAposConfirmacaoAsync(id);
     }

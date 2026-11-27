@@ -66,7 +66,7 @@ public sealed class TempoLimiteDosComandosDaCargaTests
     private static ImportadorDeLogradourosPorCopia CriarImportador(GeoDbContext contexto, string prazo)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 [$"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TempoLimiteDosComandosDaCarga)}"] = prazo,
             })

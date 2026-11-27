@@ -84,7 +84,7 @@ public sealed partial class GlobalExceptionMiddleware
     {
         context.Response.StatusCode = definicao.Status;
 
-        return new Dictionary<string, object?>
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["type"] = _problemTypeUriFactory.Build(definicao.Code).AbsoluteUri,
             ["title"] = definicao.Title,

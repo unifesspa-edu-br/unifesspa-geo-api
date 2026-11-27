@@ -21,7 +21,7 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
         ArgumentNullException.ThrowIfNull(options);
 
         // Só valida a instância default — projeto não usa named options para cifragem.
-        if (!string.IsNullOrEmpty(name) && name != Options.DefaultName)
+        if (!string.IsNullOrEmpty(name) && !string.Equals(name, Options.DefaultName, StringComparison.Ordinal))
         {
             return ValidateOptionsResult.Skip;
         }
@@ -136,5 +136,6 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
 
     private static bool IsAbsoluteHttpUri(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+            && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+                || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal));
 }

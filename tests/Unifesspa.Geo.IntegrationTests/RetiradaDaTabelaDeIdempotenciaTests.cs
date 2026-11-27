@@ -48,7 +48,7 @@ public sealed class RetiradaDaTabelaDeIdempotenciaTests
             .Select(tipo => tipo.GetTableName())
             .OfType<string>()];
 
-        doBanco.Except([TabelaDoPostgis, TabelaDoHistorico]).Should().BeEquivalentTo(doModelo);
+        doBanco.Except([TabelaDoPostgis, TabelaDoHistorico], StringComparer.Ordinal).Should().BeEquivalentTo(doModelo);
     }
 
     [Fact(DisplayName = "O modelo não tem mais nenhuma tabela de idempotência e não há mudança de modelo pendente")]

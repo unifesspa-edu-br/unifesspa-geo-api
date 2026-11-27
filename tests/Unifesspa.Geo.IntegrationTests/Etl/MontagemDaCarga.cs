@@ -73,7 +73,7 @@ internal sealed class MontagemDaCarga : IDisposable
     private CargaDaImportacao Montar(GeoDbContext contexto, IFonteDaExecucaoDne fabrica)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString })
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal) { ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString })
             .Build();
 
         return new CargaDaImportacao(

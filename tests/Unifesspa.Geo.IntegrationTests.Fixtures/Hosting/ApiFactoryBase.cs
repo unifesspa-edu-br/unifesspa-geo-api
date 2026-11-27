@@ -144,7 +144,7 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
                     .Where(d => d.ServiceType == typeof(IHostedService)
                         && (
                             (d.ImplementationFactory is not null
-                                && d.ImplementationFactory.Method.DeclaringType?.Assembly.GetName().Name == "Wolverine")
+                                && string.Equals(d.ImplementationFactory.Method.DeclaringType?.Assembly.GetName().Name, "Wolverine", StringComparison.Ordinal))
                             || IsMigrationHostedService(d.ImplementationType)))];
                 foreach (ServiceDescriptor svc in hostedToRemove)
                 {

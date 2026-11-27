@@ -25,7 +25,7 @@ internal sealed class ProblemTypeOptionsValidator : IValidateOptions<ProblemType
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!string.IsNullOrEmpty(name) && name != Options.DefaultName)
+        if (!string.IsNullOrEmpty(name) && !string.Equals(name, Options.DefaultName, StringComparison.Ordinal))
         {
             return ValidateOptionsResult.Skip;
         }
@@ -47,7 +47,7 @@ internal sealed class ProblemTypeOptionsValidator : IValidateOptions<ProblemType
             return RecusaComOValorRecebido(MotivoNaoAbsoluta, baseUri);
         }
 
-        if (baseUri.Scheme != Uri.UriSchemeHttps)
+        if (!string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
         {
             return RecusaComOValorRecebido(MotivoSemHttps, baseUri);
         }

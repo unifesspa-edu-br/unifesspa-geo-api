@@ -141,7 +141,7 @@ public sealed class ProximidadeEndpointTests
         // Correto: (lat=-5.35, long=-49.13) próximo a Marabá; latitude e longitude espelham o
         // seed em decimal(9,6).
         JsonElement correto = await LerCidadesProximasAsync(client, "lat=-5.35&long=-49.13&raioKm=50");
-        JsonElement maraba = correto.EnumerateArray().First(c => c.GetProperty("nome").GetString() == "Marabá");
+        JsonElement maraba = correto.EnumerateArray().First(c => string.Equals(c.GetProperty("nome").GetString(), "Marabá", StringComparison.Ordinal));
         maraba.GetProperty("latitude").GetDecimal().Should().Be(-5.36867m);
         maraba.GetProperty("longitude").GetDecimal().Should().Be(-49.11731m);
 
