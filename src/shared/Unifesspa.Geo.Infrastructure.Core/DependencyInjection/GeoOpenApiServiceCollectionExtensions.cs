@@ -8,10 +8,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenApi;
 
 /// <summary>
-/// Registra o pipeline de transformers Uni+ + um documento OpenAPI nomeado
-/// (<paramref name="documentName"/>). Cada módulo chama em seu Program.cs com
-/// seu próprio nome (ex.: <c>"selecao"</c>, <c>"ingresso"</c>); transformers
-/// são reutilizados (<c>TryAddSingleton</c>).
+/// Registra o pipeline de transformers do Geo e o documento OpenAPI nomeado
+/// (<paramref name="documentName"/>), que o serviço publica com o nome <c>"geo"</c>.
+/// Os transformers são reutilizados (<c>TryAddSingleton</c>).
 /// </summary>
 public static class GeoOpenApiServiceCollectionExtensions
 {
@@ -24,6 +23,14 @@ public static class GeoOpenApiServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        return services
+            .AddOpcoesDoOpenApi(configuration)
+            .AddTransformersDoOpenApi()
+            .AddOpenApi(documentName, ConfigurarDocumento);
+    }
+
+    private static IServiceCollection AddOpcoesDoOpenApi(this IServiceCollection services, IConfiguration configuration)
+    {
         services
             .AddOptions<GeoOpenApiOptions>()
             .Bind(configuration.GetSection(GeoOpenApiOptions.SectionName))
@@ -34,6 +41,11 @@ public static class GeoOpenApiServiceCollectionExtensions
                 "Geo:OpenApi — ContactUrl/ProductionServerUrl/StagingServerUrl precisam ser URIs absolutas.")
             .ValidateOnStart();
 
+        return services;
+    }
+
+    private static IServiceCollection AddTransformersDoOpenApi(this IServiceCollection services)
+    {
         services.TryAddSingleton<GeoInfoTransformer>();
         services.TryAddSingleton<GeoOperationTransformer>();
         services.TryAddSingleton<CursorPaginationOperationTransformer>();
@@ -41,16 +53,16 @@ public static class GeoOpenApiServiceCollectionExtensions
         services.TryAddSingleton<GeoSchemaTransformer>();
         services.TryAddSingleton<ProblemDetailsExtensionsDocumentTransformer>();
 
-        services.AddOpenApi(documentName, options =>
-        {
-            options.AddDocumentTransformer<GeoInfoTransformer>();
-            options.AddOperationTransformer<GeoOperationTransformer>();
-            options.AddOperationTransformer<CursorPaginationOperationTransformer>();
-            options.AddDocumentTransformer<PaginationOrphanSchemaDocumentTransformer>();
-            options.AddSchemaTransformer<GeoSchemaTransformer>();
-            options.AddDocumentTransformer<ProblemDetailsExtensionsDocumentTransformer>();
-        });
-
         return services;
+    }
+
+    private static void ConfigurarDocumento(OpenApiOptions options)
+    {
+        options.AddDocumentTransformer<GeoInfoTransformer>();
+        options.AddOperationTransformer<GeoOperationTransformer>();
+        options.AddOperationTransformer<CursorPaginationOperationTransformer>();
+        options.AddDocumentTransformer<PaginationOrphanSchemaDocumentTransformer>();
+        options.AddSchemaTransformer<GeoSchemaTransformer>();
+        options.AddDocumentTransformer<ProblemDetailsExtensionsDocumentTransformer>();
     }
 }
