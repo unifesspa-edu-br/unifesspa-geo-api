@@ -53,6 +53,23 @@ internal static class ErrosDasConsultas
     public static readonly DomainErrorMapping ImportacaoNaoEncontrada = new(
         StatusCodes.Status404NotFound, "uniplus.geo.importacao.nao_encontrada", "Importação não encontrada");
 
+    public static readonly IReadOnlyList<DomainErrorMapping> Todas =
+    [
+        CepFormatoInvalido,
+        CepNaoEncontrado,
+        CodigoIbgeInvalido,
+        CidadeNaoEncontrada,
+        UfInvalida,
+        EstadoNaoEncontrado,
+        TermoDeBuscaMuitoLongo,
+        ParametrosDeProximidadeAusentes,
+        LatitudeInvalida,
+        LongitudeInvalida,
+        RaioInvalido,
+        LimiteInvalido,
+        ImportacaoNaoEncontrada,
+    ];
+
     public static DomainError ErroCepFormatoInvalido() => new(
         CepFormatoInvalido.Code, "O CEP deve ter exatamente 8 dígitos (ex.: 01001000 ou 01001-000).");
 
