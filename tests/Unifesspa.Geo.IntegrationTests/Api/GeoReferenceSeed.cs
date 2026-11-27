@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
@@ -20,6 +21,8 @@ using Unifesspa.Geo.IntegrationTests.Infrastructure;
 internal static partial class GeoReferenceSeed
 {
     public const string Versao = "202601";
+
+    public static ProvenienciaDaCarga Proveniencia(bool vigente = true) => new(Versao, vigente);
 
     /// <summary>GET por rota relativa ou absoluta (satisfaz CA2234 — <c>GetAsync(Uri)</c>).</summary>
     public static Task<HttpResponseMessage> Obter(HttpClient client, string rota)
@@ -43,7 +46,7 @@ internal static partial class GeoReferenceSeed
     }
 
     public static Pais NovoBrasil() =>
-        GeoTestKeys.Ok(Pais.Importar("BRA", "BR", "Brasil", null, null, null, null, Versao));
+        GeoTestKeys.Ok(Pais.Importar("BRA", "BR", "Brasil", default, Proveniencia()));
 
     public static Distrito NovoDistrito(
         Guid cidadeId,

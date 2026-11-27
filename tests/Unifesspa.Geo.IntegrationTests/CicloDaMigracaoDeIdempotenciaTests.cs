@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
@@ -93,7 +94,7 @@ public sealed class CicloDaMigracaoDeIdempotenciaTests : IAsyncLifetime
     private static async Task GravarPaisAsync(GeoDbContext contexto)
     {
         contexto.Set<Pais>().Add(GeoTestKeys.Ok(Pais.Importar(
-            GeoTestKeys.SiglaIso(), "BR", "Brasil", null, null, null, null, "202601")));
+            GeoTestKeys.SiglaIso(), "BR", "Brasil", default, new ProvenienciaDaCarga("202601"))));
         await contexto.SaveChangesAsync();
     }
 

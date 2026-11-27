@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.NomesOficiais;
 
@@ -13,7 +14,7 @@ using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
 /// Importa o topo da hierarquia do Geo — País (só Brasil), Estado (+indicador
 /// +faixas) e Cidade (+territorial embutido, +indicador, +faixas) — a partir do
 /// dataset DNE (ADR-0092), executando dentro da transação ativa do <see cref="GeoDbContext"/>.
-/// O upsert por chave natural (<c>Importar</c>/<c>Atualizar</c> do domínio) torna a recarga
+/// A gravação por chave natural (<c>Importar</c>/<c>Atualizar</c> do domínio) torna a recarga
 /// idempotente.
 /// </summary>
 internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
@@ -65,7 +66,8 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
     {
         Dictionary<string, Pais> existentes =
             await _contexto.Paises.ToDictionaryAsync(p => p.SiglaIso, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
-        Guid brasilId = await UpsertarBrasilAsync(fonte, existentes, contador, cancellationToken).ConfigureAwait(false);
+        ProvenienciaDaCarga proveniencia = new(fonte.Versao);
+        Guid brasilId = await UpsertarBrasilAsync(fonte, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
         return brasilId;
@@ -73,6 +75,7 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
 
     private async Task<Guid> UpsertarBrasilAsync(
         IGeoFonteDados fonte,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, Pais> existentes,
         ContadorTabela contador,
         CancellationToken cancellationToken)
@@ -84,7 +87,7 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
         {
             contador.ContarLido();
             if (ChaveDoBrasil(cru, contador) is { } siglaIso
-                && UpsertarBrasil(siglaIso, cru, fonte.Versao, existentes, jaVistos, contador) is { } pais)
+                && UpsertarBrasil(siglaIso, cru, proveniencia, existentes, jaVistos, contador) is { } pais)
             {
                 brasilId = pais.Id;
             }
@@ -109,16 +112,19 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
     private Pais? UpsertarBrasil(
         string siglaIso,
         PaisCru cru,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, Pais> existentes,
         Dictionary<string, Pais> jaVistos,
-        ContadorTabela contador) =>
-        Upsert(
-            siglaIso,
-            jaVistos,
-            existentes,
-            () => Pais.Importar(siglaIso, cru.Sigla ?? string.Empty, cru.Nome ?? string.Empty, cru.CodigoBcb, cru.CodigoRfb, cru.CodigoSped, cru.CodigoSiscomex, versao),
-            existente => existente.Atualizar(cru.Sigla ?? string.Empty, cru.Nome ?? string.Empty, cru.CodigoBcb, cru.CodigoRfb, cru.CodigoSped, cru.CodigoSiscomex, versao),
-            _contexto.Paises,
-            contador);
+        ContadorTabela contador)
+    {
+        CodigosDoPaisNosCadastrosFederais codigos = new(cru.CodigoBcb, cru.CodigoRfb, cru.CodigoSped, cru.CodigoSiscomex);
+        string sigla = cru.Sigla ?? string.Empty;
+        string nome = cru.Nome ?? string.Empty;
+
+        return Upsert(
+            siglaIso, jaVistos, existentes,
+            () => Pais.Importar(siglaIso, sigla, nome, codigos, proveniencia),
+            existente => existente.Atualizar(sigla, nome, codigos, proveniencia),
+            _contexto.Paises, contador);
+    }
 }
