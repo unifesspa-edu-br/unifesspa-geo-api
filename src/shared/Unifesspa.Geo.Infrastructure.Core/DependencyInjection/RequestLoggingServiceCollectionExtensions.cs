@@ -15,22 +15,19 @@ public static class RequestLoggingServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        OptionsBuilder<RequestLoggingOptions> optionsBuilder = services.AddOptions<RequestLoggingOptions>();
+        OptionsBuilder<RequestLoggingOptions> optionsBuilder = services
+            .AddOptions<RequestLoggingOptions>()
+            .ComConfiguracao(configuration, RequestLoggingOptions.SectionName, configure);
 
-        if (configuration is not null)
-        {
-            IConfigurationSection secao = configuration.GetSection(RequestLoggingOptions.SectionName);
-            if (secao.Exists())
-            {
-                optionsBuilder.Bind(secao);
-            }
-        }
+        NormalizarListasAoConfigurar(optionsBuilder);
+        ExigirValidacaoNaPartida(services, optionsBuilder);
 
-        if (configure is not null)
-        {
-            optionsBuilder.Configure(configure);
-        }
+        services.AddSingleton<QueryStringMasker>();
 
+        return services;
+    }
+
+    private static void NormalizarListasAoConfigurar(OptionsBuilder<RequestLoggingOptions> optionsBuilder) =>
         // Binder do IConfiguration agrega sem deduplicar; normalizar in-place.
         optionsBuilder.PostConfigure(opts =>
         {
@@ -38,16 +35,16 @@ public static class RequestLoggingServiceCollectionExtensions
             NormalizarListaInPlace(opts.PrefixosSilenciados);
         });
 
+    private static void ExigirValidacaoNaPartida(
+        IServiceCollection services,
+        OptionsBuilder<RequestLoggingOptions> optionsBuilder)
+    {
         // ValidateOnStart: falha no boot se appsettings remover masking LGPD.
         services.AddSingleton<IValidateOptions<RequestLoggingOptions>, RequestLoggingOptionsValidator>();
         optionsBuilder.ValidateOnStart();
-
-        services.AddSingleton<QueryStringMasker>();
-
-        return services;
     }
 
-    // Duas passadas (coleta + rewrite) evitam O(N²) de RemoveAt em single-pass.
+    // A lista é materializada antes do Clear: enumerar e esvaziar a mesma lista corromperia a leitura.
     private static void NormalizarListaInPlace(IList<string> lista)
     {
         if (lista.Count == 0)
@@ -55,26 +52,17 @@ public static class RequestLoggingServiceCollectionExtensions
             return;
         }
 
-        HashSet<string> vistos = new(StringComparer.OrdinalIgnoreCase);
-        List<string> normalizada = new(lista.Count);
-        foreach (string item in lista)
-        {
-            if (string.IsNullOrWhiteSpace(item))
-            {
-                continue;
-            }
-
-            string trimmed = item.Trim();
-            if (vistos.Add(trimmed))
-            {
-                normalizada.Add(trimmed);
-            }
-        }
-
+        string[] normalizada = [.. Distintos(lista)];
         lista.Clear();
         foreach (string item in normalizada)
         {
             lista.Add(item);
         }
     }
+
+    private static IEnumerable<string> Distintos(IEnumerable<string> lista) =>
+        lista
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 }

@@ -17,47 +17,46 @@ public static class CryptographyServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        OptionsBuilder<EncryptionOptions> optionsBuilder = services.AddOptions<EncryptionOptions>();
+        OptionsBuilder<EncryptionOptions> opcoes = services
+            .AddOptions<EncryptionOptions>()
+            .ComConfiguracao(configuration, EncryptionOptions.SectionName, configure);
 
-        if (configuration is not null)
-        {
-            IConfigurationSection section = configuration.GetSection(EncryptionOptions.SectionName);
-            if (section.Exists())
-            {
-                optionsBuilder.Bind(section);
-            }
-        }
+        RegistrarValidacao(services, opcoes);
+        services.AddSingleton<IGeoEncryptionService>(CriarServicoDeCifragem);
+        AquecerServicoNaPartida(services);
 
-        if (configure is not null)
-        {
-            optionsBuilder.Configure(configure);
-        }
+        return services;
+    }
 
+    private static void RegistrarValidacao(IServiceCollection services, OptionsBuilder<EncryptionOptions> opcoes)
+    {
         // Validator condicional Provider × campos dependentes. Composto com ValidateDataAnnotations:
         // ambos rodam ao materializar IOptions<EncryptionOptions>.Value e ValidateOnStart força no boot.
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<EncryptionOptions>, EncryptionOptionsValidator>());
 
-        optionsBuilder.ValidateDataAnnotations().ValidateOnStart();
+        opcoes.ValidateDataAnnotations().ValidateOnStart();
+    }
 
-        services.AddSingleton<IGeoEncryptionService>(sp =>
+    private static IGeoEncryptionService CriarServicoDeCifragem(IServiceProvider sp)
+    {
+        EncryptionOptions opts = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
+
+        if (string.Equals(opts.Provider, "vault", StringComparison.OrdinalIgnoreCase))
         {
-            EncryptionOptions opts = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
+            return ActivatorUtilities.CreateInstance<VaultTransitEncryptionService>(sp);
+        }
 
-            if (string.Equals(opts.Provider, "vault", StringComparison.OrdinalIgnoreCase))
-            {
-                return ActivatorUtilities.CreateInstance<VaultTransitEncryptionService>(sp);
-            }
+        if (string.Equals(opts.Provider, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return ActivatorUtilities.CreateInstance<LocalAesEncryptionService>(sp);
+        }
 
-            if (string.Equals(opts.Provider, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                return ActivatorUtilities.CreateInstance<LocalAesEncryptionService>(sp);
-            }
+        throw new InvalidOperationException(
+            $"Geo:Encryption:Provider inválido: '{opts.Provider}'. Use 'vault' ou 'local'.");
+    }
 
-            throw new InvalidOperationException(
-                $"Geo:Encryption:Provider inválido: '{opts.Provider}'. Use 'vault' ou 'local'.");
-        });
-
+    private static void AquecerServicoNaPartida(IServiceCollection services) =>
         // Warmup hosted service força a resolução do IGeoEncryptionService no
         // Host.StartAsync — falha do construtor (JWT ausente, mutex auth method)
         // vira CrashLoopBackOff antes do app aceitar tráfego, em vez de 500 na
@@ -68,7 +67,4 @@ public static class CryptographyServiceCollectionExtensions
         // ImplementationType, mesmo pattern de MigrationHostedService/Wolverine.
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IHostedService, EncryptionWarmupHostedService>());
-
-        return services;
-    }
 }
