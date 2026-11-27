@@ -67,7 +67,7 @@ public sealed class LimpezaDaPartidaDaCargaTests : IDisposable
 
     private async Task IniciarComATravaDeOutraInstanciaAsync()
     {
-        TravaConsultivaDaCargaDne outraInstancia = new(_conexao.Configuracao);
+        TravaConsultivaDaCargaDne outraInstancia = TravaDaCargaParaTeste.Criar(_fixture.ConnectionString);
         IAsyncDisposable? trava = await outraInstancia.TentarAdquirirAsync(CancellationToken.None);
         trava.Should().NotBeNull();
         await using (trava!)
@@ -91,7 +91,7 @@ public sealed class LimpezaDaPartidaDaCargaTests : IDisposable
         EsquemaDeCargaDne esquemas = new(_conexao.Configuracao, _arquivos, NullLogger<EsquemaDeCargaDne>.Instance);
         return new GeoReconciliacaoStartupHostedService(
             ServicosDaPartidaParaTeste.Criar(_fixture, esquemas),
-            new TravaConsultivaDaCargaDne(_conexao.Configuracao),
+            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
             _arquivos,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }

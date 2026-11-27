@@ -37,6 +37,13 @@ public sealed class EtlOpcoes
     public TimeSpan TempoLimiteDosComandosDaCarga { get; set; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
+    /// Intervalo do sinal de vida que a conexão da trava da carga envia ao banco enquanto está parada,
+    /// para não ser derrubada por ociosidade pela rede nem pelo banco. Padrão de 30 segundos; deve
+    /// estar entre 1 segundo e 5 minutos (fração de segundo é arredondada para cima).
+    /// </summary>
+    public TimeSpan IntervaloDoSinalDeVidaDaTrava { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
     /// Tamanho máximo, em bytes, do pacote enviado. Padrão de 128 MiB; deve ser maior que zero.
     /// </summary>
     public long TamanhoMaximoDoPacote { get; set; } = TamanhoPadraoDoPacote;
