@@ -5,6 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
+
 using Testcontainers.PostgreSql;
 
 using Unifesspa.Geo.Infrastructure.Core.Persistence.Interceptors;
@@ -46,22 +48,11 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync().ConfigureAwait(false);
-
-        // Captura o valor prévio para restaurar no DisposeAsync — a env var é
-        // process-wide e não pode vazar para outras coleções no mesmo processo.
         _connectionStringEnvVarPrevio = Environment.GetEnvironmentVariable(ConnectionStringEnvVar);
-
         try
         {
-            // Env var lida pelo WebApplicationBuilder a tempo (ConfigureAppConfiguration
-            // chegaria tarde para a connection string lazy do DbContext/Wolverine).
-            Environment.SetEnvironmentVariable(ConnectionStringEnvVar, ConnectionString);
-
-            // Aplica o schema (extensão postgis + tabela-sonda).
-            // Como superusuário do container, o CREATE EXTENSION postgis cria de fato.
-            await using GeoDbContext context = CreateDbContext();
-            await context.Database.MigrateAsync().ConfigureAwait(false);
-
+            PublicarAConnectionStringNoProcesso();
+            await AplicarOSchemaAsync().ConfigureAwait(false);
             _factory = new GeoApiFactory();
         }
         catch
@@ -81,6 +72,33 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(ConnectionStringEnvVar, _connectionStringEnvVarPrevio);
 
         await _postgres.DisposeAsync().ConfigureAwait(false);
+    }
+
+    // O valor prévio da env var é capturado em InitializeAsync para ser restaurado no DisposeAsync:
+    // ela é process-wide e não pode vazar para outras coleções no mesmo processo.
+    // Lida pelo WebApplicationBuilder a tempo (ConfigureAppConfiguration chegaria tarde
+    // para a connection string lazy do DbContext/Wolverine).
+    private void PublicarAConnectionStringNoProcesso() =>
+        Environment.SetEnvironmentVariable(ConnectionStringEnvVar, ConnectionString);
+
+    // Aplica o schema (extensão postgis + tabela-sonda).
+    // Como superusuário do container, o CREATE EXTENSION postgis cria de fato.
+    private async Task AplicarOSchemaAsync()
+    {
+        await using GeoDbContext context = CreateDbContext();
+        await context.Database.MigrateAsync().ConfigureAwait(false);
+    }
+
+    private static void ConfigurarNpgsql(NpgsqlDbContextOptionsBuilder npgsql)
+    {
+        npgsql.UseNetTopologySuite();
+        // Mesmas convenções de migrations da produção (UseGeoNpgsqlConventions):
+        // sem este pin, a UseSnakeCaseNamingConvention poderia gravar a história
+        // numa tabela snake-cased divergente da `__EFMigrationsHistory` usada pelo
+        // host (AddGeoInfrastructure), fazendo a migration de startup ver a inicial
+        // como pendente e tentar recriar as tabelas (42P07).
+        npgsql.MigrationsAssembly(typeof(GeoDbContext).Assembly.FullName);
+        npgsql.MigrationsHistoryTable("__EFMigrationsHistory");
     }
 
     /// <summary>
@@ -109,17 +127,7 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
 
         DbContextOptions<GeoDbContext> options =
             new DbContextOptionsBuilder<GeoDbContext>()
-                .UseNpgsql(ConnectionString, npgsql =>
-                {
-                    npgsql.UseNetTopologySuite();
-                    // Mesmas convenções de migrations da produção (UseGeoNpgsqlConventions):
-                    // sem este pin, a UseSnakeCaseNamingConvention poderia gravar a história
-                    // numa tabela snake-cased divergente da `__EFMigrationsHistory` usada pelo
-                    // host (AddGeoInfrastructure), fazendo a migration de startup ver a inicial
-                    // como pendente e tentar recriar as tabelas (42P07).
-                    npgsql.MigrationsAssembly(typeof(GeoDbContext).Assembly.FullName);
-                    npgsql.MigrationsHistoryTable("__EFMigrationsHistory");
-                })
+                .UseNpgsql(ConnectionString, ConfigurarNpgsql)
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     new SoftDeleteInterceptor(relogio, userContext: null),
