@@ -37,21 +37,27 @@ internal sealed class BairroReader : IBairroReader
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(codigoIbge);
 
-        if (await ResolverCidadeIdAsync(codigoIbge, cancellationToken).ConfigureAwait(false) is not { } cidadeId)
+        if (await _dbContext.IdDaCidadeVigenteAsync(codigoIbge, cancellationToken).ConfigureAwait(false) is not { } cidadeId)
         {
             return (false, [], null, null);
         }
 
-        IQueryable<Bairro> query = _dbContext.Bairros
-            .AsNoTracking()
-            .Where(b => b.Vigente && b.CidadeId == cidadeId);
+        return await ListarDaCidadeAsync(cidadeId, afterId, limit, direction, busca, cancellationToken).ConfigureAwait(false);
+    }
 
-        if (!string.IsNullOrWhiteSpace(busca))
-        {
-            string pattern = BuscaTextualNormalizada.CriarPadraoContem(busca);
-            query = query.Where(b =>
-                EF.Functions.ILike(b.NomeNormalizado, pattern, BuscaTextualNormalizada.Escape));
-        }
+    private async Task<(bool, IReadOnlyList<Bairro>, Guid?, Guid?)> ListarDaCidadeAsync(
+        Guid cidadeId,
+        Guid? afterId,
+        int limit,
+        PaginationDirection direction,
+        string? busca,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<Bairro> query = ComNomeQueContem(
+            _dbContext.Bairros
+                .AsNoTracking()
+                .Where(b => b.Vigente && b.CidadeId == cidadeId),
+            busca);
 
         CursorKeysetPage<Bairro> page = await CursorKeyset
             .ApplyAsync(query, afterId, limit, direction, cancellationToken)
@@ -60,13 +66,15 @@ internal sealed class BairroReader : IBairroReader
         return (true, page.Items, page.PrevAfterId, page.NextAfterId);
     }
 
-    private Task<Guid?> ResolverCidadeIdAsync(string codigoIbge, CancellationToken cancellationToken)
+    private static IQueryable<Bairro> ComNomeQueContem(IQueryable<Bairro> bairros, string? busca)
     {
-        string codigo = codigoIbge.Trim();
-        return _dbContext.Cidades
-            .AsNoTracking()
-            .Where(c => c.Vigente && c.CodigoIbge == codigo)
-            .Select(c => (Guid?)c.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(busca))
+        {
+            return bairros;
+        }
+
+        string pattern = BuscaTextualNormalizada.CriarPadraoContem(busca);
+        return bairros.Where(b =>
+            EF.Functions.ILike(b.NomeNormalizado, pattern, BuscaTextualNormalizada.Escape));
     }
 }

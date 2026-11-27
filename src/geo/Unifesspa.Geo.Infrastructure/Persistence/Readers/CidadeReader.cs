@@ -42,67 +42,29 @@ internal sealed class CidadeReader : ICidadeReader
     {
         ArgumentNullException.ThrowIfNull(filtro);
 
-        IQueryable<Cidade> query = _dbContext.Cidades
-            .AsNoTracking()
-            .Where(c => c.Vigente);
-
-        if (filtro.TemUf)
-        {
-            // UF normalizada para maiúsculas (espelha Cidade.Importar); inexistente
-            // produz lista vazia, não erro — UF é filtro, não recurso.
-            string ufNormalizada = filtro.Uf!.Trim().ToUpperInvariant();
-            query = query.Where(c => c.Uf == ufNormalizada);
-        }
-
-        if (filtro.TemBusca)
-        {
-            // Busca insensível a acento, caixa e apóstrofo: a carga grava nome_normalizado já
-            // sem acento nem apóstrofo (NormalizarNomeDoMunicipio) — NÃO há immutable_unaccent
-            // em runtime. O termo recebe a mesma normalização no app e é comparado via ILIKE.
-            // Os curingas %, _ e \ são escapados para serem tratados como texto literal; o
-            // escape char é passado explicitamente (a sobrecarga de 2 args do ILike emite
-            // ESCAPE '', desligando o \). Guard NomeNormalizado != null: ILIKE NULL não casa —
-            // cidades sem nome_normalizado simplesmente não aparecem na busca (aparecem sem filtro).
-            string pattern = BuscaTextualNormalizada.CriarPadraoContemNomeDoMunicipio(filtro.Termo!);
-            query = query.Where(c =>
-                c.NomeNormalizado != null &&
-                EF.Functions.ILike(c.NomeNormalizado, pattern, BuscaTextualNormalizada.Escape));
-        }
-
-        // Keyset ordenado por nome_ordenacao (ADR-0094/0095) sobre a query JÁ filtrada — ordenação,
-        // âncora (sort key + Id), reversão e flags ficam no helper; os EXISTS herdam o
-        // WHERE. A chave de ordenação é gerada no banco com fallback normalizado de Nome.
-        KeysetOrdenadoPage<Cidade> page = await KeysetOrdenadoCursor
-            .ApplyAsync(
-                query,
-                b => b.Ascending(c => c.NomeOrdenacao).Ascending(c => c.Id),
-                c => c.NomeOrdenacao,
-                static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id },
-                afterSortKey,
-                afterId,
-                limit,
-                direction,
-                cancellationToken)
-            .ConfigureAwait(false);
+        KeysetOrdenadoPage<Cidade> page = await PaginaEmOrdemAlfabeticaAsync(
+            CidadesVigentesDoFiltro(filtro),
+            afterSortKey,
+            afterId,
+            limit,
+            direction,
+            cancellationToken).ConfigureAwait(false);
 
         return (page.Items, page.Anterior, page.Proximo);
     }
 
+    // Projeção única (um round-trip, snapshot consistente sob READ COMMITTED):
+    // cidade vigente + indicador 1:1 vigente via subconsulta correlacionada —
+    // Cidade e CidadeIndicador não têm navigation property (ver
+    // CidadeIndicadorConfiguration), então o vínculo é resolvido por CidadeId.
     public async Task<CidadeComIndicador?> ObterDetalhePorCodigoIbgeAsync(
         string codigoIbge,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(codigoIbge);
 
-        string codigo = codigoIbge.Trim();
-
-        // Projeção única (um round-trip, snapshot consistente sob READ COMMITTED):
-        // cidade vigente + indicador 1:1 vigente via subconsulta correlacionada —
-        // Cidade e CidadeIndicador não têm navigation property (ver
-        // CidadeIndicadorConfiguration), então o vínculo é resolvido por CidadeId.
-        return await _dbContext.Cidades
-            .AsNoTracking()
-            .Where(c => c.Vigente && c.CodigoIbge == codigo)
+        return await _dbContext
+            .CidadeVigentePeloCodigoIbge(codigoIbge)
             .Select(c => new CidadeComIndicador(
                 c,
                 _dbContext.CidadeIndicadores
@@ -112,4 +74,61 @@ internal sealed class CidadeReader : ICidadeReader
             .ConfigureAwait(false);
     }
 
+    private IQueryable<Cidade> CidadesVigentesDoFiltro(FiltroListagemCidades filtro)
+    {
+        IQueryable<Cidade> query = _dbContext.Cidades
+            .AsNoTracking()
+            .Where(c => c.Vigente);
+
+        if (filtro.TemUf)
+        {
+            query = DaUf(query, filtro.Uf!);
+        }
+
+        return filtro.TemBusca ? ComNomeQueContem(query, filtro.Termo!) : query;
+    }
+
+    private static IQueryable<Cidade> DaUf(IQueryable<Cidade> cidades, string uf)
+    {
+        // UF normalizada para maiúsculas (espelha Cidade.Importar); inexistente
+        // produz lista vazia, não erro — UF é filtro, não recurso.
+        string ufNormalizada = uf.Trim().ToUpperInvariant();
+        return cidades.Where(c => c.Uf == ufNormalizada);
+    }
+
+    private static IQueryable<Cidade> ComNomeQueContem(IQueryable<Cidade> cidades, string termo)
+    {
+        // Busca insensível a acento, caixa e apóstrofo: a carga grava nome_normalizado já
+        // sem acento nem apóstrofo (NormalizarNomeDoMunicipio) — NÃO há immutable_unaccent
+        // em runtime. O termo recebe a mesma normalização no app e é comparado via ILIKE.
+        // Os curingas %, _ e \ são escapados para serem tratados como texto literal; o
+        // escape char é passado explicitamente (a sobrecarga de 2 args do ILike emite
+        // ESCAPE '', desligando o \). Guard NomeNormalizado != null: ILIKE NULL não casa —
+        // cidades sem nome_normalizado simplesmente não aparecem na busca (aparecem sem filtro).
+        string pattern = BuscaTextualNormalizada.CriarPadraoContemNomeDoMunicipio(termo);
+        return cidades.Where(c =>
+            c.NomeNormalizado != null &&
+            EF.Functions.ILike(c.NomeNormalizado, pattern, BuscaTextualNormalizada.Escape));
+    }
+
+    // Keyset ordenado por nome_ordenacao (ADR-0094/0095) sobre a query JÁ filtrada — ordenação,
+    // âncora (sort key + Id), reversão e flags ficam no helper; os EXISTS herdam o
+    // WHERE. A chave de ordenação é gerada no banco com fallback normalizado de Nome.
+    private static Task<KeysetOrdenadoPage<Cidade>> PaginaEmOrdemAlfabeticaAsync(
+        IQueryable<Cidade> query,
+        string? afterSortKey,
+        Guid? afterId,
+        int limit,
+        PaginationDirection direction,
+        CancellationToken cancellationToken) =>
+        KeysetOrdenadoCursor.ApplyAsync(
+            query,
+            b => b.Ascending(c => c.NomeOrdenacao).Ascending(c => c.Id),
+            c => c.NomeOrdenacao,
+            static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id },
+            afterSortKey,
+            afterId,
+            limit,
+            direction,
+            cancellationToken);
 }
