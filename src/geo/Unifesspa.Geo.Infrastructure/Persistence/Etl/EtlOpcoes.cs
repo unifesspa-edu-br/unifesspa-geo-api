@@ -25,7 +25,7 @@ public sealed class EtlOpcoes
     public bool SeedHabilitado { get; set; }
 
     /// <summary>Versão (AAAAMM) do dataset usada pelo seed de desenvolvimento.</summary>
-    public string VersaoSeed { get; set; } = "202601";
+    public string VersaoSeed { get; set; } = "202610";
 
     /// <summary>
     /// Schema onde os dumps DNE são restaurados no banco de staging dedicado
