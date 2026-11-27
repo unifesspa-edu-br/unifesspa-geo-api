@@ -1,10 +1,8 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Pagination;
 
 using System.Globalization;
-using System.Reflection;
 
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -35,7 +33,7 @@ public sealed class PageRequestModelBinder : IModelBinder
     {
         ArgumentNullException.ThrowIfNull(bindingContext);
 
-        FromCursorAttribute attribute = ResolveAttribute(bindingContext)
+        FromCursorAttribute attribute = FromCursorAttribute.DaAcao(bindingContext.ActionContext.ActionDescriptor)
             ?? throw new InvalidOperationException(
                 $"Parâmetro do tipo {nameof(PageRequest)} requer [FromCursor(\"<recurso>\")].");
 
@@ -219,30 +217,5 @@ public sealed class PageRequestModelBinder : IModelBinder
         bindingContext.HttpContext.Items[CursorBindingErrorCodes.HttpContextItemKey] = domainCode;
         bindingContext.ModelState.AddModelError(bindingContext.ModelName, detail);
         bindingContext.Result = ModelBindingResult.Failed();
-    }
-
-    private static FromCursorAttribute? ResolveAttribute(ModelBindingContext bindingContext)
-    {
-        // ParameterDescriptor.BindingInfo expõe o ModelBinderAttribute.BinderType, mas não
-        // o FromCursorAttribute em si. O caminho confiável é olhar a ParameterInfo do
-        // ControllerParameterDescriptor; o binder fica resiliente a renomes do parâmetro.
-        if (bindingContext.ActionContext.ActionDescriptor is not ControllerActionDescriptor descriptor)
-            return null;
-
-        foreach (Microsoft.AspNetCore.Mvc.Abstractions.ParameterDescriptor parameter in descriptor.Parameters)
-        {
-            if (parameter is not ControllerParameterDescriptor controllerParam)
-                continue;
-
-            if (controllerParam.ParameterType != typeof(PageRequest))
-                continue;
-
-            FromCursorAttribute? attribute = controllerParam.ParameterInfo
-                .GetCustomAttribute<FromCursorAttribute>();
-            if (attribute is not null)
-                return attribute;
-        }
-
-        return null;
     }
 }

@@ -1,6 +1,10 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Pagination;
 
+using System.Reflection;
+
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 /// <summary>
@@ -39,4 +43,18 @@ public sealed class FromCursorAttribute : ModelBinderAttribute
     /// multi-coluna, nos quais a âncora é o par <c>(SortKey, Id)</c>.
     /// </summary>
     public bool RequireSortKey { get; init; }
+
+    /// <summary>
+    /// Localiza o atributo do parâmetro <see cref="PageRequest"/> da ação, ou <c>null</c> quando
+    /// a ação não o declara. A leitura, a emissão e o OpenAPI partem deste mesmo ponto.
+    /// </summary>
+    internal static FromCursorAttribute? DaAcao(ActionDescriptor descritor) =>
+        // ParameterDescriptor.BindingInfo expõe o BinderType, mas não o atributo em si. O caminho
+        // confiável é a ParameterInfo do ControllerParameterDescriptor, que também resiste a renomes
+        // do parâmetro.
+        (descritor as ControllerActionDescriptor)?.Parameters
+            .OfType<ControllerParameterDescriptor>()
+            .Where(static parametro => parametro.ParameterType == typeof(PageRequest))
+            .Select(static parametro => parametro.ParameterInfo.GetCustomAttribute<FromCursorAttribute>())
+            .FirstOrDefault(static atributo => atributo is not null);
 }
