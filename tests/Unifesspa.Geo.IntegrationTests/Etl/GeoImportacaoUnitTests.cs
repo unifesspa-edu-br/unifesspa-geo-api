@@ -28,7 +28,7 @@ public sealed class GeoImportacaoExecucaoTests
         resultado.Value.IniciadoEm.Should().Be(Agora);
     }
 
-    [Theory(DisplayName = "Iniciar com versão fora de AAAAMM falha")]
+    [Theory(DisplayName = "Iniciar com versão fora de AAAAMM falha como pacote inválido")]
     [InlineData("20260")]
     [InlineData("202600")]
     [InlineData("202613")]
@@ -38,16 +38,16 @@ public sealed class GeoImportacaoExecucaoTests
         Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(versao), "admin", Agora);
 
         resultado.IsFailure.Should().BeTrue();
-        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.VersaoFormatoInvalido);
+        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.PacoteInvalido);
     }
 
-    [Fact(DisplayName = "Iniciar com versão nula falha como formato inválido (não lança)")]
+    [Fact(DisplayName = "Iniciar com versão nula falha como pacote inválido (não lança)")]
     public void Iniciar_VersaoNula_Falha()
     {
         Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(null!), "admin", Agora);
 
         resultado.IsFailure.Should().BeTrue();
-        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.VersaoFormatoInvalido);
+        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.PacoteInvalido);
     }
 
     [Fact(DisplayName = "Iniciar guarda o resumo SHA-256 e o tamanho do pacote recebido")]
@@ -76,13 +76,15 @@ public sealed class GeoImportacaoExecucaoTests
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.PacoteInvalido);
     }
 
-    [Fact(DisplayName = "Iniciar sem disparador falha")]
-    public void Iniciar_SemDisparador_Falha()
+    [Theory(DisplayName = "Iniciar sem identificação de quem disparou viola a invariante e lança")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Iniciar_SemDisparador_Lanca(string? disparadoPor)
     {
-        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "  ", Agora);
+        Action iniciar = () => GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), disparadoPor!, Agora);
 
-        resultado.IsFailure.Should().BeTrue();
-        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.DisparadoPorObrigatorio);
+        iniciar.Should().Throw<ArgumentException>();
     }
 
     [Fact(DisplayName = "Concluir a partir de EmAndamento grava status e relatório")]
