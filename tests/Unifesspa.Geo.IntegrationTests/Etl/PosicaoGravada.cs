@@ -3,27 +3,24 @@ namespace Unifesspa.Geo.IntegrationTests.Etl;
 using NetTopologySuite.Geometries;
 
 /// <summary>
-/// Latitude, longitude e ponto como foram gravados. O ponto é arredondado na nona casa, bem além da
-/// precisão das colunas de latitude e longitude (seis casas), só para a comparação não depender do
-/// último dígito da conversão entre decimal e ponto flutuante.
+/// Latitude, longitude e ponto como foram gravados. O ponto é comparado exatamente (X, Y e SRID):
+/// o banco guarda o ponto como números de ponto flutuante de 64 bits, os mesmos enviados pela carga.
 /// </summary>
-internal readonly record struct PosicaoGravada(decimal? Latitude, decimal? Longitude, double? PontoY, double? PontoX)
+internal readonly record struct PosicaoGravada(decimal? Latitude, decimal? Longitude, double? PontoY, double? PontoX, int? Srid)
 {
-    private const int CasasDoPonto = 9;
+    private const int Srid4326 = 4326;
 
-    /// <summary>Posição que cabe no domínio geográfico: as colunas e o ponto trazem a mesma coordenada.</summary>
+    /// <summary>Posição dentro do domínio: as colunas trazem o valor esperado e o ponto traz o valor enviado.</summary>
     public static PosicaoGravada Valida(decimal latitude, decimal longitude) =>
-        new(latitude, longitude, Arredondar((double)latitude), Arredondar((double)longitude));
+        Valida(latitude, longitude, latitude, longitude);
 
-    /// <summary>Coordenada fora do domínio que a carga ainda grava nas colunas, sem ponto.</summary>
-    public static PosicaoGravada SoNasColunas(decimal latitude, decimal longitude) =>
-        new(latitude, longitude, null, null);
+    /// <summary>Posição dentro do domínio cujas colunas diferem do valor enviado (o banco arredonda a sexta casa).</summary>
+    public static PosicaoGravada Valida(decimal latitudeColuna, decimal longitudeColuna, decimal latitudeEnviada, decimal longitudeEnviada) =>
+        new(latitudeColuna, longitudeColuna, (double)latitudeEnviada, (double)longitudeEnviada, Srid4326);
 
-    public static PosicaoGravada Ausente => new(null, null, null, null);
+    /// <summary>Coordenada ausente ou fora do domínio: latitude, longitude, ponto e SRID vazios.</summary>
+    public static PosicaoGravada Ausente => new(null, null, null, null, null);
 
     public static PosicaoGravada De(decimal? latitude, decimal? longitude, Point? ponto) =>
-        new(latitude, longitude, Arredondar(ponto?.Y), Arredondar(ponto?.X));
-
-    private static double? Arredondar(double? valor) =>
-        valor is null ? null : Math.Round(valor.Value, CasasDoPonto);
+        new(latitude, longitude, ponto?.Y, ponto?.X, ponto?.SRID);
 }

@@ -109,7 +109,7 @@ internal sealed class GeoImportadorCidades
 
         territorios.TryGetValue(chave.CodigoIbge, out CidadeTerritorioCru? territorio);
         string nome = NomeDaCidade(chave.CodigoIbge, cru, contador);
-        CidadeParaCarga carga = new(chave, NomeComBusca(nome), cru.Ddd, CoordenadaDne.De(cru.Latitude, cru.Longitude), DivisaoDe(territorio), proveniencia);
+        CidadeParaCarga carga = new(chave, NomeComBusca(nome), cru.Ddd, CoordenadaDne.Ler(cru.Latitude, cru.Longitude), DivisaoDe(territorio), proveniencia);
         return Upsert(chave.CodigoIbge, jaVistas, existentes, carga.Criar, carga.Atualizar, _contexto.Cidades, contador);
     }
 

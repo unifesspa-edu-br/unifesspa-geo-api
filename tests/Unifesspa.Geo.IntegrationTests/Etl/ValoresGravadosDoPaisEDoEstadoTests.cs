@@ -45,9 +45,10 @@ public sealed class ValoresGravadosDoPaisEDoEstadoTests
         EstadoGravado.De(await leitura.Estados.SingleAsync(e => e.Uf == "PA")).Should().Be(new EstadoGravado(
             paisId, "PA", "Pará", "para", "para", "Norte", "Belém", "15",
             PosicaoGravada.Valida(-5.36867m, -49.11731m), "66000000", "68899999", "202601", true));
+        // Latitude 95.5 e longitude -200 estão fora do domínio: a posição inteira fica vazia.
         EstadoGravado.De(await leitura.Estados.SingleAsync(e => e.Uf == "SP")).Should().Be(new EstadoGravado(
             paisId, "SP", "São Paulo", null, "sao paulo", null, null, null,
-            PosicaoGravada.SoNasColunas(95.5m, -200m), null, null, "202601", true));
+            PosicaoGravada.Ausente, null, null, "202601", true));
     }
 
     [Fact(DisplayName = "Segunda carga: o país e os estados trocam os valores, mantêm o identificador e gravam a nova versão")]
