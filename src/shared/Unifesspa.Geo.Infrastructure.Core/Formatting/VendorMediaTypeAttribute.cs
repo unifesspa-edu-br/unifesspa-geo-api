@@ -2,7 +2,6 @@ namespace Unifesspa.Geo.Infrastructure.Core.Formatting;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text.RegularExpressions;
 
 using Errors;
 
@@ -24,10 +23,8 @@ using Microsoft.Net.Http.Headers;
     "Performance",
     "CA1813:Avoid unsealed attributes",
     Justification = "ASP.NET Core resolve filtros por tipo concreto via reflection; manter unsealed permite extensão controlada por subclasses específicas de recurso, sem quebrar a descoberta de filtros.")]
-public partial class VendorMediaTypeAttribute : ActionFilterAttribute
+public class VendorMediaTypeAttribute : ActionFilterAttribute
 {
-    private const string JsonSuffix = "+json";
-    private const string VendorPrefix = "application/vnd.uniplus.";
     private const string ResponseContextKey = "__GeoVendorMediaTypeAccepted";
 
     /// <summary>Identificador do recurso na vendor MIME (ex.: <c>edital</c>).</summary>
@@ -42,114 +39,62 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (string.IsNullOrEmpty(Resource) || Versions.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(VendorMediaTypeAttribute)} requer Resource e Versions configurados.");
-        }
+        ExigirConfiguracao();
 
-        int latest = Versions[^1];
-        HttpRequest request = context.HttpContext.Request;
-
-        if (!request.Headers.TryGetValue(HeaderNames.Accept, out Microsoft.Extensions.Primitives.StringValues acceptValues)
-            || acceptValues.Count == 0
-            || acceptValues.All(static v => string.IsNullOrWhiteSpace(v)))
-        {
-            StoreAcceptedVersion(context.HttpContext, latest);
-            return;
-        }
-
-        if (!MediaTypeHeaderValue.TryParseList(acceptValues, out IList<MediaTypeHeaderValue>? parsed))
-        {
+        if (VersaoNegociada(context.HttpContext.Request) is { } versao)
+            StoreAcceptedVersion(context.HttpContext, versao);
+        else
             WriteNotAcceptable(context);
-            return;
-        }
-
-        // RFC 9110 §12.5.1: maior q-value vence quando há múltiplos aceitáveis.
-        // OrderByDescending estável preserva ordem do header como tie-breaker.
-        // Quality ausente == 1.0 (default RFC).
-        List<MediaTypeHeaderValue> ordered = [.. parsed
-            .OrderByDescending(static m => m.Quality ?? 1.0)];
-
-        // RFC 9110 §12.5.1: q=0 não é apenas "ignorar" — é "excluir do match".
-        // Construir primeiro a lista de exclusões para que matches por wildcard
-        // ou por vendor explícito subsequentes respeitem essas exclusões.
-        HashSet<int> excludedVersions = [];
-        bool excludeAllViaWildcard = false;
-
-        foreach (MediaTypeHeaderValue media in ordered)
-        {
-            if (media.Quality is not 0)
-                continue;
-
-            string excluded = media.MediaType.Value ?? string.Empty;
-            if (IsWildcardOrJson(excluded))
-            {
-                excludeAllViaWildcard = true;
-            }
-            else if (TryMatchVendor(excluded, out int excludedVersion))
-            {
-                excludedVersions.Add(excludedVersion);
-            }
-        }
-
-        foreach (MediaTypeHeaderValue media in ordered)
-        {
-            if (media.Quality is 0)
-                continue;
-
-            string mediaType = media.MediaType.Value ?? string.Empty;
-
-            // RFC 9110 §8.3.1: media type tokens são case-insensitive.
-            if (IsWildcardOrJson(mediaType))
-            {
-                if (excludeAllViaWildcard || excludedVersions.Contains(latest))
-                    continue;
-
-                StoreAcceptedVersion(context.HttpContext, latest);
-                return;
-            }
-
-            if (TryMatchVendor(mediaType, out int requestedVersion)
-                && Array.IndexOf(Versions, requestedVersion) >= 0
-                && !excludedVersions.Contains(requestedVersion))
-            {
-                StoreAcceptedVersion(context.HttpContext, requestedVersion);
-                return;
-            }
-        }
-
-        WriteNotAcceptable(context);
     }
 
     public override void OnResultExecuting(ResultExecutingContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!context.HttpContext.Items.TryGetValue(ResponseContextKey, out object? value)
-            || value is not int version)
+        if (context.HttpContext.Items.TryGetValue(ResponseContextKey, out object? value)
+            && value is int version
+            && !IsProblemDetailsResult(context.Result))
         {
-            return;
+            AnunciarVersaoNaResposta(context.HttpContext.Response, version);
         }
+    }
 
-        // RFC 9457 §3: respostas de erro mantêm Content-Type
-        // application/problem+json. O wire format do erro não muda com o
-        // versionamento por vendor MIME — sobrescrever quebraria clientes
-        // que dispatcham por content-type para tratar ProblemDetails.
-        if (IsProblemDetailsResult(context.Result))
+    private void ExigirConfiguracao()
+    {
+        if (string.IsNullOrEmpty(Resource) || Versions.Length == 0)
         {
-            return;
+            throw new InvalidOperationException(
+                $"{nameof(VendorMediaTypeAttribute)} requer Resource e Versions configurados.");
         }
+    }
 
-        string vendorMime = BuildVendorMime(Resource, version);
-        context.HttpContext.Response.ContentType = vendorMime;
+    // Sem preferência (Accept ausente ou em branco) vale a versão mais recente; um Accept que não
+    // se lê, ou que nenhuma versão atende, não tem versão e dá 406.
+    private int? VersaoNegociada(HttpRequest request)
+    {
+        if (NaoHaPreferenciaDeVersao(request, out Microsoft.Extensions.Primitives.StringValues valores))
+            return Versions[^1];
+
+        return MediaTypeHeaderValue.TryParseList(valores, out IList<MediaTypeHeaderValue>? pedidos)
+            ? new NegociacaoDaVersaoDeMidia(Resource, Versions).VersaoAceita(pedidos)
+            : null;
+    }
+
+    private static bool NaoHaPreferenciaDeVersao(HttpRequest request, out Microsoft.Extensions.Primitives.StringValues valores) =>
+        !request.Headers.TryGetValue(HeaderNames.Accept, out valores)
+        || valores.Count == 0
+        || valores.All(static valor => string.IsNullOrWhiteSpace(valor));
+
+    private void AnunciarVersaoNaResposta(HttpResponse response, int version)
+    {
+        response.ContentType = BuildVendorMime(Resource, version);
 
         // RFC 9110 §12.5.5: respostas que variam por content negotiation devem
         // declarar Vary: Accept para que caches compartilhados (CDN, Traefik,
         // reverse proxy) não sirvam representação de uma versão para um cliente
         // que pediu outra. Sem isso, /api/editais cacheado como v1 seria
         // replayado a um cliente que pediu v2.
-        AppendAcceptToVaryIfMissing(context.HttpContext.Response);
+        AppendAcceptToVaryIfMissing(response);
     }
 
     private static void AppendAcceptToVaryIfMissing(HttpResponse response)
@@ -164,6 +109,9 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
             response.Headers.Append(HeaderNames.Vary, "Accept");
     }
 
+    // RFC 9457 §3: respostas de erro mantêm Content-Type application/problem+json. O wire format
+    // do erro não muda com o versionamento por vendor MIME — sobrescrever quebraria clientes que
+    // despacham por content-type para tratar ProblemDetails.
     private static bool IsProblemDetailsResult(IActionResult result) =>
         result switch
         {
@@ -174,42 +122,11 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
             _ => false,
         };
 
-    private static bool IsWildcardOrJson(string mediaType) =>
-        string.Equals(mediaType, "*/*", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(mediaType, "application/*", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
-
-    private bool TryMatchVendor(string mediaType, out int version)
-    {
-        version = 0;
-
-        // RFC 9110 §8.3.1: type/subtype são case-insensitive.
-        if (!mediaType.StartsWith(VendorPrefix, StringComparison.OrdinalIgnoreCase)
-            || !mediaType.EndsWith(JsonSuffix, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        string inner = mediaType.Substring(VendorPrefix.Length, mediaType.Length - VendorPrefix.Length - JsonSuffix.Length);
-        Match match = VendorMimeRegex().Match(inner);
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        if (!string.Equals(match.Groups["resource"].Value, Resource, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return int.TryParse(match.Groups["version"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out version);
-    }
-
     private static void StoreAcceptedVersion(HttpContext httpContext, int version) =>
         httpContext.Items[ResponseContextKey] = version;
 
     private static string BuildVendorMime(string resource, int version) =>
-        string.Create(CultureInfo.InvariantCulture, $"{VendorPrefix}{resource}.v{version}{JsonSuffix}");
+        string.Create(CultureInfo.InvariantCulture, $"{NegociacaoDaVersaoDeMidia.PrefixoDoFornecedor}{resource}.v{version}{NegociacaoDaVersaoDeMidia.SufixoJson}");
 
     private void WriteNotAcceptable(ActionExecutingContext context)
     {
@@ -226,7 +143,4 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
             ContentTypes = { "application/problem+json" },
         };
     }
-
-    [GeneratedRegex(@"^(?<resource>[a-z][a-z0-9_-]*)\.v(?<version>\d+)$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex VendorMimeRegex();
 }
