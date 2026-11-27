@@ -46,12 +46,7 @@ public sealed class EsquemaDeCargaDneTests : IDisposable
 
         await using (IFonteDaCargaDne fonte = await _esquemaDeCarga.PrepararAsync(execucao, Versao, CancellationToken.None))
         {
-            (await _banco.TabelasSemRegistroDeTransacaoAsync(esquema)).Should().Be(15);
-            (await _banco.LinhasAsync(esquema, "cidade")).Should().Be(1);
-            (await _banco.LinhasAsync(esquema, "logradouro")).Should().Be(2);
-            (await _banco.LinhasAsync(esquema, "bairro")).Should().Be(0);
-            File.Exists(_arquivos.CaminhoDe(execucao)).Should().BeFalse("o arquivo é apagado ao terminar de popular o esquema");
-            fonte.Versao.Should().Be(Versao);
+            await ConferirEsquemaCarregadoEArquivoApagadoAsync(esquema, execucao, fonte);
         }
 
         (await _banco.ExisteEsquemaAsync(esquema)).Should().BeFalse();
@@ -151,16 +146,31 @@ public sealed class EsquemaDeCargaDneTests : IDisposable
 
         try
         {
-            int removidos = await _esquemaDeCarga.DescartarSobrasAsync(CancellationToken.None);
-
-            removidos.Should().BeGreaterThanOrEqualTo(2);
-            await ConferirEsquemasRemovidosAsync(sobra1, sobra2);
-            (await _banco.ExisteEsquemaAsync("carga_dne_de_outro_uso")).Should().BeTrue("o nome não tem a forma de um esquema de carga");
+            await DescartarSobrasEConferirAsync(sobra1, sobra2);
         }
         finally
         {
             await _banco.ExecutarAsync("DROP SCHEMA IF EXISTS carga_dne_de_outro_uso CASCADE");
         }
+    }
+
+    private async Task ConferirEsquemaCarregadoEArquivoApagadoAsync(string esquema, Guid execucao, IFonteDaCargaDne fonte)
+    {
+        (await _banco.TabelasSemRegistroDeTransacaoAsync(esquema)).Should().Be(15);
+        (await _banco.LinhasAsync(esquema, "cidade")).Should().Be(1);
+        (await _banco.LinhasAsync(esquema, "logradouro")).Should().Be(2);
+        (await _banco.LinhasAsync(esquema, "bairro")).Should().Be(0);
+        File.Exists(_arquivos.CaminhoDe(execucao)).Should().BeFalse("o arquivo é apagado ao terminar de popular o esquema");
+        fonte.Versao.Should().Be(Versao);
+    }
+
+    private async Task DescartarSobrasEConferirAsync(string sobra1, string sobra2)
+    {
+        int removidos = await _esquemaDeCarga.DescartarSobrasAsync(CancellationToken.None);
+
+        removidos.Should().BeGreaterThanOrEqualTo(2);
+        await ConferirEsquemasRemovidosAsync(sobra1, sobra2);
+        (await _banco.ExisteEsquemaAsync("carga_dne_de_outro_uso")).Should().BeTrue("o nome não tem a forma de um esquema de carga");
     }
 
     private async Task CriarEsquemasAsync(params string[] nomes)
