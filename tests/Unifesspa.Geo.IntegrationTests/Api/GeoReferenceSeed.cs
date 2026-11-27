@@ -175,7 +175,7 @@ internal static partial class GeoReferenceSeed
 
     // Remove os diacríticos (como a fonte faz em *_sem_acento). O ToLower fica por
     // conta da própria entidade (GeoTexto.NormalizarBuscaOpcional) — evita CA1308 aqui.
-    private static string Normalizar(string nome)
+    internal static string Normalizar(string nome)
     {
         string decomposto = nome.Normalize(NormalizationForm.FormD);
         return new string([.. decomposto.Where(c =>
