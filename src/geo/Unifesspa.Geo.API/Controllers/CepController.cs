@@ -68,6 +68,11 @@ public sealed class CepController : ControllerBase
             return Result.Failure(ErrosDasConsultas.ErroCepFormatoInvalido()).ToActionResult(_mapper);
         }
 
+        return await ConsultarEnderecoDoCepAsync(cepNormalizado, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ConsultarEnderecoDoCepAsync(string cepNormalizado, CancellationToken cancellationToken)
+    {
         CepResolvidoDto? endereco = await _queryBus
             .Send(new ResolverCepQuery(cepNormalizado), cancellationToken)
             .ConfigureAwait(false);

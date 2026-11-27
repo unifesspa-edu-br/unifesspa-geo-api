@@ -116,6 +116,11 @@ public sealed class CidadesController : ControllerBase
             return Result.Failure(recusa).ToActionResult(_mapper);
         }
 
+        return await ConsultarCidadeAsync(codigoIbge, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ConsultarCidadeAsync(string codigoIbge, CancellationToken cancellationToken)
+    {
         CidadeDetalheDto? cidade = await _queryBus
             .Send(new ObterCidadePorCodigoIbgeQuery(codigoIbge), cancellationToken)
             .ConfigureAwait(false);
