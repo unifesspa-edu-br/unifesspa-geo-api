@@ -92,7 +92,7 @@ controller anexa **HATEOAS** (`IResourceLinksBuilder<T>`) e devolve.
 - **Paginação por cursor opaco** (keyset via biblioteca MR sob cursor base64; ADR-0094/0095):
   `[FromCursor(tag, RequireSortKey = true)]` no parâmetro `PageRequest`; a chave de ordenação é
   **sempre não-nula** (ADR-0095). Resposta via `OkPaginatedOrdenadoAsync` + header `Link`.
-- **Contrato HTTP**: respostas de erro em `application/problem+json`; vendor media types via
+- **Contrato HTTP**: respostas de erro em `application/problem+json`, com `type` = `ProblemType:BaseUri` (obrigatório, HTTPS; valor padrão no `appsettings.json` da API) + código; vendor media types via
   `[VendorMediaType(Resource="…", Versions=[1])]`; OpenAPI 3.1 servido em `/openapi/geo.json`.
 - **ETL DNE** (`…Infrastructure/Persistence/Etl`, ADR-0092 e ADR-0098): a carga parte do pacote
   zip dos Correios (proprietário, **não versionado**), enviado em `POST /api/admin/geo/importacoes`

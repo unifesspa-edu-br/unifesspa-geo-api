@@ -61,7 +61,7 @@ builder.Services.AddOpenApi("geo", options =>
 });
 
 builder.Services.AddSingleton<IDomainErrorRegistration, GeoDomainErrorRegistration>();
-builder.Services.AddDomainErrorMapper();
+builder.Services.AddDomainErrorMapper(builder.Configuration);
 
 // Criptografia (entries de idempotency at-rest) + cursor pagination (ADR-0026/0031).
 // AddCursorPagination atende as listagens paginadas de localidades.
