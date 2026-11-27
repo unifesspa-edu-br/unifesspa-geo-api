@@ -3,19 +3,22 @@ namespace Unifesspa.Geo.IntegrationTests.Etl;
 using AwesomeAssertions;
 
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 /// <summary>Obtém a trava consultiva da carga DNE, em conexão própria, como o pedido real faz.</summary>
 internal static class TravaDaCargaParaTeste
 {
-    public static TravaConsultivaDaCargaDne Criar(string textoDeConexao)
+    public static TravaConsultivaDaCargaDne Criar(string textoDeConexao) => Criar(textoDeConexao, new EtlOpcoes());
+
+    public static TravaConsultivaDaCargaDne Criar(string textoDeConexao, EtlOpcoes opcoes)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = textoDeConexao })
             .Build();
 
-        return new TravaConsultivaDaCargaDne(configuracao);
+        return new TravaConsultivaDaCargaDne(configuracao, Options.Create(opcoes));
     }
 
     public static async Task<IAsyncDisposable> AdquirirAsync(string textoDeConexao)
