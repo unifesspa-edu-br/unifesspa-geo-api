@@ -20,25 +20,22 @@ internal static partial class CepValido
     public static bool TentarNormalizar(string? cep, [NotNullWhen(true)] out string? normalizado)
     {
         normalizado = null;
-
-        if (string.IsNullOrWhiteSpace(cep))
-        {
-            return false;
-        }
+        string? bruto = cep?.Trim();
 
         // Valida o formato CRU (já aparado) contra os padrões canônicos — não remove
         // separadores antes, senão "0-1-0-0-1-000" passaria como se fosse 8 dígitos.
-        string bruto = cep.Trim();
-        if (!CepRegex().IsMatch(bruto))
+        if (string.IsNullOrEmpty(bruto) || !CepRegex().IsMatch(bruto))
         {
             return false;
         }
 
-        normalizado = bruto
-            .Replace("-", string.Empty, StringComparison.Ordinal)
-            .Replace(" ", string.Empty, StringComparison.Ordinal);
+        normalizado = RemoverMascara(bruto);
         return true;
     }
+
+    private static string RemoverMascara(string cep) =>
+        cep.Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal);
 
     // [0-9] e não \d: em .NET \d casa dígitos Unicode (ex.: árabe-índicos); o CEP é
     // ASCII. Aceita 8 dígitos OU NNNNN-NNN OU NNNNN␠NNN — o separador só na posição
