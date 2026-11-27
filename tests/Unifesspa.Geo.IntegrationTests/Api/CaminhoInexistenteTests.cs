@@ -28,12 +28,22 @@ public sealed class CaminhoInexistenteTests : IClassFixture<GeoOpenApiFactory>
     [InlineData("/api/rota-que-o-geo-nao-declara-x7q")]
     [InlineData("/health/x7q")]
     [InlineData("/api/cidades/1500602/x7q")]
+    [InlineData("/openapi/inexistente-x7q.json")]
+    [InlineData("/openapi/x7q%3Cb%3E.json")]
     public async Task RotaQueNaoExiste_Responde404ComOCodigoComum(string caminho) =>
         await ConferirCaminhoInexistenteAsync(caminho);
 
     [Fact(DisplayName = "Identificador de importação que não é um GUID responde 404 com o código comum e sem repetir o identificador")]
     public async Task IdentificadorForaDoFormato_Responde404ComOCodigoComum() =>
         await ConferirCaminhoInexistenteAsync("/api/admin/geo/importacoes/nao-e-guid-x7q");
+
+    [Fact(DisplayName = "Documento de contrato com nome longo e codificado responde 404 com o código comum e sem repetir o nome")]
+    public async Task DocumentoComNomeLongoECodificado_Responde404ComOCodigoComum() =>
+        await ConferirCaminhoInexistenteAsync("/openapi/x7q" + new string('a', 500) + "%20%3Cb%3E.json");
+
+    [Fact(DisplayName = "Documento de contrato com o nome publicado em outra grafia responde 404 com o código comum")]
+    public async Task DocumentoComOutraGrafia_Responde404ComOCodigoComum() =>
+        await ConferirCaminhoInexistenteAsync("/openapi/GEO.json");
 
     [Theory(DisplayName = "Método que a rota não aceita continua 405 com Allow e sem o código comum")]
     [InlineData("/api/cidades", "GET")]
