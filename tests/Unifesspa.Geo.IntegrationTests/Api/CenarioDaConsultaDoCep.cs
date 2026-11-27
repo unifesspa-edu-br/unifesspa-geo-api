@@ -31,8 +31,8 @@ internal sealed class CenarioDaConsultaDoCep
 
     private static void AdicionarSaoPaulo(GeoDbContext ctx, Pais brasil)
     {
-        Estado estado = GeoReferenceSeed.NovoEstado(brasil.Id, "SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo");
-        Cidade cidade = GeoReferenceSeed.NovaCidade(estado.Id, "SP", "3550308", "São Paulo");
+        Estado estado = new EstadoBuilder(brasil.Id, "SP", "São Paulo").NaRegiao("Sudeste").ComCapital("São Paulo").Construir();
+        Cidade cidade = new CidadeBuilder(estado.Id, "SP", "3550308", "São Paulo").Construir();
         Bairro se = GeoReferenceSeed.NovoBairro(cidade.Id, "SP", "Sé");
         Bairro belaVista = GeoReferenceSeed.NovoBairro(cidade.Id, "SP", "Bela Vista");
         Bairro jardimPaulista = GeoReferenceSeed.NovoBairro(cidade.Id, "SP", "Jardim Paulista");
@@ -57,11 +57,10 @@ internal sealed class CenarioDaConsultaDoCep
     private static void AdicionarCepsComComplemento(GeoDbContext ctx, Cidade cidade, Bairro se)
     {
         ctx.Logradouros.AddRange(
-            GeoReferenceSeed.NovoLogradouro(
-                cidade.Id, "SP", "01001000", "Praça da Sé", tipo: "Praça",
-                bairroId: se.Id, latitude: -23.55m, longitude: -46.63m),
-            GeoReferenceSeed.NovoLogradouro(
-                cidade.Id, "SP", "01002000", "Rua das Flores", tipo: "Rua", bairroId: se.Id));
+            new LogradouroBuilder(cidade.Id, "SP", "01001000", "Praça da Sé")
+                .DoTipo("Praça").NoBairro(se.Id).NaPosicao(-23.55m, -46.63m).Construir(),
+            new LogradouroBuilder(cidade.Id, "SP", "01002000", "Rua das Flores")
+                .DoTipo("Rua").NoBairro(se.Id).Construir());
         ctx.LogradouroComplementos.AddRange(
             GeoReferenceSeed.NovoComplemento("01001000", "de 1 a 999 - lado ímpar"),
             GeoReferenceSeed.NovoComplemento("01002000", "lado par"),
@@ -73,12 +72,11 @@ internal sealed class CenarioDaConsultaDoCep
     private static void AdicionarCepDeDoisLogradouros(GeoDbContext ctx, Cidade cidade, Bairro belaVista, Bairro jardimPaulista)
     {
         ctx.Logradouros.AddRange(
-            GeoReferenceSeed.NovoLogradouro(
-                cidade.Id, "SP", "01310100", "Avenida Paulista", tipo: "Avenida", bairroId: belaVista.Id),
-            GeoReferenceSeed.NovoLogradouro(
-                cidade.Id, "SP", "01310100", "Alameda Santos", tipo: "Alameda", bairroId: jardimPaulista.Id),
-            GeoReferenceSeed.NovoLogradouro(
-                cidade.Id, "SP", "30000000", "Rua Obsoleta", vigente: false));
+            new LogradouroBuilder(cidade.Id, "SP", "01310100", "Avenida Paulista")
+                .DoTipo("Avenida").NoBairro(belaVista.Id).Construir(),
+            new LogradouroBuilder(cidade.Id, "SP", "01310100", "Alameda Santos")
+                .DoTipo("Alameda").NoBairro(jardimPaulista.Id).Construir(),
+            new LogradouroBuilder(cidade.Id, "SP", "30000000", "Rua Obsoleta").ForaDeVigencia().Construir());
     }
 
     // CEP geral com o mesmo número de um logradouro (01001000) e de um grande usuário
@@ -92,8 +90,8 @@ internal sealed class CenarioDaConsultaDoCep
 
     private static void AdicionarMaraba(GeoDbContext ctx, Pais brasil)
     {
-        Estado estado = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará", regiao: "Norte", capital: "Belém");
-        Cidade cidade = GeoReferenceSeed.NovaCidade(estado.Id, "PA", "1500402", "Marabá");
+        Estado estado = new EstadoBuilder(brasil.Id, "PA", "Pará").NaRegiao("Norte").ComCapital("Belém").Construir();
+        Cidade cidade = new CidadeBuilder(estado.Id, "PA", "1500402", "Marabá").Construir();
         Bairro cidadeNova = GeoReferenceSeed.NovoBairro(cidade.Id, "PA", "Cidade Nova");
         Distrito novaMaraba = GeoReferenceSeed.NovoDistrito(cidade.Id, "PA", "Nova Marabá");
         ctx.Estados.Add(estado);
