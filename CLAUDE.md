@@ -131,6 +131,10 @@ test). As migrations tocam o banco e precisam acontecer antes do runtime de mens
   sob o diretório temporário) e a falha mostra o comando `cp` para aprovar. Rode-o na raiz do repositório,
   depois de revisar a diferença. Não há variável de ambiente que regere o contrato. CodeQL e Trivy
   (bloqueante para `HIGH`/`CRITICAL`) também rodam.
+- **Catálogo público de erros** (`contracts/README.md`): `contracts/codigos-de-erro.json` é gerado dos registros de
+  erro do host pelo teste `CodigosDeErroPublicados`; `contracts/descricoes-de-erros.json` descreve só os códigos
+  `uniplus.geo.*` e é conferido pelo teste `DescricoesDeErrosPublicadas`. **Código de erro novo ⇒ descrição no mesmo PR.**
+  Filtro: `dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj --filter "CodigosDeErroPublicados|DescricoesDeErrosPublicadas"`.
 
 ## Commits
 

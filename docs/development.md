@@ -164,4 +164,17 @@ contrato gerado pela API com esse arquivo; divergência reprova o teste e o CI.
 3. Revise a diferença. Depois de aprovar, execute na raiz do repositório o `cp` mostrado na falha e rode o
    teste de novo, com compilação, para atualizar a cópia na saída.
 
-Nunca edite os arquivos de `contracts/` à mão.
+Nunca edite à mão os arquivos gerados de `contracts/`.
+
+### Códigos de erro e descrições
+
+`contracts/codigos-de-erro.json` é gerado dos registros de erro do host; `contracts/descricoes-de-erros.json`
+descreve os códigos `uniplus.geo.*` e é escrito por pessoas. Código de erro novo exige a descrição no mesmo PR.
+O formato e as regras estão em `contracts/README.md`.
+
+```bash
+dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj \
+  --filter "CodigosDeErroPublicados|DescricoesDeErrosPublicadas"
+```
+
+A aprovação do arquivo de códigos segue o procedimento acima (`cp` mostrado na falha).
