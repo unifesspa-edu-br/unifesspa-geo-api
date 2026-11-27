@@ -85,6 +85,10 @@ builder.Services.AddScoped<UmEnvioPorVezFilter>();
 builder.Services.AddGeoApplication();
 builder.Services.AddGeoInfrastructure();
 
+// Caminhos dos recursos do Geo, compartilhados pelos montadores de _links abaixo.
+builder.Services.AddSingleton(static servicos => new CaminhosDosRecursosDoGeo(
+    servicos.GetRequiredService<LinkGenerator>(), servicos.GetRequiredService<IHttpContextAccessor>()));
+
 // HATEOAS Level 1 (ADR-0029) do registro de execução do ETL.
 builder.Services.AddSingleton<IResourceLinksBuilder<ImportacaoGeoDto>, ImportacaoGeoLinksBuilder>();
 

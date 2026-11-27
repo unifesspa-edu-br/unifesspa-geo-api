@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -21,42 +17,23 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via AddSingleton<IResourceLinksBuilder<EstadoDto>, EstadoLinksBuilder>().")]
 internal sealed class EstadoLinksBuilder : IResourceLinksBuilder<EstadoDto>
 {
-    private static readonly string EstadosControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.EstadosController));
-    private static readonly string CidadesControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CidadesController));
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public EstadoLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public EstadoLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(EstadoDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-
-        string self = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.EstadosController.ObterPorUf), EstadosControllerNome, new { uf = dto.Uf });
-        string collection = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.EstadosController.Listar), EstadosControllerNome, values: null);
-
-        // A lista de cidades da UF é o endpoint de cidades com o filtro uf= anexado
-        // (uf é query param, não rota — o LinkGenerator não a inclui em values).
-        string cidadesBase = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.Listar), CidadesControllerNome, values: null);
-        string cidades = $"{cidadesBase}?uf={Uri.EscapeDataString(dto.Uf)}";
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["self"] = self,
-            ["cidades"] = cidades,
-            ["collection"] = collection,
+            ["self"] = _caminhos.DoEstado(dto.Uf),
+            ["cidades"] = _caminhos.DaListaDeCidadesDaUf(dto.Uf),
+            ["collection"] = _caminhos.DaListaDeEstados(),
         };
     }
 }
