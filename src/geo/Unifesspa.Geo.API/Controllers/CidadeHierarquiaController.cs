@@ -145,8 +145,7 @@ public sealed class CidadeHierarquiaController : ControllerBase
 
         DistritoDto[] comLinks = [.. resultado.Items.Select(d => d with { Links = _distritoLinks.Build(d) })];
         return await this.OkPaginatedAsync(
-            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, DistritosResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IActionResult> ConsultarBairrosAsync(
@@ -166,8 +165,7 @@ public sealed class CidadeHierarquiaController : ControllerBase
 
         BairroDto[] comLinks = [.. resultado.Items.Select(b => b with { Links = _bairroLinks.Build(b) })];
         return await this.OkPaginatedAsync(
-            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, BairrosResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IActionResult> ConsultarLogradourosAsync(
@@ -187,8 +185,7 @@ public sealed class CidadeHierarquiaController : ControllerBase
 
         LogradouroResumoDto[] comLinks = [.. resultado.Items.Select(l => l with { Links = _logradouroLinks.Build(l) })];
         return await this.OkPaginatedAsync(
-            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, LogradourosResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, cancellationToken).ConfigureAwait(false);
     }
 
     private IActionResult? RecusaDoFiltro(string codigoIbge, string? q)

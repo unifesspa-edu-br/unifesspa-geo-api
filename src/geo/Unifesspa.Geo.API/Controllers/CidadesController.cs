@@ -94,8 +94,7 @@ public sealed class CidadesController : ControllerBase
         CidadeResumoDto[] comLinks = [.. resultado.Items.Select(c => c with { Links = _resumoLinks.Build(c) })];
 
         return await this.OkPaginatedOrdenadoAsync(
-            comLinks, resultado.Anterior, resultado.Proximo, page, ResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            comLinks, resultado.Anterior, resultado.Proximo, page, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
