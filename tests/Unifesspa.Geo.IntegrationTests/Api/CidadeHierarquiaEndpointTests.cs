@@ -202,6 +202,35 @@ public sealed class CidadeHierarquiaEndpointTests
         (await LerArrayAsync(vazio)).GetArrayLength().Should().Be(0);
     }
 
+    [Theory(DisplayName = "CA-04: cidade inexistente retorna 404 também em bairros e logradouros")]
+    [InlineData("/api/cidades/9999999/bairros")]
+    [InlineData("/api/cidades/9999999/logradouros")]
+    public async Task Hierarquia_CidadeInexistente_BairrosELogradouros_404(string rota)
+    {
+        await _cenario.SemearAsync();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
+
+        using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, rota);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory(DisplayName = "CA-04: busca em branco lista como se não houvesse busca")]
+    [InlineData("bairros")]
+    [InlineData("logradouros")]
+    public async Task Hierarquia_BuscaEmBranco_ListaComoSemBusca(string colecao)
+    {
+        await _cenario.SemearAsync();
+        using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
+
+        using HttpResponseMessage semBusca = await GeoReferenceSeed.Obter(client, $"/api/cidades/3550308/{colecao}?limit=1");
+        using HttpResponseMessage emBranco = await GeoReferenceSeed.Obter(client, $"/api/cidades/3550308/{colecao}?q=%20%20&limit=1");
+
+        emBranco.StatusCode.Should().Be(HttpStatusCode.OK);
+        LerNomes(await LerArrayAsync(emBranco)).Should().Equal(LerNomes(await LerArrayAsync(semBusca)));
+        GeoReferenceSeed.ExtrairLink(semBusca, "next").Should().NotBeNull();
+        GeoReferenceSeed.ExtrairLink(emBranco, "next").Should().NotBeNull();
+    }
+
     [Theory(DisplayName = "CA-05: código IBGE malformado retorna 400")]
     [InlineData("/api/cidades/abc/distritos")]
     [InlineData("/api/cidades/123/bairros")]
