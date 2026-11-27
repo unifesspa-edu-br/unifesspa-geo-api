@@ -19,6 +19,7 @@ internal sealed class LogradouroBuilder
     private readonly string _nome;
     private string? _tipo;
     private string? _nomeCompleto;
+    private Guid? _distritoId;
     private Guid? _bairroId;
     private decimal? _latitude;
     private decimal? _longitude;
@@ -42,6 +43,12 @@ internal sealed class LogradouroBuilder
     public LogradouroBuilder ComNomeCompleto(string nomeCompleto)
     {
         _nomeCompleto = nomeCompleto;
+        return this;
+    }
+
+    public LogradouroBuilder NoDistrito(Guid distritoId)
+    {
+        _distritoId = distritoId;
         return this;
     }
 
@@ -74,7 +81,7 @@ internal sealed class LogradouroBuilder
         GeoTestKeys.Ok(Logradouro.Importar(
             _cep,
             new NomeDoLogradouro(_tipo, _nome, _nomeCompleto, GeoReferenceSeed.Normalizar(_nomeCompleto ?? _nome)),
-            new LocalidadeDoLogradouro(_cidadeId, null, _bairroId, _uf),
+            new LocalidadeDoLogradouro(_cidadeId, _distritoId, _bairroId, _uf),
             new PosicaoGeografica(_latitude, _longitude, _coordenada),
             true,
             GeoReferenceSeed.Proveniencia(_vigente)));
