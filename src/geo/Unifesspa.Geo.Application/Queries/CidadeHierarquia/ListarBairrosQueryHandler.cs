@@ -15,20 +15,13 @@ public static class ListarBairrosQueryHandler
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(reader);
 
-        string? busca = string.IsNullOrWhiteSpace(query.Busca) ? null : query.Busca;
-
         (bool cidadeExiste, IReadOnlyList<Bairro> itens, Guid? anteriorAfterId, Guid? proximoAfterId) =
             await reader
                 .ListarPorCidadeAsync(
-                    query.CodigoIbge, query.AfterId, query.Limit, query.Direction, busca, cancellationToken)
+                    query.CodigoIbge, query.AfterId, query.Limit, query.Direction, query.Busca, cancellationToken)
                 .ConfigureAwait(false);
 
-        if (!cidadeExiste)
-        {
-            return new ListarBairrosResult(false, [], anteriorAfterId, proximoAfterId);
-        }
-
         BairroDto[] items = [.. itens.Select(b => b.ToDto(query.CodigoIbge))];
-        return new ListarBairrosResult(true, items, anteriorAfterId, proximoAfterId);
+        return new ListarBairrosResult(cidadeExiste, items, anteriorAfterId, proximoAfterId);
     }
 }
