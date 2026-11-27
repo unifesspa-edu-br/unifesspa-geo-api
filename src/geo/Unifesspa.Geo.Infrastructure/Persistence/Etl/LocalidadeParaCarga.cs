@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -15,7 +16,7 @@ internal readonly record struct LocalidadeParaCarga(
     string Uf,
     string Nome,
     string NomeNormalizado,
-    CoordenadaDne Coordenada,
+    PosicaoGeografica Posicao,
     string? IdOrigemDne,
     string Versao)
 {
@@ -58,22 +59,22 @@ internal readonly record struct LocalidadeParaCarga(
     public Result<Distrito> CriarDistrito() =>
         Distrito.Importar(
             CidadeId, Uf, Nome, NomeNormalizado,
-            Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto, IdOrigemDne, Versao);
+            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
 
     public Result Atualizar(Distrito distrito) =>
         distrito.Atualizar(
             CidadeId, Uf, Nome, NomeNormalizado,
-            Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto, IdOrigemDne, Versao);
+            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
 
     public Result<Bairro> CriarBairro() =>
         Bairro.Importar(
             CidadeId, Uf, Nome, NomeNormalizado,
-            Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto, IdOrigemDne, Versao);
+            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
 
     public Result Atualizar(Bairro bairro) =>
         bairro.Atualizar(
             CidadeId, Uf, Nome, NomeNormalizado,
-            Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto, IdOrigemDne, Versao);
+            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
 
     private static string? NormalizarObrigatorio(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : GeoTexto.NormalizarTexto(valor);

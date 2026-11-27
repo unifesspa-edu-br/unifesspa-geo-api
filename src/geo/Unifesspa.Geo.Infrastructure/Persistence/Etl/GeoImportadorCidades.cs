@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.NomesOficiais;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
@@ -295,7 +296,7 @@ internal sealed class GeoImportadorCidades
         ChaveDaCidade Chave,
         string Nome,
         CidadeCru Cru,
-        CoordenadaDne Coordenada,
+        PosicaoGeografica Posicao,
         CidadeTerritorioCru? Territorio,
         string Versao)
     {
@@ -307,7 +308,7 @@ internal sealed class GeoImportadorCidades
         public Result<Cidade> Criar() =>
             Cidade.Importar(
                 Chave.EstadoId, Chave.Uf, Chave.CodigoIbge, Nome, NomeNormalizado, Cru.Ddd,
-                Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto,
+                Posicao.Latitude, Posicao.Longitude, Posicao.Ponto,
                 Territorio?.MesorregiaoCodigo, Territorio?.MesorregiaoNome, Territorio?.MicrorregiaoCodigo, Territorio?.MicrorregiaoNome,
                 Territorio?.RegiaoIntermediariaCodigo, Territorio?.RegiaoIntermediariaNome, Territorio?.RegiaoImediataCodigo, Territorio?.RegiaoImediataNome,
                 Versao);
@@ -315,7 +316,7 @@ internal sealed class GeoImportadorCidades
         public Result Atualizar(Cidade existente) =>
             existente.Atualizar(
                 Chave.EstadoId, Chave.Uf, Nome, NomeNormalizado, Cru.Ddd,
-                Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto,
+                Posicao.Latitude, Posicao.Longitude, Posicao.Ponto,
                 Territorio?.MesorregiaoCodigo, Territorio?.MesorregiaoNome, Territorio?.MicrorregiaoCodigo, Territorio?.MicrorregiaoNome,
                 Territorio?.RegiaoIntermediariaCodigo, Territorio?.RegiaoIntermediariaNome, Territorio?.RegiaoImediataCodigo, Territorio?.RegiaoImediataNome,
                 Versao);

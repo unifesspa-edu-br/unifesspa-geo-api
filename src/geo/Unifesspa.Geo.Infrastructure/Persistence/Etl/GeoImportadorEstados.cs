@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
@@ -109,7 +110,7 @@ internal sealed class GeoImportadorEstados
         }
 
         indicadores.TryGetValue(uf, out EstadoIndicadorCru? indicador);
-        CoordenadaDne c = CoordenadaDne.De(cru.Latitude, cru.Longitude);
+        PosicaoGeografica c = CoordenadaDne.De(cru.Latitude, cru.Longitude);
         return Upsert(
             uf, jaVistos, existentes,
             () => Estado.Importar(brasilId, uf, cru.Nome ?? string.Empty, cru.NomeSemAcento, cru.Regiao, cru.Capital, indicador?.CodigoIbge, c.Latitude, c.Longitude, c.Ponto, cru.FaixaIni, cru.FaixaFim, versao),
@@ -199,7 +200,7 @@ internal sealed class GeoImportadorEstados
     {
         // Upsert por chave natural (estado, CEP inicial, CEP final), em vez de apagar e
         // inserir: preserva o Id da faixa entre cargas, e a repetição na própria fonte
-        // não estoura a restrição de unicidade. Faixa que some numa release nova é
+        // não estoura a restrição de unicidade. Faixa que some numa versão nova é
         // tratada pela política de vigência da atualização periódica.
         Guid[] estadoIds = [.. estadosPorUf.Values];
         Dictionary<string, EstadoFaixaCep> existentes =
