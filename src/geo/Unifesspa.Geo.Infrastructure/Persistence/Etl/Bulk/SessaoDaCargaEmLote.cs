@@ -1,103 +1,56 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
 
-using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore;
 
 using Npgsql;
 
 /// <summary>
-/// Conexão única e dedicada da carga em lote. A cópia, a mesclagem e a criação dos índices
-/// precisam compartilhar a mesma sessão do banco, e a conexão nunca abre transação:
-/// <c>CREATE INDEX CONCURRENTLY</c> não roda dentro de uma. Todo comando criado aqui recebe o
-/// prazo configurado, menos a cópia binária, que não tem prazo.
+/// Sessão de execução dos comandos da carga em lote sobre a conexão e a transação
+/// ativas do <see cref="GeoDbContext"/>. Os comandos comuns herdam a transação do
+/// contexto e o prazo configurado; a cópia binária usa a mesma conexão e, por isso,
+/// a mesma transação.
 /// </summary>
-[SuppressMessage(
-    "Security",
-    "CA2100:Review SQL queries for security vulnerabilities",
-    Justification = "Todo o SQL que chega a esta classe é literal de código (criação e remoção de tabelas temporárias, índices, cópia e mesclagem constantes); os nomes de tabela vêm de uma lista fixa de literais. O único valor parametrizado (@now) é um NpgsqlParameter. Não há entrada de usuário — COPY e DDL não são parametrizáveis por identificador.")]
-internal sealed class SessaoDaCargaEmLote : IAsyncDisposable
+internal sealed class SessaoDaCargaEmLote
 {
-    private readonly NpgsqlDataSource _fonteDeDados;
-    private readonly NpgsqlConnection _conexao;
-    private readonly int _prazoDosComandosEmSegundos;
+    private readonly GeoDbContext _contexto;
 
-    private SessaoDaCargaEmLote(NpgsqlDataSource fonteDeDados, NpgsqlConnection conexao, int prazoDosComandosEmSegundos)
+    private SessaoDaCargaEmLote(GeoDbContext contexto)
     {
-        _fonteDeDados = fonteDeDados;
-        _conexao = conexao;
-        _prazoDosComandosEmSegundos = prazoDosComandosEmSegundos;
+        _contexto = contexto;
     }
 
-    public static async Task<SessaoDaCargaEmLote> AbrirAsync(ConfiguracaoDaCargaEmLote configuracao, CancellationToken cancellationToken)
+    public static SessaoDaCargaEmLote DaTransacaoAtiva(GeoDbContext contexto, ConfiguracaoDaCargaEmLote configuracao)
     {
+        ArgumentNullException.ThrowIfNull(contexto);
         ArgumentNullException.ThrowIfNull(configuracao);
 
-        NpgsqlDataSource fonteDeDados = CriarFonteDeDados(configuracao.TextoDeConexao);
-        try
+        if (contexto.Database.CurrentTransaction is null)
         {
-            NpgsqlConnection conexao = await fonteDeDados.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            return new SessaoDaCargaEmLote(fonteDeDados, conexao, configuracao.PrazoDosComandosEmSegundos);
+            throw new InvalidOperationException("A carga em lote exige uma transação ativa no GeoDbContext.");
         }
-        catch
-        {
-            await fonteDeDados.DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
+
+        contexto.Database.SetCommandTimeout(configuracao.PrazoDosComandosEmSegundos);
+        return new SessaoDaCargaEmLote(contexto);
     }
 
-    public async Task ExecutarAsync(string comando, CancellationToken cancellationToken)
-    {
-        NpgsqlCommand npgsqlComando = CriarComando(comando);
-        await using (npgsqlComando.ConfigureAwait(false))
-        {
-            await npgsqlComando.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-    }
+    public Task ExecutarAsync(string comando, CancellationToken cancellationToken) =>
+        _contexto.Database.ExecuteSqlRawAsync(comando, cancellationToken);
 
     public async Task<long> ContarLinhasAsync(string tabela, CancellationToken cancellationToken)
     {
-        // O nome da tabela é literal de código (lista fixa), não entrada de usuário.
-        NpgsqlCommand comando = CriarComando($"SELECT count(*) FROM {tabela}");
-        await using (comando.ConfigureAwait(false))
-        {
-            object? resultado = await comando.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-            return resultado is long linhas ? linhas : 0;
-        }
+        string consulta = $"SELECT count(*) AS \"Value\" FROM {tabela}";
+        List<long> linhas = await _contexto.Database
+            .SqlQueryRaw<long>(consulta)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return linhas.Count == 0 ? 0 : linhas[0];
     }
 
-    public async Task<long> MesclarAsync(string comandoDeMesclagem, DateTimeOffset instante, CancellationToken cancellationToken)
-    {
-        NpgsqlCommand comando = CriarComando(comandoDeMesclagem);
-        await using (comando.ConfigureAwait(false))
-        {
-            comando.Parameters.AddWithValue("now", instante);
-            return await comando.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-    }
+    public async Task<long> MesclarAsync(string comandoDeMesclagem, DateTimeOffset instante, CancellationToken cancellationToken) =>
+        await _contexto.Database
+            .ExecuteSqlRawAsync(comandoDeMesclagem, [new NpgsqlParameter("now", instante)], cancellationToken)
+            .ConfigureAwait(false);
 
     public Task<NpgsqlBinaryImporter> IniciarCopiaAsync(string comandoDeCopia, CancellationToken cancellationToken) =>
-        _conexao.BeginBinaryImportAsync(comandoDeCopia, cancellationToken);
-
-    public async ValueTask DisposeAsync()
-    {
-        await _conexao.DisposeAsync().ConfigureAwait(false);
-        await _fonteDeDados.DisposeAsync().ConfigureAwait(false);
-    }
-
-    // Fonte de dados própria com NetTopologySuite em modo geography: a cópia binária escreve o
-    // Point como geography(Point,4326), igual à coluna. No modo padrão (geometry) o EWKB seria
-    // incompatível com ela.
-    private static NpgsqlDataSource CriarFonteDeDados(string textoDeConexao)
-    {
-        NpgsqlDataSourceBuilder construtor = new(textoDeConexao);
-        construtor.UseNetTopologySuite(geographyAsDefault: true);
-        return construtor.Build();
-    }
-
-    private NpgsqlCommand CriarComando(string texto)
-    {
-        NpgsqlCommand comando = _conexao.CreateCommand();
-        comando.CommandTimeout = _prazoDosComandosEmSegundos;
-        comando.CommandText = texto;
-        return comando;
-    }
+        ((NpgsqlConnection)_contexto.Database.GetDbConnection()).BeginBinaryImportAsync(comandoDeCopia, cancellationToken);
 }

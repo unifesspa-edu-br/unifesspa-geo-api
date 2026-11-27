@@ -1,7 +1,6 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 using Unifesspa.Geo.Domain.Entities;
@@ -13,17 +12,10 @@ using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
 /// <summary>
 /// Importa o topo da hierarquia do Geo — País (só Brasil), Estado (+indicador
 /// +faixas) e Cidade (+territorial embutido, +indicador, +faixas) — a partir do
-/// dataset DNE (ADR-0092). Toda a carga roda numa <strong>única transação</strong>:
-/// <c>SaveChanges</c> por nível, mas commit só no fim — uma falha no meio faz
-/// rollback total, evitando publicar uma release mista. O upsert por chave natural
-/// (<c>Importar</c>/<c>Atualizar</c> do domínio) torna a recarga idempotente.
+/// dataset DNE (ADR-0092), executando dentro da transação ativa do <see cref="GeoDbContext"/>.
+/// O upsert por chave natural (<c>Importar</c>/<c>Atualizar</c> do domínio) torna a recarga
+/// idempotente.
 /// </summary>
-/// <remarks>
-/// Esta Story (#672) faz <strong>carga inicial + upsert</strong>. A política de
-/// <em>stale</em> (marcar <c>vigente=false</c> para chaves ausentes numa nova
-/// release) é da Story de atualização periódica (#674) — aqui todo registro tocado
-/// nasce/permanece vigente.
-/// </remarks>
 internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
 {
     private readonly GeoDbContext _contexto;
@@ -48,20 +40,9 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
 
         RelatorioImportacao relatorio = new(fonte.Versao);
         GeoEtlLog.LogCargaIniciada(_logger, fonte.Versao);
-        await ImportarEmTransacaoAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
+        await ImportarHierarquiaAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
         GeoEtlLog.CargaConcluida(_logger, relatorio);
         return relatorio;
-    }
-
-    private async Task ImportarEmTransacaoAsync(IGeoFonteDados fonte, RelatorioImportacao relatorio, CancellationToken cancellationToken)
-    {
-        IDbContextTransaction transacao =
-            await _contexto.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using (transacao.ConfigureAwait(false))
-        {
-            await ImportarHierarquiaAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
-            await transacao.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private async Task ImportarHierarquiaAsync(IGeoFonteDados fonte, RelatorioImportacao relatorio, CancellationToken cancellationToken)
@@ -69,7 +50,7 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
         Guid brasilId = await ImportarPaisAsync(fonte, relatorio.Tabela("pais"), cancellationToken).ConfigureAwait(false);
         if (brasilId == Guid.Empty)
         {
-            // País-âncora (Brasil) ausente no dataset: sem ele estados/cidades ficariam
+            // País de referência (Brasil) ausente no dataset: sem ele estados/cidades ficariam
             // órfãos e a carga retornaria verde-vazia, indistinguível de uma base
             // legitimamente vazia. Sinaliza explicitamente o caso.
             GeoEtlLog.LogBrasilAusente(_logger, fonte.Versao);

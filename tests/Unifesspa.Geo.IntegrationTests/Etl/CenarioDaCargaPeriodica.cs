@@ -1,0 +1,169 @@
+namespace Unifesspa.Geo.IntegrationTests.Etl;
+
+using System.Text.Json;
+
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
+using NSubstitute;
+
+using Unifesspa.Geo.Application.Abstractions;
+using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Infrastructure.Observability;
+using Unifesspa.Geo.Infrastructure.Persistence;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
+using Unifesspa.Geo.IntegrationTests.Infrastructure;
+
+/// <summary>
+/// Apoio das classes de teste da atualização periódica da carga: monta o executor da carga
+/// real sobre o banco da coleção, com um relógio de teste que avança a cada execução, e traz
+/// as versões fictícias usadas pelos cenários. Usado por composição.
+/// </summary>
+internal sealed class CenarioDaCargaPeriodica
+{
+    public const string Maraba = "1500402";
+    public const string SaoPaulo = "3550308";
+    public const string CepMaraba = "68500000";
+    public const string CepSaoPaulo = "01000000";
+
+    public static readonly JsonSerializerOptions RelatorioJsonCamelCase =
+        new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    private readonly GeoPostgisFixture _fixture;
+
+    public CenarioDaCargaPeriodica(GeoPostgisFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    public RelogioFixo Relogio { get; } = new();
+
+    public GeoDbContext CriarContexto() => _fixture.CreateDbContext(Relogio);
+
+    public async Task<Guid> CriarExecucaoAsync(string versao)
+    {
+        await using GeoDbContext ctx = CriarContexto();
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao
+            .Iniciar(versao, "teste", Relogio.GetUtcNow())
+            .Value!;
+        ctx.ImportacaoExecucoes.Add(execucao);
+        await ctx.SaveChangesAsync();
+        return execucao.Id;
+    }
+
+    public Task ExecutarAsync(Guid execucaoId, IGeoFonteDadosFactory fonteFactory, IGeoCepCacheInvalidador cache) =>
+        ExecutarComLazyAsync(execucaoId, fonteFactory, new Lazy<IGeoCepCacheInvalidador>(() => cache));
+
+    // Cada execução começa depois da anterior: a marcação de não vigentes compara os
+    // carimbos gravados com o instante em que a carga iniciou.
+    public async Task ExecutarComLazyAsync(Guid execucaoId, IGeoFonteDadosFactory fonteFactory, Lazy<IGeoCepCacheInvalidador> cacheLazy)
+    {
+        Relogio.Avancar(TimeSpan.FromMinutes(1));
+        await using GeoDbContext ctx = CriarContexto();
+        using GeoEtlMetrics metricas = new();
+        CargaDaImportacao executor = CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
+        CargaReservada carga = await ReservarAsync(execucaoId);
+        await executor.ExecutarAsync(carga, CancellationToken.None);
+    }
+
+    public Task<CargaReservada> ReservarAsync(Guid execucaoId) =>
+        TravaDaCargaParaTeste.ReservarAsync(_fixture.ConnectionString, execucaoId);
+
+    public CargaDaImportacao CriarExecutor(
+        GeoDbContext ctx,
+        IGeoFonteDadosFactory fonteFactory,
+        Lazy<IGeoCepCacheInvalidador> cacheLazy,
+        GeoEtlMetrics metricas)
+    {
+        IConfiguration configuracao = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString })
+            .Build();
+
+        return new CargaDaImportacao(
+            ctx,
+            CriarImportadorVersao(ctx, fonteFactory, configuracao),
+            CriarFinalizacao(cacheLazy, metricas),
+            Relogio,
+            Options.Create(new EtlOpcoes()),
+            NullLogger<CargaDaImportacao>.Instance);
+    }
+
+    public async Task LimparAsync()
+    {
+        await using GeoDbContext ctx = _fixture.CreateDbContext();
+        await ctx.Database.ExecuteSqlRawAsync(
+            "TRUNCATE TABLE pais, logradouro_complemento, cep_grande_usuario, geo_importacao_execucao CASCADE");
+    }
+
+    public static FonteEmMemoria FonteCompleta(string versao)
+    {
+        FonteEmMemoria fonte = new() { Versao = versao };
+
+        fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
+        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
+        fonte.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
+        fonte.Cidades.Add(DadosDne.Cidade(SaoPaulo, "São Paulo", "SP", ddd: "11"));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(2, SaoPaulo));
+
+        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
+        fonte.Distritos.Add(DadosDne.Distrito(20, "Centro", 2));
+        fonte.Logradouros.Add(DadosDne.Logradouro(CepMaraba, "Rua A", 1, distritoIdDne: 10));
+        fonte.Logradouros.Add(DadosDne.Logradouro(CepSaoPaulo, "Av Paulista", 2, distritoIdDne: 20));
+
+        return fonte;
+    }
+
+    // Versão seguinte sem São Paulo (cidade + CEP somem) — exercita a marcação de não vigentes.
+    public static FonteEmMemoria FonteSomenteMaraba(string versao)
+    {
+        FonteEmMemoria fonte = new() { Versao = versao };
+
+        fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
+        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
+        fonte.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
+
+        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
+        fonte.Logradouros.Add(DadosDne.Logradouro(CepMaraba, "Rua A", 1, distritoIdDne: 10));
+
+        return fonte;
+    }
+
+    private ImportadorDaVersaoDne CriarImportadorVersao(
+        GeoDbContext ctx,
+        IGeoFonteDadosFactory fonteFactory,
+        IConfiguration configuracao)
+    {
+        GeoImportadorPaisEstadoCidade topo = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
+        GeoImportadorDistritoBairro distritoBairro = new(ctx);
+        ImportadorDeLogradourosPorCopia logradouro = new(ctx, configuracao, Relogio, NullLogger<ImportadorDeLogradourosPorCopia>.Instance);
+        GeoImportadorLocalidades folhas = new(distritoBairro, logradouro, NullLogger<GeoImportadorLocalidades>.Instance);
+        return new ImportadorDaVersaoDne(ctx, topo, folhas, fonteFactory, Relogio);
+    }
+
+    private FinalizacaoDaCargaDne CriarFinalizacao(
+        Lazy<IGeoCepCacheInvalidador> cacheLazy,
+        GeoEtlMetrics metricas)
+    {
+        ServiceCollection services = new();
+        services.AddScoped(_ => CriarContexto());
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        return new FinalizacaoDaCargaDne(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            cacheLazy,
+            metricas,
+            Relogio,
+            NullLogger<FinalizacaoDaCargaDne>.Instance);
+    }
+}

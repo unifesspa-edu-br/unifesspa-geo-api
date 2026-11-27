@@ -6,23 +6,22 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 
 /// <summary>
-/// Orquestra a carga das folhas do Geo (ADR-0092, Story #673) em duas fases que commitam
-/// separadamente (o COPY em lote e o <c>CREATE INDEX CONCURRENTLY</c> não cabem numa
-/// transação única): (1) <see cref="GeoImportadorDistritoBairro"/> faz o upsert de
-/// Distrito/Bairro (+faixas) e grande usuário numa transação e devolve os mapas de FK;
-/// (2) <see cref="LogradouroCopyImporter"/> carrega complementos e logradouros em lote.
-/// O topo (País/Estado/Cidade, #672) deve estar carregado antes — a resolução de FK
+/// Orquestra a carga das folhas do Geo (ADR-0092) dentro da transação única:
+/// (1) <see cref="GeoImportadorDistritoBairro"/> faz o upsert de
+/// Distrito/Bairro (+faixas), grande usuário e CEP geral e devolve os mapas de FK;
+/// (2) <see cref="ImportadorDeLogradourosPorCopia"/> carrega complementos e logradouros em lote.
+/// O topo (País/Estado/Cidade) deve estar carregado antes — a resolução de FK
 /// depende das cidades.
 /// </summary>
 internal sealed partial class GeoImportadorLocalidades : IGeoImportadorLocalidades
 {
     private readonly GeoImportadorDistritoBairro _distritoBairro;
-    private readonly LogradouroCopyImporter _logradouro;
+    private readonly ImportadorDeLogradourosPorCopia _logradouro;
     private readonly ILogger<GeoImportadorLocalidades> _logger;
 
     public GeoImportadorLocalidades(
         GeoImportadorDistritoBairro distritoBairro,
-        LogradouroCopyImporter logradouro,
+        ImportadorDeLogradourosPorCopia logradouro,
         ILogger<GeoImportadorLocalidades> logger)
     {
         ArgumentNullException.ThrowIfNull(distritoBairro);
@@ -34,26 +33,26 @@ internal sealed partial class GeoImportadorLocalidades : IGeoImportadorLocalidad
         _logger = logger;
     }
 
-    public async Task<RelatorioImportacao> ImportarAsync(IGeoFonteDados fonte, ModoCarga modo, CancellationToken cancellationToken)
+    public async Task<RelatorioImportacao> ImportarAsync(IGeoFonteDados fonte, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fonte);
 
         RelatorioImportacao relatorio = new(fonte.Versao);
-        LogCargaIniciada(_logger, fonte.Versao, modo);
+        LogCargaIniciada(_logger, fonte.Versao);
 
         ResolucaoLocalidades resolucao =
             await _distritoBairro.ImportarAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
 
-        await _logradouro.ImportarAsync(fonte, modo, resolucao, relatorio, cancellationToken).ConfigureAwait(false);
+        await _logradouro.ImportarAsync(fonte, resolucao, relatorio, cancellationToken).ConfigureAwait(false);
 
         LogCargaConcluida(_logger, fonte.Versao, relatorio.TotalInseridos, relatorio.TotalAtualizados, relatorio.TotalOrfaos, relatorio.TotalParsesDegradados);
 
         return relatorio;
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "ETL Geo: carga das folhas iniciada (versão {Versao}, modo {Modo}).")]
-    private static partial void LogCargaIniciada(ILogger logger, string versao, ModoCarga modo);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Geo: carga das folhas iniciada (versão {Versao}).")]
+    private static partial void LogCargaIniciada(ILogger logger, string versao);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "ETL Geo: carga das folhas concluída (versão {Versao}, inseridos={Inseridos}, atualizados={Atualizados}, órfãos={Orfaos}, degradados={Degradados}).")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Geo: carga das folhas concluída (versão {Versao}, inseridos={Inseridos}, atualizados={Atualizados}, órfãos={Orfaos}, degradados={Degradados}).")]
     private static partial void LogCargaConcluida(ILogger logger, string versao, int inseridos, int atualizados, int orfaos, int degradados);
 }

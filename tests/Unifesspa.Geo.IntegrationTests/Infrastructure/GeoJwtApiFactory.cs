@@ -38,7 +38,7 @@ public sealed class GeoJwtApiFactory : ApiFactoryBase<Program>
         new("Auth:Authority", _keycloak.Authority),
         new("Auth:Audience", KeycloakContainerFixture.Audience),
         new("Auth:ValidateAudience", "false"),
-        new("Geo:Etl:WorkerHabilitado", "false"),
+        new("Geo:Etl:ProcessoEmSegundoPlanoHabilitado", "false"),
         new("Redis:ConnectionString", string.Empty),
     ];
 }

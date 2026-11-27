@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 /// <summary>
 /// Fila in-process de disparos do ETL (Story #674): o endpoint admin / o seed
-/// enfileiram o Id da execução já registrada; o <see cref="GeoImportacaoBackgroundService"/>
+/// enfileiram a carga já registrada, com a trava consultiva; o <see cref="GeoImportacaoBackgroundService"/>
 /// consome e roda a carga fora do request (resposta <c>202 Accepted</c>).
 /// </summary>
 /// <remarks>
@@ -14,11 +14,11 @@ using System.Threading.Channels;
 /// </remarks>
 internal interface IGeoImportacaoFila
 {
-    /// <summary>Enfileira o Id de uma execução para processamento em segundo plano.</summary>
-    ValueTask EnfileirarAsync(Guid execucaoId, CancellationToken cancellationToken);
+    /// <summary>Enfileira uma carga reservada para processamento em segundo plano.</summary>
+    ValueTask EnfileirarAsync(CargaReservada carga, CancellationToken cancellationToken);
 
-    /// <summary>Sequência das execuções enfileiradas, em ordem de chegada.</summary>
-    IAsyncEnumerable<Guid> LerAsync(CancellationToken cancellationToken);
+    /// <summary>Sequência das cargas enfileiradas, em ordem de chegada.</summary>
+    IAsyncEnumerable<CargaReservada> LerAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Fecha o writer: novos <see cref="EnfileirarAsync"/> passam a lançar
@@ -28,11 +28,11 @@ internal interface IGeoImportacaoFila
     void Completar();
 
     /// <summary>
-    /// Drena de forma não-bloqueante (<c>TryRead</c>) os Ids ainda na fila — usado no
+    /// Drena de forma não-bloqueante (<c>TryRead</c>) as cargas ainda na fila — usado no
     /// desligamento do worker (#694) para marcar como falha as execuções enfileiradas e
-    /// não processadas, liberando o índice único parcial.
+    /// não processadas e soltar a trava de cada uma.
     /// </summary>
-    IReadOnlyList<Guid> DrenarRestante();
+    IReadOnlyList<CargaReservada> DrenarRestante();
 }
 
 /// <inheritdoc />
@@ -40,27 +40,27 @@ internal sealed class GeoImportacaoFila : IGeoImportacaoFila
 {
     // Capacidade pequena: o índice único parcial garante ≤1 carga em andamento, então a
     // fila raramente passa de um item. FullMode.Wait dá backpressure se ainda assim encher.
-    private readonly Channel<Guid> _canal = Channel.CreateBounded<Guid>(
+    private readonly Channel<CargaReservada> _canal = Channel.CreateBounded<CargaReservada>(
         new BoundedChannelOptions(16)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
         });
 
-    public ValueTask EnfileirarAsync(Guid execucaoId, CancellationToken cancellationToken) =>
-        _canal.Writer.WriteAsync(execucaoId, cancellationToken);
+    public ValueTask EnfileirarAsync(CargaReservada carga, CancellationToken cancellationToken) =>
+        _canal.Writer.WriteAsync(carga, cancellationToken);
 
-    public IAsyncEnumerable<Guid> LerAsync(CancellationToken cancellationToken) =>
+    public IAsyncEnumerable<CargaReservada> LerAsync(CancellationToken cancellationToken) =>
         _canal.Reader.ReadAllAsync(cancellationToken);
 
     public void Completar() => _canal.Writer.TryComplete();
 
-    public IReadOnlyList<Guid> DrenarRestante()
+    public IReadOnlyList<CargaReservada> DrenarRestante()
     {
-        List<Guid> restante = [];
-        while (_canal.Reader.TryRead(out Guid execucaoId))
+        List<CargaReservada> restante = [];
+        while (_canal.Reader.TryRead(out CargaReservada? carga))
         {
-            restante.Add(execucaoId);
+            restante.Add(carga);
         }
 
         return restante;
