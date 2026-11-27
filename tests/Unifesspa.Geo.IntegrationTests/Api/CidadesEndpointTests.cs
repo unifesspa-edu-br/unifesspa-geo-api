@@ -7,29 +7,29 @@ using System.Text.Json;
 
 using AwesomeAssertions;
 
-using Unifesspa.Geo.Domain.Entities;
-using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Endpoints de leitura autenticada de Cidades (#675) contra a API real + PostGIS.
-/// Read-only sem role administrativa. Cobre CA-02 a CA-08. A collection é serial;
-/// cada teste TRUNCA e semeia.
+/// Endpoints de leitura autenticada de cidades contra a API real e o PostGIS.
+/// Leitura sem papel administrativo. Cobre CA-02 a CA-08. A collection é serial;
+/// cada teste apaga e semeia.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
 public sealed class CidadesEndpointTests
 {
     private readonly GeoPostgisFixture _fixture;
+    private readonly CenarioDeCidades _cenario;
 
     public CidadesEndpointTests(GeoPostgisFixture fixture)
     {
         _fixture = fixture;
+        _cenario = new CenarioDeCidades(fixture);
     }
 
     [Fact(DisplayName = "CA-02: filtro por UF retorna só cidades da UF; UF inexistente é lista vazia (200)")]
     public async Task Cidades_FiltraPorUf()
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage soPara = await GeoReferenceSeed.Obter(client, "/api/cidades?uf=PA&limit=100");
@@ -49,7 +49,7 @@ public sealed class CidadesEndpointTests
     [InlineData("marabá")]
     public async Task Cidades_Busca_AcentoInsensivel(string termo)
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/cidades?q={Uri.EscapeDataString(termo)}&limit=100");
@@ -63,30 +63,18 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "CA-04: filtros uf+q são preservados no cursor (header Link de next)")]
     public async Task Cidades_FiltroMaisCursor_Persiste()
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // 'a' casa Marabá e Parauapebas (PA); Óbidos (PA, "obidos") NÃO casa.
         // limit=1 força paginação — exercita o filtro em cada página seguida.
         using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client, "/api/cidades?uf=PA&q=a&limit=1");
         pagina1.StatusCode.Should().Be(HttpStatusCode.OK);
-
         string? proximo = GeoReferenceSeed.ExtrairLink(pagina1, "next");
         proximo.Should().NotBeNull("há mais de uma cidade PA casando 'a'");
         proximo.Should().Contain("uf=PA").And.Contain("q=a");
-
-        // Percorre TODAS as páginas seguindo o cursor: o conjunto coletado deve ser
-        // exatamente {Marabá, Parauapebas} — Óbidos nunca aparece (prova que q segue
-        // filtrando após o cursor, não só na primeira página).
-        List<string> nomes = [.. LerNomes(await LerArrayAsync(pagina1))];
-        while (proximo is not null)
-        {
-            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
-            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
-            nomes.AddRange(LerNomes(await LerArrayAsync(pagina)));
-            proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
-        }
-
+        // Seguindo o cursor, o conjunto é {Marabá, Parauapebas}: Óbidos nunca aparece.
+        List<string> nomes = [.. LerNomes(await LerArrayAsync(pagina1)), .. await ListaDaApi.NomesDasPaginasAsync(client, proximo)];
         nomes.Should().BeEquivalentTo(["Marabá", "Parauapebas"]);
         nomes.Should().NotContain("Óbidos");
     }
@@ -94,18 +82,10 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "#700: lista de cidades vem ordenada alfabeticamente por nome, estável ao paginar")]
     public async Task Cidades_OrdenadasAlfabeticamente()
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
-        List<string> nomes = [];
-        string? proximo = "/api/cidades?limit=2";
-        while (proximo is not null)
-        {
-            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
-            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
-            nomes.AddRange(LerNomes(await LerArrayAsync(pagina)));
-            proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
-        }
+        List<string> nomes = await ListaDaApi.NomesDasPaginasAsync(client, "/api/cidades?limit=2");
 
         // Ordem por nome_normalizado: maraba < obidos < parauapebas < sao paulo.
         nomes.Should().Equal("Marabá", "Óbidos", "Parauapebas", "São Paulo");
@@ -114,31 +94,13 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "#700: cidade sem nome_normalizado ordena pelo fallback normalizado de nome")]
     public async Task Cidades_Ordenacao_NomeNormalizadoNulo_UsaFallbackDeNome()
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            Pais brasil = GeoReferenceSeed.NovoBrasil();
-            Estado para = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará");
-            Cidade acara = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1500800", "Acará", nomeNormalizado: "");
-            Cidade belem = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1501402", "Belém", nomeNormalizado: "belem");
-            Cidade zzz = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1599998", "Zzz", nomeNormalizado: "");
-            ctx.Paises.Add(brasil);
-            ctx.Estados.Add(para);
-            ctx.Cidades.AddRange(acara, belem, zzz);
-            await ctx.SaveChangesAsync();
-        }
-
+        await _cenario.GravarCidadesDoParaAsync(
+            para => new CidadeBuilder(para, "PA", "1500800", "Acará").ComNomeNormalizado(""),
+            para => new CidadeBuilder(para, "PA", "1501402", "Belém").ComNomeNormalizado("belem"),
+            para => new CidadeBuilder(para, "PA", "1599998", "Zzz").ComNomeNormalizado(""));
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
-        List<string> nomes = [];
-        string? proximo = "/api/cidades?limit=1";
-        while (proximo is not null)
-        {
-            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
-            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
-            nomes.AddRange(LerNomes(await LerArrayAsync(pagina)));
-            proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
-        }
+        List<string> nomes = await ListaDaApi.NomesDasPaginasAsync(client, "/api/cidades?limit=1");
 
         nomes.Should().Equal("Acará", "Belém", "Zzz");
     }
@@ -146,41 +108,11 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "#700: cidades homônimas (mesmo nome, UFs distintas) têm ordem estável por desempate de Id")]
     public async Task Cidades_Homonimas_OrdemEstavel()
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            Pais brasil = GeoReferenceSeed.NovoBrasil();
-            Estado pe = GeoReferenceSeed.NovoEstado(brasil.Id, "PE", "Pernambuco");
-            Estado ms = GeoReferenceSeed.NovoEstado(brasil.Id, "MS", "Mato Grosso do Sul");
-            Cidade bonitoPe = GeoReferenceSeed.NovaCidade(pe.Id, "PE", "2602605", "Bonito", nomeNormalizado: "bonito");
-            Cidade bonitoMs = GeoReferenceSeed.NovaCidade(ms.Id, "MS", "5002209", "Bonito", nomeNormalizado: "bonito");
-            ctx.Paises.Add(brasil);
-            ctx.Estados.AddRange(pe, ms);
-            ctx.Cidades.AddRange(bonitoPe, bonitoMs);
-            await ctx.SaveChangesAsync();
-        }
-
+        await _cenario.GravarCidadesHomonimasAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
-        async Task<List<string>> ColetarCodigosAsync()
-        {
-            List<string> codigos = [];
-            // limit=1 força paginar ENTRE os homônimos — exercita o desempate por Id no cursor.
-            string? proximo = "/api/cidades?limit=1";
-            while (proximo is not null)
-            {
-                using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
-                pagina.StatusCode.Should().Be(HttpStatusCode.OK);
-                JsonElement itens = await LerArrayAsync(pagina);
-                codigos.AddRange(itens.EnumerateArray().Select(c => c.GetProperty("codigoIbge").GetString()!));
-                proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
-            }
-
-            return codigos;
-        }
-
-        List<string> primeira = await ColetarCodigosAsync();
-        List<string> segunda = await ColetarCodigosAsync();
+        List<string> primeira = await ColetarCodigosAsync(client);
+        List<string> segunda = await ColetarCodigosAsync(client);
 
         primeira.Should().HaveCount(2).And.OnlyHaveUniqueItems();
         segunda.Should().Equal(primeira, "homônimos são desempatados por Id de forma estável entre execuções");
@@ -191,7 +123,7 @@ public sealed class CidadesEndpointTests
     [InlineData("_")]
     public async Task Cidades_Busca_MetacaractereLiteral(string termo)
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         // Sem escape, "%"/"_" casariam quase tudo. Com o escape do reader, são texto
@@ -205,45 +137,23 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "CA-05: detalhe por código IBGE traz territorial + indicador 1:1 + _links")]
     public async Task Cidade_Detalhe_PorCodigoIbge()
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cidades/1500402");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
-        JsonElement raiz = doc.RootElement;
-        raiz.GetProperty("codigoIbge").GetString().Should().Be("1500402");
-        raiz.GetProperty("nome").GetString().Should().Be("Marabá");
-        raiz.GetProperty("uf").GetString().Should().Be("PA");
-        raiz.GetProperty("mesorregiaoNome").GetString().Should().Be("Sudeste Paraense");
-
-        JsonElement indicador = raiz.GetProperty("indicador");
-        indicador.GetProperty("gentilico").GetString().Should().Be("marabaense");
-        indicador.GetProperty("idh").GetDecimal().Should().Be(0.668m);
-        indicador.GetProperty("aniversario").GetString().Should().Be("05/04");
-
-        JsonElement links = raiz.GetProperty("_links");
-        links.GetProperty("self").GetString().Should().Be("/api/cidades/1500402");
-        links.GetProperty("estado").GetString().Should().Be("/api/estados/PA");
-        links.GetProperty("collection").GetString().Should().Be("/api/cidades");
+        ConferirDadosTerritoriaisDeMaraba(doc.RootElement);
+        ConferirIndicadorDeMaraba(doc.RootElement.GetProperty("indicador"));
+        ConferirLinksDeMaraba(doc.RootElement.GetProperty("_links"));
     }
 
     [Fact(DisplayName = "CA-05: cidade sem indicador omite o campo indicador (null) sem erro")]
     public async Task Cidade_Detalhe_SemIndicador()
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            Pais brasil = GeoReferenceSeed.NovoBrasil();
-            Estado para = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará");
-            Cidade semIndicador = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1500701", "Abel Figueiredo");
-            ctx.Paises.Add(brasil);
-            ctx.Estados.Add(para);
-            ctx.Cidades.Add(semIndicador);
-            await ctx.SaveChangesAsync();
-        }
-
+        await _cenario.GravarCidadesDoParaAsync(
+            para => new CidadeBuilder(para, "PA", "1500701", "Abel Figueiredo"));
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cidades/1500701");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -256,7 +166,7 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "CA-06: código IBGE bem-formado e inexistente retorna 404")]
     public async Task Cidade_Detalhe_Inexistente_404()
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/cidades/9999999");
@@ -278,7 +188,7 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "CA-07: Accept vendor incompatível retorna 406; vendor cidade.v1 é aceito")]
     public async Task Cidades_VendorMime_406()
     {
-        await SemearAsync();
+        await _cenario.SemearAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpRequestMessage incompativel = new(HttpMethod.Get, "/api/cidades");
@@ -305,19 +215,9 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "Busca sobre nome_normalizado null: cidade não aparece na busca, mas aparece sem filtro")]
     public async Task Cidades_Busca_NomeNormalizadoNulo()
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            Pais brasil = GeoReferenceSeed.NovoBrasil();
-            Estado para = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará");
-            // nomeNormalizado explicitamente vazio → normalizado para null pela entidade.
-            Cidade semNorm = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1500800", "Acará", nomeNormalizado: "");
-            ctx.Paises.Add(brasil);
-            ctx.Estados.Add(para);
-            ctx.Cidades.Add(semNorm);
-            await ctx.SaveChangesAsync();
-        }
-
+        // nomeNormalizado explicitamente vazio → normalizado para null pela entidade.
+        await _cenario.GravarCidadesDoParaAsync(
+            para => new CidadeBuilder(para, "PA", "1500800", "Acará").ComNomeNormalizado(""));
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage busca = await GeoReferenceSeed.Obter(client, "/api/cidades?q=acara&limit=100");
@@ -332,19 +232,9 @@ public sealed class CidadesEndpointTests
     [Fact(DisplayName = "ADR-0092: cidade stale (vigente=false) não aparece na lista nem no detalhe")]
     public async Task Cidades_NaoVigente_NaoVaza()
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            Pais brasil = GeoReferenceSeed.NovoBrasil();
-            Estado para = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará");
-            Cidade vigente = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1500402", "Marabá");
-            Cidade stale = GeoReferenceSeed.NovaCidade(para.Id, "PA", "1599999", "Obsoleta", vigente: false);
-            ctx.Paises.Add(brasil);
-            ctx.Estados.Add(para);
-            ctx.Cidades.AddRange(vigente, stale);
-            await ctx.SaveChangesAsync();
-        }
-
+        await _cenario.GravarCidadesDoParaAsync(
+            para => new CidadeBuilder(para, "PA", "1500402", "Marabá"),
+            para => new CidadeBuilder(para, "PA", "1599999", "Obsoleta").ForaDeVigencia());
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage lista = await GeoReferenceSeed.Obter(client, "/api/cidades?limit=100");
@@ -356,37 +246,43 @@ public sealed class CidadesEndpointTests
         detalhe.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private async Task SemearAsync()
+    private static void ConferirDadosTerritoriaisDeMaraba(JsonElement raiz)
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using GeoDbContext ctx = _fixture.CreateDbContext();
+        raiz.GetProperty("codigoIbge").GetString().Should().Be("1500402");
+        raiz.GetProperty("nome").GetString().Should().Be("Marabá");
+        raiz.GetProperty("uf").GetString().Should().Be("PA");
+        raiz.GetProperty("mesorregiaoNome").GetString().Should().Be("Sudeste Paraense");
+    }
 
-        Pais brasil = GeoReferenceSeed.NovoBrasil();
-        Estado para = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará", regiao: "Norte", capital: "Belém");
-        Estado saoPaulo = GeoReferenceSeed.NovoEstado(brasil.Id, "SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo");
+    private static void ConferirIndicadorDeMaraba(JsonElement indicador)
+    {
+        indicador.GetProperty("gentilico").GetString().Should().Be("marabaense");
+        indicador.GetProperty("idh").GetDecimal().Should().Be(0.668m);
+        indicador.GetProperty("aniversario").GetString().Should().Be("05/04");
+    }
 
-        Cidade maraba = GeoReferenceSeed.NovaCidade(
-            para.Id, "PA", "1500402", "Marabá", nomeNormalizado: "maraba", ddd: "94",
-            latitude: -5.36867m, longitude: -49.11731m,
-            mesorregiaoNome: "Sudeste Paraense", microrregiaoNome: "Marabá",
-            regiaoIntermediariaNome: "Marabá", regiaoImediataNome: "Marabá");
-        Cidade parauapebas = GeoReferenceSeed.NovaCidade(
-            para.Id, "PA", "1505536", "Parauapebas", nomeNormalizado: "parauapebas", ddd: "94");
-        // Óbidos (PA) NÃO contém "a" no nome normalizado — prova negativa da busca q=a.
-        Cidade obidos = GeoReferenceSeed.NovaCidade(
-            para.Id, "PA", "1505106", "Óbidos", nomeNormalizado: "obidos", ddd: "93");
-        Cidade saoPauloCidade = GeoReferenceSeed.NovaCidade(
-            saoPaulo.Id, "SP", "3550308", "São Paulo", nomeNormalizado: "sao paulo", ddd: "11");
+    private static void ConferirLinksDeMaraba(JsonElement links)
+    {
+        links.GetProperty("self").GetString().Should().Be("/api/cidades/1500402");
+        links.GetProperty("estado").GetString().Should().Be("/api/estados/PA");
+        links.GetProperty("collection").GetString().Should().Be("/api/cidades");
+    }
 
-        CidadeIndicador indicadorMaraba = GeoReferenceSeed.NovoIndicador(
-            maraba.Id, gentilico: "marabaense", areaKm2: 15128.058m, populacaoResidente: 233669,
-            densidadeDemografica: 15.45m, idh: 0.668m, aniversario: "05/04");
+    // limit=1 força paginar ENTRE os homônimos — exercita o desempate por Id no cursor.
+    private static async Task<List<string>> ColetarCodigosAsync(HttpClient client)
+    {
+        List<string> codigos = [];
+        string? proximo = "/api/cidades?limit=1";
+        while (proximo is not null)
+        {
+            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
+            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
+            JsonElement itens = await LerArrayAsync(pagina);
+            codigos.AddRange(itens.EnumerateArray().Select(c => c.GetProperty("codigoIbge").GetString()!));
+            proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
+        }
 
-        ctx.Paises.Add(brasil);
-        ctx.Estados.AddRange(para, saoPaulo);
-        ctx.Cidades.AddRange(maraba, parauapebas, obidos, saoPauloCidade);
-        ctx.CidadeIndicadores.Add(indicadorMaraba);
-        await ctx.SaveChangesAsync();
+        return codigos;
     }
 
     private static async Task<JsonElement> LerArrayAsync(HttpResponseMessage resposta)
