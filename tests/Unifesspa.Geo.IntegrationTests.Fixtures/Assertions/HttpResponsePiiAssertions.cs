@@ -50,38 +50,44 @@ public static partial class HttpResponsePiiAssertions
         }
     }
 
-    private static string? FindMatchingField(JsonElement element, Regex pattern, string? path)
-    {
-        switch (element.ValueKind)
+    private static string? FindMatchingField(JsonElement element, Regex pattern, string? path) =>
+        element.ValueKind switch
         {
-            case JsonValueKind.String:
-                string? value = element.GetString();
-                return value is not null && pattern.IsMatch(value) ? path : null;
+            JsonValueKind.String => FindInString(element, pattern, path),
+            JsonValueKind.Object => FindInObject(element, pattern, path),
+            JsonValueKind.Array => FindInArray(element, pattern, path),
+            _ => null,
+        };
 
-            case JsonValueKind.Object:
-                foreach (JsonProperty prop in element.EnumerateObject())
-                {
-                    string childPath = path is null ? prop.Name : $"{path}.{prop.Name}";
-                    string? found = FindMatchingField(prop.Value, pattern, childPath);
-                    if (found is not null)
-                        return found;
-                }
-                break;
+    private static string? FindInString(JsonElement element, Regex pattern, string? path)
+    {
+        string? value = element.GetString();
+        return value is not null && pattern.IsMatch(value) ? path : null;
+    }
 
-            case JsonValueKind.Array:
-                int index = 0;
-                foreach (JsonElement item in element.EnumerateArray())
-                {
-                    string childPath = path is null ? $"[{index}]" : $"{path}[{index}]";
-                    string? found = FindMatchingField(item, pattern, childPath);
-                    if (found is not null)
-                        return found;
-                    index++;
-                }
-                break;
+    private static string? FindInObject(JsonElement element, Regex pattern, string? path)
+    {
+        foreach (JsonProperty prop in element.EnumerateObject())
+        {
+            string childPath = path is null ? prop.Name : $"{path}.{prop.Name}";
+            string? found = FindMatchingField(prop.Value, pattern, childPath);
+            if (found is not null)
+                return found;
+        }
 
-            default:
-                break;
+        return null;
+    }
+
+    private static string? FindInArray(JsonElement element, Regex pattern, string? path)
+    {
+        int index = 0;
+        foreach (JsonElement item in element.EnumerateArray())
+        {
+            string childPath = path is null ? $"[{index}]" : $"{path}[{index}]";
+            string? found = FindMatchingField(item, pattern, childPath);
+            if (found is not null)
+                return found;
+            index++;
         }
 
         return null;

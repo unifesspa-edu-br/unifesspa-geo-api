@@ -51,40 +51,55 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
             return Task.FromResult(AuthenticateResult.Fail("Invalid test token."));
         }
 
-        string[] roles = GetHeaderValues(RolesHeader);
+        return Task.FromResult(AuthenticateResult.Success(CriarTicket()));
+    }
+
+    private AuthenticationTicket CriarTicket()
+    {
+        ClaimsIdentity identity = new(CriarClaims(), SchemeName);
+        ClaimsPrincipal principal = new(identity);
+        return new AuthenticationTicket(principal, SchemeName);
+    }
+
+    private List<Claim> CriarClaims()
+    {
         List<Claim> claims =
         [
             new("name", GetHeaderValue(NameHeader, "Test User")),
             new("email", GetHeaderValue(EmailHeader, "test@unifesspa.edu.br")),
         ];
 
+        AdicionarSubject(claims);
+        AdicionarClaimOpcional(claims, "cpf", CpfHeader);
+        AdicionarClaimOpcional(claims, "nomeSocial", NomeSocialHeader);
+        AdicionarPapeis(claims);
+        return claims;
+    }
+
+    private void AdicionarSubject(List<Claim> claims)
+    {
         if (GetOptionalHeaderValue(SemSubjectHeader) is null)
         {
             claims.Add(new Claim("sub", GetHeaderValue(UserIdHeader, "test-user-id")));
         }
+    }
 
-        string? cpf = GetOptionalHeaderValue(CpfHeader);
-        if (cpf is not null)
+    private void AdicionarClaimOpcional(List<Claim> claims, string tipoDaClaim, string headerName)
+    {
+        string? valor = GetOptionalHeaderValue(headerName);
+        if (valor is not null)
         {
-            claims.Add(new Claim("cpf", cpf));
+            claims.Add(new Claim(tipoDaClaim, valor));
         }
+    }
 
-        string? nomeSocial = GetOptionalHeaderValue(NomeSocialHeader);
-        if (nomeSocial is not null)
-        {
-            claims.Add(new Claim("nomeSocial", nomeSocial));
-        }
-
+    private void AdicionarPapeis(List<Claim> claims)
+    {
+        string[] roles = GetHeaderValues(RolesHeader);
         if (roles.Length > 0)
         {
             claims.Add(new Claim("realm_access", JsonSerializer.Serialize(new { roles })));
         }
-
-        ClaimsIdentity identity = new(claims, SchemeName);
-        ClaimsPrincipal principal = new(identity);
-        AuthenticationTicket ticket = new(principal, SchemeName);
-
-        return Task.FromResult(AuthenticateResult.Success(ticket));
     }
 
     /// <summary>

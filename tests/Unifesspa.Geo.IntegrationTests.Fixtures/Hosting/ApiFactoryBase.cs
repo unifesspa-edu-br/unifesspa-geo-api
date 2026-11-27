@@ -109,70 +109,84 @@ public abstract class ApiFactoryBase<TEntryPoint> : WebApplicationFactory<TEntry
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseEnvironment("Development");
-
-        builder.ConfigureAppConfiguration((_, configurationBuilder) =>
-        {
-            // Observability:Enabled=false é injetado via env var no static ctor
-            // desta classe (ver explicação no XML doc) — ConfigureAppConfiguration
-            // roda em builder.Build() e seria tarde demais para o Program.cs ler
-            // antes de chamar AdicionarObservabilidade.
-            configurationBuilder.AddInMemoryCollection(GetConfigurationOverrides());
-        });
-
-        builder.ConfigureTestServices(services =>
-        {
-            ConfigureTestAuthentication(services);
-
-            if (DisableWolverineRuntimeForTests)
-            {
-                // Dois IHostedService produtivos precisam ser removidos juntos quando o
-                // Postgres não está disponível no test host (default da maioria das suites
-                // de integração que só exercitam o pipeline HTTP):
-                //
-                // 1. Wolverine registra o WolverineRuntime como IHostedService via factory
-                //    (ImplementationFactory != null, ImplementationType == null). A heurística
-                //    estável é casar pelo assembly da fábrica.
-                // 2. MigrationHostedService<TContext> (issue #344) é registrado por
-                //    AddDbContextMigrationsOnStartup<T>() e dispara MigrateAsync no StartAsync.
-                //    Sem PG real, falha com "Connection refused" e derruba o factory antes do
-                //    primeiro teste. Reconhecemos pelo ImplementationType genérico.
-                //
-                // Suites que exercitam outbox real (CascadingFixture) sobrescrevem
-                // DisableWolverineRuntimeForTests=false e provisionam o PG efêmero — nesse
-                // caso AMBOS os hosted services rodam contra o banco da fixture.
-                ServiceDescriptor[] hostedToRemove = [.. services
-                    .Where(d => d.ServiceType == typeof(IHostedService)
-                        && (
-                            (d.ImplementationFactory is not null
-                                && string.Equals(d.ImplementationFactory.Method.DeclaringType?.Assembly.GetName().Name, "Wolverine", StringComparison.Ordinal))
-                            || IsMigrationHostedService(d.ImplementationType)))];
-                foreach (ServiceDescriptor svc in hostedToRemove)
-                {
-                    services.Remove(svc);
-                }
-            }
-
-            // Filtro de health checks de infra externa — removidos por default porque a maioria
-            // das suites HTTP-only não tem PG/Redis rodando. Override
-            // InfraHealthCheckNamesToRemoveForTests => emptyset em fixtures que provisionam
-            // todas as deps. Aplicado via Configure<HealthCheckServiceOptions> que roda na
-            // pipeline de IServiceCollection — a remoção acontece antes do host materializar
-            // o IHealthCheckService.
-            ISet<string> namesToRemove = InfraHealthCheckNamesToRemoveForTests;
-            if (namesToRemove.Count > 0)
-            {
-                services.PostConfigure<HealthCheckServiceOptions>(opts =>
-                {
-                    HealthCheckRegistration[] toRemove = [.. opts.Registrations
-                        .Where(r => namesToRemove.Contains(r.Name))];
-                    foreach (HealthCheckRegistration reg in toRemove)
-                    {
-                        opts.Registrations.Remove(reg);
-                    }
-                });
-            }
-        });
+        builder.ConfigureAppConfiguration((_, configurationBuilder) => AdicionarSobrescritasDeConfiguracao(configurationBuilder));
+        builder.ConfigureTestServices(ConfigurarServicosDeTeste);
     }
+
+    /// <summary>
+    /// Aplica as sobrescritas de configuração do módulo. <c>Observability:Enabled=false</c> é
+    /// injetado via env var no static ctor desta classe (ver explicação no XML doc) —
+    /// <c>ConfigureAppConfiguration</c> roda em <c>builder.Build()</c> e seria tarde demais para o
+    /// <c>Program.cs</c> ler antes de chamar <c>AdicionarObservabilidade</c>.
+    /// </summary>
+    private void AdicionarSobrescritasDeConfiguracao(IConfigurationBuilder configurationBuilder) =>
+        configurationBuilder.AddInMemoryCollection(GetConfigurationOverrides());
+
+    private void ConfigurarServicosDeTeste(IServiceCollection services)
+    {
+        ConfigureTestAuthentication(services);
+        RemoverHostedServicesQueExigemPostgres(services);
+        RemoverHealthChecksDeInfraExterna(services);
+    }
+
+    /// <summary>
+    /// Dois IHostedService produtivos precisam ser removidos juntos quando o Postgres não está
+    /// disponível no test host (default da maioria das suites de integração que só exercitam o
+    /// pipeline HTTP):
+    /// 1. Wolverine registra o WolverineRuntime como IHostedService via factory
+    ///    (ImplementationFactory != null, ImplementationType == null). A heurística estável é casar
+    ///    pelo assembly da fábrica.
+    /// 2. MigrationHostedService&lt;TContext&gt; é registrado por AddDbContextMigrationsOnStartup&lt;T&gt;()
+    ///    e dispara MigrateAsync no StartAsync. Sem PG real, falha com "Connection refused" e derruba
+    ///    o factory antes do primeiro teste. Reconhecemos pelo ImplementationType genérico.
+    /// Suites que exercitam outbox real (CascadingFixture) sobrescrevem
+    /// DisableWolverineRuntimeForTests=false e provisionam o PG efêmero — nesse caso AMBOS os hosted
+    /// services rodam contra o banco da fixture.
+    /// </summary>
+    private void RemoverHostedServicesQueExigemPostgres(IServiceCollection services)
+    {
+        if (DisableWolverineRuntimeForTests)
+        {
+            ServiceDescriptor[] hostedToRemove = [.. services.Where(EhHostedServiceQueExigePostgres)];
+            foreach (ServiceDescriptor svc in hostedToRemove)
+            {
+                services.Remove(svc);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Filtro de health checks de infra externa — removidos por default porque a maioria das suites
+    /// HTTP-only não tem PG/Redis rodando. Override <c>InfraHealthCheckNamesToRemoveForTests</c> =&gt;
+    /// emptyset em fixtures que provisionam todas as deps. Aplicado via
+    /// <c>Configure&lt;HealthCheckServiceOptions&gt;</c> que roda na pipeline de IServiceCollection — a
+    /// remoção acontece antes do host materializar o IHealthCheckService.
+    /// </summary>
+    private void RemoverHealthChecksDeInfraExterna(IServiceCollection services)
+    {
+        ISet<string> namesToRemove = InfraHealthCheckNamesToRemoveForTests;
+        if (namesToRemove.Count > 0)
+        {
+            services.PostConfigure<HealthCheckServiceOptions>(opts => RemoverRegistros(opts, namesToRemove));
+        }
+    }
+
+    private static void RemoverRegistros(HealthCheckServiceOptions opts, ISet<string> namesToRemove)
+    {
+        HealthCheckRegistration[] toRemove = [.. opts.Registrations
+            .Where(r => namesToRemove.Contains(r.Name))];
+        foreach (HealthCheckRegistration reg in toRemove)
+        {
+            opts.Registrations.Remove(reg);
+        }
+    }
+
+    private static bool EhHostedServiceQueExigePostgres(ServiceDescriptor d) =>
+        d.ServiceType == typeof(IHostedService)
+        && (
+            (d.ImplementationFactory is not null
+                && string.Equals(d.ImplementationFactory.Method.DeclaringType?.Assembly.GetName().Name, "Wolverine", StringComparison.Ordinal))
+            || IsMigrationHostedService(d.ImplementationType));
 
     private static bool IsMigrationHostedService(Type? implementationType) =>
         implementationType is { IsGenericType: true }
