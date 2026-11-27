@@ -40,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Unifesspa.Geo.Infrastructure.Core.UnitTests" />
+    <InternalsVisibleTo Include="Unifesspa.Geo.IntegrationTests" />
   </ItemGroup>
 
 </Project>

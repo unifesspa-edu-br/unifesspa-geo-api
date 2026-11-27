@@ -47,7 +47,7 @@ public static class SerilogConfiguration
     /// no fim da linha (próxima ao <c>NewLine</c>), padrão amplamente
     /// reconhecido por regex log scrapers.</para>
     /// <para><strong>Visibilidade:</strong> <c>internal</c> deliberadamente — é detalhe
-    /// de configuração interna; o assembly <c>Unifesspa.Geo.Infrastructure.Core.UnitTests</c>
+    /// de configuração interna; o assembly <c>Unifesspa.Geo.IntegrationTests</c>
     /// recebe acesso via <c>InternalsVisibleTo</c> para sentinelas. Pattern consistente
     /// com <see cref="Middleware.CorrelationIdMiddleware.FormatoValidoPattern"/>.</para>
     /// </remarks>
