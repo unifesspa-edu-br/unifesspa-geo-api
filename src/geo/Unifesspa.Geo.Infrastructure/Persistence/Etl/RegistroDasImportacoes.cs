@@ -47,21 +47,13 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
         TimeProvider relogio,
         ILogger<RegistroDasImportacoes> logger)
     {
-        ArgumentNullException.ThrowIfNull(contexto);
-        ArgumentNullException.ThrowIfNull(encerramento);
-        ArgumentNullException.ThrowIfNull(fila);
-        ArgumentNullException.ThrowIfNull(trava);
-        ArgumentNullException.ThrowIfNull(arquivos);
-        ArgumentNullException.ThrowIfNull(relogio);
-        ArgumentNullException.ThrowIfNull(logger);
-
-        _contexto = contexto;
-        _encerramento = encerramento;
-        _fila = fila;
-        _trava = trava;
-        _arquivos = arquivos;
-        _relogio = relogio;
-        _logger = logger;
+        _contexto = contexto ?? throw new ArgumentNullException(nameof(contexto));
+        _encerramento = encerramento ?? throw new ArgumentNullException(nameof(encerramento));
+        _fila = fila ?? throw new ArgumentNullException(nameof(fila));
+        _trava = trava ?? throw new ArgumentNullException(nameof(trava));
+        _arquivos = arquivos ?? throw new ArgumentNullException(nameof(arquivos));
+        _relogio = relogio ?? throw new ArgumentNullException(nameof(relogio));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(
@@ -73,8 +65,7 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
 
         if (await _encerramento.HaCargaEmExecucaoAsync(cancellationToken).ConfigureAwait(false))
         {
-            LogRecusadoSemLerOCorpo(_logger);
-            return Result<EnvioDoPacoteRegistrado>.Failure(ErrosDoPacoteDne.EmAndamento());
+            return RecusarSemLerOCorpo();
         }
 
         Result<PacoteDneRecebido> recebido = await _arquivos
@@ -84,6 +75,12 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
         return recebido.IsFailure
             ? Result<EnvioDoPacoteRegistrado>.Failure(recebido.Error!)
             : await IniciarDoPacoteAsync(recebido.Value!, disparadoPor, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Result<EnvioDoPacoteRegistrado> RecusarSemLerOCorpo()
+    {
+        LogRecusadoSemLerOCorpo(_logger);
+        return Result<EnvioDoPacoteRegistrado>.Failure(ErrosDoPacoteDne.EmAndamento());
     }
 
     private async Task<Result<EnvioDoPacoteRegistrado>> IniciarDoPacoteAsync(
@@ -138,20 +135,23 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
         string disparadoPor,
         IAsyncDisposable trava)
     {
+        Result<GeoImportacaoExecucao>? criacao = null;
         try
         {
-            Result<GeoImportacaoExecucao> criacao = IniciarExecucao(pacote, disparadoPor);
-            if (criacao.IsFailure)
-            {
-                await trava.DisposeAsync().ConfigureAwait(false);
-            }
-
+            criacao = IniciarExecucao(pacote, disparadoPor);
             return criacao;
         }
-        catch
+        finally
+        {
+            await SoltarSeNaoCriadaAsync(trava, criacao).ConfigureAwait(false);
+        }
+    }
+
+    private static async ValueTask SoltarSeNaoCriadaAsync(IAsyncDisposable trava, Result<GeoImportacaoExecucao>? criacao)
+    {
+        if (criacao is not { IsSuccess: true })
         {
             await trava.DisposeAsync().ConfigureAwait(false);
-            throw;
         }
     }
 
@@ -233,9 +233,7 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
         if (ultimaAplicada is not null && string.CompareOrdinal(versao, ultimaAplicada) < 0)
         {
             LogVersaoNaoProgressiva(_logger, versao, ultimaAplicada);
-            return Result.Failure(new DomainError(
-                GeoImportacaoErrorCodes.VersaoNaoProgressiva,
-                $"A versão {versao} é anterior à última aplicada ({ultimaAplicada})."));
+            return Result.Failure(ErrosDoPacoteDne.VersaoNaoProgressiva(versao, ultimaAplicada));
         }
 
         return Result.Success();
@@ -284,9 +282,7 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
         {
             await MarcarFalhaNoEnfileiramentoAsync(execucao.Id).ConfigureAwait(false);
             LogNaoEnfileirada(_logger, execucao.Id, DiagnosticoDeExcecaoSanitizado.Descrever(ex));
-            return Result<EnvioDoPacoteRegistrado>.Failure(new DomainError(
-                GeoImportacaoErrorCodes.NaoEnfileirada,
-                "Não foi possível colocar a carga na fila porque o serviço está sendo encerrado."));
+            return Result<EnvioDoPacoteRegistrado>.Failure(ErrosDoPacoteDne.NaoEnfileirada());
         }
 
         LogDisparada(_logger, execucao.Id, execucao.VersaoDataset);
