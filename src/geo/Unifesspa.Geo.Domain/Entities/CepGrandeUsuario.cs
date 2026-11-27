@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Domain.Entities;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -9,7 +10,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// órgão/empresa com CEP próprio (ex.: UNESP). Reference data sem soft-delete
 /// (ADR-0092). Carrega só <see cref="Cep"/> + <see cref="Nome"/> (+ proveniência):
 /// <strong>não tem cidade/UF</strong> — a localização é resolvida por faixa de CEP
-/// no lookup (F4), não por FK aqui.
+/// na consulta, não por FK aqui.
 /// </summary>
 /// <remarks>O <see cref="Cep"/> é a chave natural UNIQUE (um grande usuário por CEP).</remarks>
 public sealed class CepGrandeUsuario : EntityBase
@@ -22,10 +23,10 @@ public sealed class CepGrandeUsuario : EntityBase
     /// <summary>Nome sem acentos (origem <c>*_sem_acento</c>), quando informado.</summary>
     public string? NomeNormalizado { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
-    /// <summary><see langword="false"/> quando o CEP some da release vigente (stale do ETL).</summary>
+    /// <summary><see langword="false"/> quando o CEP some da versão vigente (registro não vigente).</summary>
     public bool Vigente { get; private set; } = true;
 
     // Construtor privado para materialização do EF Core.
@@ -34,83 +35,63 @@ public sealed class CepGrandeUsuario : EntityBase
     }
 
     /// <summary>
-    /// Importa um CEP de grande usuário. Valores já tipados (parse no ETL). Valida o
-    /// mínimo: chave natural (<paramref name="cep"/>), <paramref name="nome"/> e
-    /// proveniência.
+    /// Importa um CEP de grande usuário. Valores já tipados (leitura tolerante na carga). Valida o
+    /// mínimo: chave natural (<paramref name="cep"/>), o nome em <paramref name="nome"/> e a
+    /// versão da base em <paramref name="proveniencia"/>.
     /// </summary>
     public static Result<CepGrandeUsuario> Importar(
         string cep,
-        string nome,
-        string? nomeNormalizado,
-        string versaoDataset,
-        bool vigente = true)
+        NomeComFormaDeBusca nome,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(cep);
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(cep))
+        DomainError? erro = Validar(cep, nome.Nome, proveniencia);
+        if (erro is not null)
         {
-            return Result<CepGrandeUsuario>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CepGrandeUsuarioCepObrigatorio,
-                "CEP do grande usuário é obrigatório."));
+            return Result<CepGrandeUsuario>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result<CepGrandeUsuario>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CepGrandeUsuarioNomeObrigatorio,
-                "Nome do grande usuário é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<CepGrandeUsuario>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CepGrandeUsuarioVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do grande usuário é obrigatória."));
-        }
-
-        var entidade = new CepGrandeUsuario
-        {
-            Cep = cep.Trim(),
-            Nome = nome.Trim(),
-            NomeNormalizado = GeoTexto.NormalizarBuscaOpcional(nomeNormalizado),
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var entidade = new CepGrandeUsuario { Cep = cep.Trim() };
+        entidade.Aplicar(nome, proveniencia);
 
         return Result<CepGrandeUsuario>.Success(entidade);
     }
 
     /// <summary>
-    /// Reaplica os dados de uma release sobre um CEP de grande usuário já existente
-    /// (upsert in place do ETL), preservando <see cref="EntityBase.Id"/> e a chave
-    /// natural <see cref="Cep"/>. Valida o mínimo <strong>antes</strong> de mutar.
+    /// Reaplica os dados de uma versão da base sobre um CEP de grande usuário já existente
+    /// (atualização pela chave natural da carga), preservando <see cref="EntityBase.Id"/> e a
+    /// chave natural <see cref="Cep"/>. Valida o mínimo <strong>antes</strong> de mutar.
     /// </summary>
-    public Result Atualizar(string nome, string? nomeNormalizado, string versaoDataset, bool vigente = true)
+    public Result Atualizar(NomeComFormaDeBusca nome, ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(nome))
+        DomainError? erro = Validar(Cep, nome.Nome, proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CepGrandeUsuarioNomeObrigatorio,
-                "Nome do grande usuário é obrigatório."));
+            return Result.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CepGrandeUsuarioVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do grande usuário é obrigatória."));
-        }
-
-        Nome = nome.Trim();
-        NomeNormalizado = GeoTexto.NormalizarBuscaOpcional(nomeNormalizado);
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(nome, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(string cep, string nome, ProvenienciaDaCarga proveniencia) =>
+        string.IsNullOrWhiteSpace(cep)
+            ? new DomainError(GeoReferenceDataErrorCodes.CepGrandeUsuarioCepObrigatorio, "CEP do grande usuário é obrigatório.")
+            : string.IsNullOrWhiteSpace(nome)
+                ? new DomainError(GeoReferenceDataErrorCodes.CepGrandeUsuarioNomeObrigatorio, "Nome do grande usuário é obrigatório.")
+                : proveniencia.TemVersao
+                    ? null
+                    : new DomainError(
+                        GeoReferenceDataErrorCodes.CepGrandeUsuarioVersaoDatasetObrigatoria,
+                        "Versão do dataset (proveniência) do grande usuário é obrigatória.");
+
+    private void Aplicar(NomeComFormaDeBusca nome, ProvenienciaDaCarga proveniencia)
+    {
+        (Nome, NomeNormalizado) = nome;
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }
