@@ -51,6 +51,8 @@ public sealed class CaminhoInexistenteTests : IClassFixture<GeoOpenApiFactory>
     [InlineData("/api/cidades", "POST", "GET")]
     [InlineData("/api/admin/geo/importacoes/abc-x7q", "POST", "GET")]
     [InlineData("/api/estados", "DELETE", "GET")]
+    [InlineData("/openapi/inexistente-x7q.json", "POST", "GET")]
+    [InlineData("/openapi/geo.json", "POST", "GET")]
     public async Task MetodoNaoAceito_Responde405ComOCodigoEAllow(string caminho, string metodo, string metodoPermitido)
     {
         using HttpClient cliente = _fabrica.CreateClient();
