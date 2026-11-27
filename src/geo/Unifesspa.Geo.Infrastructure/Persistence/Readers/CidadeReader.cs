@@ -24,6 +24,11 @@ using Unifesspa.Geo.Kernel.Pagination;
     Justification = "Instanciada via DI em GeoInfrastructureRegistration.")]
 internal sealed class CidadeReader : ICidadeReader
 {
+    private static readonly OrdenacaoDaListagem<Cidade> OrdemAlfabetica = new(
+        b => b.Ascending(c => c.NomeOrdenacao).Ascending(c => c.Id),
+        c => c.NomeOrdenacao,
+        static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id });
+
     private readonly GeoDbContext _dbContext;
 
     public CidadeReader(GeoDbContext dbContext)
@@ -123,9 +128,7 @@ internal sealed class CidadeReader : ICidadeReader
         CancellationToken cancellationToken) =>
         KeysetOrdenadoCursor.ApplyAsync(
             query,
-            b => b.Ascending(c => c.NomeOrdenacao).Ascending(c => c.Id),
-            c => c.NomeOrdenacao,
-            static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id },
+            OrdemAlfabetica,
             afterSortKey,
             afterId,
             limit,

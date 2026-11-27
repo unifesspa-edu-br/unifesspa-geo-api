@@ -25,6 +25,11 @@ using Unifesspa.Geo.Kernel.Pagination;
     Justification = "Instanciada via DI em GeoInfrastructureRegistration.")]
 internal sealed class EstadoReader : IEstadoReader
 {
+    private static readonly OrdenacaoDaListagem<Estado> OrdemAlfabetica = new(
+        b => b.Ascending(e => e.NomeOrdenacao).Ascending(e => e.Id),
+        e => e.NomeOrdenacao,
+        static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id });
+
     private readonly GeoDbContext _dbContext;
 
     public EstadoReader(GeoDbContext dbContext)
@@ -77,9 +82,7 @@ internal sealed class EstadoReader : IEstadoReader
         CancellationToken cancellationToken) =>
         KeysetOrdenadoCursor.ApplyAsync(
             query,
-            b => b.Ascending(e => e.NomeOrdenacao).Ascending(e => e.Id),
-            e => e.NomeOrdenacao,
-            static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id },
+            OrdemAlfabetica,
             afterSortKey,
             afterId,
             limit,

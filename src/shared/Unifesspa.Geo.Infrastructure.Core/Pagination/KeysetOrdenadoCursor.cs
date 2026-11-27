@@ -23,7 +23,8 @@ public sealed record KeysetOrdenadoPage<T>(
 /// filtrada</b>, usando o motor de seek da <c>MR.EntityFrameworkCore.KeysetPagination</c>
 /// sob a nossa camada de cursor opaco (ADR-0026). A chave de ordenação é definida pelo
 /// chamador (ex.: <c>b =&gt; b.Ascending(x =&gt; x.NomeOrdenacao).Ascending(x =&gt; x.Id)</c>),
-/// que também fornece como extrair a sort key de um item e como montar a âncora — assim o
+/// que também fornece como extrair a sort key de um item e como montar a âncora
+/// (<see cref="OrdenacaoDaListagem{T}"/>) — assim o
 /// <c>Id</c>-only (<see cref="CursorKeyset"/>) segue intocado para quem não ordena.
 /// </summary>
 /// <remarks>
@@ -39,9 +40,7 @@ public static class KeysetOrdenadoCursor
 {
     public static async Task<KeysetOrdenadoPage<T>> ApplyAsync<T>(
         IQueryable<T> filtered,
-        Action<KeysetPaginationBuilder<T>> buildKeyset,
-        Func<T, string> sortKeyDoItem,
-        Func<string, Guid, object> referenceDaAncora,
+        OrdenacaoDaListagem<T> ordenacao,
         string? afterSortKey,
         Guid? afterId,
         int limit,
@@ -50,44 +49,54 @@ public static class KeysetOrdenadoCursor
         where T : EntityBase
     {
         ArgumentNullException.ThrowIfNull(filtered);
-        ArgumentNullException.ThrowIfNull(buildKeyset);
-        ArgumentNullException.ThrowIfNull(sortKeyDoItem);
-        ArgumentNullException.ThrowIfNull(referenceDaAncora);
+        ArgumentNullException.ThrowIfNull(ordenacao);
 
-        KeysetPaginationDirection mrDirection = direction == PaginationDirection.Prev
+        KeysetPaginationContext<T> contexto = filtered.KeysetPaginate(
+            ordenacao.ConfigurarColunas,
+            DirecaoDoMotor(direction),
+            ordenacao.AncoraDaContinuacao(afterSortKey, afterId));
+
+        List<T> itens = await LerItensAsync(contexto, limit, cancellationToken).ConfigureAwait(false);
+        return await MontarPaginaAsync(contexto, itens, ordenacao).ConfigureAwait(false);
+    }
+
+    private static KeysetPaginationDirection DirecaoDoMotor(PaginationDirection direcao) =>
+        direcao == PaginationDirection.Prev
             ? KeysetPaginationDirection.Backward
             : KeysetPaginationDirection.Forward;
 
-        // Âncora completa (sort key + Id) ⇒ continuação; ausente ⇒ primeira página.
-        object? reference = afterSortKey is not null && afterId is not null
-            ? referenceDaAncora(afterSortKey, afterId.Value)
-            : null;
-
-        KeysetPaginationContext<T> contexto = filtered.KeysetPaginate(buildKeyset, mrDirection, reference);
-
+    private static async Task<List<T>> LerItensAsync<T>(
+        KeysetPaginationContext<T> contexto,
+        int limite,
+        CancellationToken cancellationToken)
+        where T : EntityBase
+    {
         List<T> itens = await contexto.Query
-            .Take(limit)
+            .Take(limite)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         // Backward devolve em ordem inversa; restaura a ordem ascendente canônica.
         contexto.EnsureCorrectOrder(itens);
+        return itens;
+    }
 
+    private static async Task<KeysetOrdenadoPage<T>> MontarPaginaAsync<T>(
+        KeysetPaginationContext<T> contexto,
+        List<T> itens,
+        OrdenacaoDaListagem<T> ordenacao)
+        where T : EntityBase
+    {
         if (itens.Count == 0)
-        {
             return new KeysetOrdenadoPage<T>(itens, Anterior: null, Proximo: null);
-        }
 
         // Flags exatas por EXISTS indexado (sem COUNT) — ADR-0089.
         bool temAnterior = await contexto.HasPreviousAsync(itens).ConfigureAwait(false);
         bool temProximo = await contexto.HasNextAsync(itens).ConfigureAwait(false);
 
-        T primeiro = itens[0];
-        T ultimo = itens[^1];
-
         return new KeysetOrdenadoPage<T>(
             itens,
-            Anterior: temAnterior ? (sortKeyDoItem(primeiro), primeiro.Id) : null,
-            Proximo: temProximo ? (sortKeyDoItem(ultimo), ultimo.Id) : null);
+            Anterior: temAnterior ? ordenacao.AncoraDoItem(itens[0]) : null,
+            Proximo: temProximo ? ordenacao.AncoraDoItem(itens[^1]) : null);
     }
 }
