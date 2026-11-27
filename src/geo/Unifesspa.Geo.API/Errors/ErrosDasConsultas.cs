@@ -1,5 +1,7 @@
 namespace Unifesspa.Geo.API.Errors;
 
+using System.Globalization;
+
 using Microsoft.AspNetCore.Http;
 
 using Unifesspa.Geo.API.Formatting;
@@ -33,6 +35,21 @@ internal static class ErrosDasConsultas
     public static readonly DomainErrorMapping TermoDeBuscaMuitoLongo = new(
         StatusCodes.Status400BadRequest, "uniplus.geo.busca.termo_muito_longo", "Termo de busca longo demais");
 
+    public static readonly DomainErrorMapping ParametrosDeProximidadeAusentes = new(
+        StatusCodes.Status400BadRequest, "uniplus.geo.proximidade.parametros_ausentes", "Parâmetros da consulta por proximidade ausentes");
+
+    public static readonly DomainErrorMapping LatitudeInvalida = new(
+        StatusCodes.Status400BadRequest, "uniplus.geo.proximidade.latitude_invalida", "Latitude fora da faixa");
+
+    public static readonly DomainErrorMapping LongitudeInvalida = new(
+        StatusCodes.Status400BadRequest, "uniplus.geo.proximidade.longitude_invalida", "Longitude fora da faixa");
+
+    public static readonly DomainErrorMapping RaioInvalido = new(
+        StatusCodes.Status400BadRequest, "uniplus.geo.proximidade.raio_invalido", "Raio fora da faixa");
+
+    public static readonly DomainErrorMapping LimiteInvalido = new(
+        StatusCodes.Status400BadRequest, "uniplus.geo.proximidade.limite_invalido", "Limite de resultados inválido");
+
     public static DomainError ErroCepFormatoInvalido() => new(
         CepFormatoInvalido.Code, "O CEP deve ter exatamente 8 dígitos (ex.: 01001000 ou 01001-000).");
 
@@ -53,4 +70,22 @@ internal static class ErrosDasConsultas
 
     public static DomainError ErroTermoDeBuscaMuitoLongo() => new(
         TermoDeBuscaMuitoLongo.Code, $"O parâmetro 'q' não pode exceder {TermoDeBusca.TamanhoMaximo} caracteres.");
+
+    public static DomainError ErroParametrosDeProximidadeAusentes() => new(
+        ParametrosDeProximidadeAusentes.Code, "Informe os parâmetros 'lat', 'long' e 'raioKm'.");
+
+    public static DomainError ErroLatitudeInvalida() => new(
+        LatitudeInvalida.Code, "A latitude deve estar entre -90 e 90 graus.");
+
+    public static DomainError ErroLongitudeInvalida() => new(
+        LongitudeInvalida.Code, "A longitude deve estar entre -180 e 180 graus.");
+
+    public static DomainError ErroRaioInvalido(double raioMaxKm) => new(
+        RaioInvalido.Code,
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"O raio (raioKm) deve ser maior que 0 e no máximo {raioMaxKm} km."));
+
+    public static DomainError ErroLimiteInvalido() => new(
+        LimiteInvalido.Code, "O parâmetro 'limit' deve ser maior que 0.");
 }
