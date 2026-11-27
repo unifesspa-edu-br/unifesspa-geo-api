@@ -6,6 +6,7 @@ using System.Text;
 
 using AwesomeAssertions;
 
+using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Errors;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.Kernel.Results;
@@ -97,19 +98,74 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         File.Exists(Path.Combine(_diretorio, execucao.ToString("N"))).Should().BeFalse();
     }
 
-    [Fact(DisplayName = "Zip com a imagem 0relacionamentos.jpg é aceito e a entrada de uma tabela abre para leitura")]
-    public async Task ZipComImagem_EhAceitoEEntradaAbre()
+    [Fact(DisplayName = "Formato de 202601: tabelas no topo e imagem jpg são aceitos e a entrada de uma tabela abre para leitura")]
+    public async Task ZipNoTopoComImagemJpg_EhAceitoEEntradaAbre()
     {
-        Dictionary<string, byte[]> entradas = EntradasDoPacote("202610");
+        Dictionary<string, byte[]> entradas = EntradasDoPacote("202601");
         entradas["0relacionamentos.jpg"] = [1, 2, 3];
         byte[] zip = MontarZip(entradas);
         PacoteDneRecebido recebido = await ReceberComSucessoAsync(zip, Guid.NewGuid(), zip.Length);
 
-        using ZipArchive aberto = ArquivoDoPacoteDne.AbrirZip(recebido.Caminho);
-        await using Stream entrada = await ArquivoDoPacoteDne.AbrirEntradaAsync(aberto, "202610", "cidade_faixa", CancellationToken.None);
-        List<object?[]> linhas = await LeituraDoArquivoSqlDne.LerTudoAsync(entrada, "cidade_faixa", versao: "202610");
+        await ConferirQueAEntradaAbreAsync(recebido, "202601");
+    }
 
-        linhas.Should().ContainSingle();
+    [Fact(DisplayName = "Formato de 202610: entrada da pasta, imagem png e tabelas dentro da pasta são aceitos e a carga abre a tabela na pasta")]
+    public async Task ZipNaPastaComEntradaDePastaEPng_EhAceitoEEntradaAbre()
+    {
+        byte[] zip = MontarZip(EntradasNaPasta("202610", "qualquer_pasta-1", comEntradaDePasta: true));
+        PacoteDneRecebido recebido = await ReceberComSucessoAsync(zip, Guid.NewGuid(), zip.Length);
+
+        recebido.Versao.Should().Be("202610");
+        await ConferirQueAEntradaAbreAsync(recebido, "202610");
+    }
+
+    [Fact(DisplayName = "Pasta sem a entrada da própria pasta é aceita")]
+    public async Task ZipNaPastaSemEntradaDePasta_EhAceito()
+    {
+        byte[] zip = MontarZip(EntradasNaPasta("202610", "postgresql", comEntradaDePasta: false));
+
+        PacoteDneRecebido recebido = await ReceberComSucessoAsync(zip, Guid.NewGuid(), zip.Length);
+
+        await ConferirQueAEntradaAbreAsync(recebido, "202610");
+    }
+
+    [Fact(DisplayName = "Mistura de tabelas no topo e na pasta é recusada no recebimento e o arquivo é apagado")]
+    public async Task ZipComTopoEPasta_EhRecusadoEApagado()
+    {
+        Dictionary<string, byte[]> entradas = EntradasNaPasta("202610", "postgresql", comEntradaDePasta: true);
+        entradas[NomeDaTabelaDne.Entrada("202610", "estado")] = [];
+        entradas.Remove("postgresql/" + NomeDaTabelaDne.Entrada("202610", "estado"));
+        Guid execucao = Guid.NewGuid();
+
+        Result<PacoteDneRecebido> resultado = await ReceberAsync(MontarZip(entradas), execucao, 5_000_000);
+
+        resultado.Error!.Message.Should().Contain("mesma pasta");
+        File.Exists(Path.Combine(_diretorio, execucao.ToString("N"))).Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "Entradas acima do limite configurado são recusadas no recebimento")]
+    public async Task EntradasAcimaDoLimiteConfigurado_SaoRecusadas()
+    {
+        byte[] zip = MontarZip(EntradasNaPasta("202610", "postgresql", comEntradaDePasta: true));
+        using MemoryStream fluxo = new(zip);
+
+        Result<PacoteDneRecebido> resultado = await new ArquivoDoPacoteDne(_diretorio, quantidadeMaximaDeEntradas: 16)
+            .ReceberAsync(fluxo, Guid.NewGuid(), zip.Length, CancellationToken.None);
+
+        resultado.Error!.Message.Should().Contain("mais de 16 entradas");
+    }
+
+    [Fact(DisplayName = "Abrir a entrada de uma tabela que o zip não tem falha com erro de operação")]
+    public async Task EntradaAusente_Falha()
+    {
+        Dictionary<string, byte[]> entradas = EntradasDoPacote("202610");
+        byte[] zip = MontarZip(entradas);
+        PacoteDneRecebido recebido = await ReceberComSucessoAsync(zip, Guid.NewGuid(), zip.Length);
+        using ZipArchive aberto = ArquivoDoPacoteDne.AbrirZip(recebido.Caminho);
+
+        Func<Task> abertura = async () => await ArquivoDoPacoteDne.AbrirEntradaAsync(aberto, "202601", "cidade_faixa", CancellationToken.None);
+
+        await abertura.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact(DisplayName = "Ao apagar, o arquivo some")]
@@ -121,6 +177,22 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         ArquivoDoPacoteDne.Apagar(recebido.Caminho);
 
         File.Exists(recebido.Caminho).Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "Falha antes de criar o arquivo chega como a exceção original, sem erro de remoção por cima")]
+    public async Task FalhaAntesDeCriarOArquivo_PreservaAExcecaoOriginal()
+    {
+        Directory.CreateDirectory(_diretorio);
+        string diretorioQueEUmArquivo = Path.Combine(_diretorio, "ocupado");
+        await File.WriteAllTextAsync(diretorioQueEUmArquivo, "arquivo comum");
+
+        Func<Task> recebimento = async () =>
+        {
+            using MemoryStream corpo = new([1, 2, 3]);
+            await new ArquivoDoPacoteDne(diretorioQueEUmArquivo).ReceberAsync(corpo, Guid.NewGuid(), 1024, CancellationToken.None);
+        };
+
+        (await recebimento.Should().ThrowAsync<IOException>()).Which.Should().NotBeOfType<DirectoryNotFoundException>();
     }
 
     [Fact(DisplayName = "Cancelamento durante a gravação apaga o arquivo")]
@@ -145,6 +217,32 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         TabelasDne.Nomes.ToDictionary(
             tabela => NomeDaTabelaDne.Entrada(versao, tabela),
             tabela => ConteudoDaTabela(tabela, versao));
+
+    private static Dictionary<string, byte[]> EntradasNaPasta(string versao, string pasta, bool comEntradaDePasta)
+    {
+        Dictionary<string, byte[]> entradas = [];
+        if (comEntradaDePasta)
+        {
+            entradas[$"{pasta}/"] = [];
+            entradas[$"{pasta}/0relacionamentos.png"] = [1, 2, 3];
+        }
+
+        foreach ((string nome, byte[] conteudo) in EntradasDoPacote(versao))
+        {
+            entradas[$"{pasta}/{nome}"] = conteudo;
+        }
+
+        return entradas;
+    }
+
+    private static async Task ConferirQueAEntradaAbreAsync(PacoteDneRecebido recebido, string versao)
+    {
+        using ZipArchive aberto = ArquivoDoPacoteDne.AbrirZip(recebido.Caminho);
+        await using Stream entrada = await ArquivoDoPacoteDne.AbrirEntradaAsync(aberto, versao, "cidade_faixa", CancellationToken.None);
+        List<object?[]> linhas = await LeituraDoArquivoSqlDne.LerTudoAsync(entrada, "cidade_faixa", versao: versao);
+
+        linhas.Should().ContainSingle();
+    }
 
     private static byte[] ConteudoDaTabela(string tabela, string versao)
     {

@@ -7,7 +7,7 @@ using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
-/// Trilha de uma execução do ETL DNE (Story #674): qual versão (<c>AAAAMM</c>) foi
+/// Trilha de uma execução do ETL DNE: qual versão (<c>AAAAMM</c>) foi
 /// carregada, quando, por quem e com qual resultado. É dado operacional do módulo
 /// (não reference data), <see cref="EntityBase"/> puro — sem soft-delete; cada
 /// carga é um fato append-only. O relatório por tabela (contadores, sem PII) é
@@ -26,13 +26,22 @@ public sealed class GeoImportacaoExecucao : EntityBase
     /// <summary>Estado atual da carga.</summary>
     public StatusImportacao Status { get; private set; }
 
-    /// <summary>Instante de início (relógio do orquestrador via <c>TimeProvider</c>).</summary>
+    /// <summary>Instante de início (relógio injetado via <c>TimeProvider</c>).</summary>
     public DateTimeOffset IniciadoEm { get; private set; }
 
     /// <summary>Instante de término (conclusão ou falha); <see langword="null"/> enquanto em andamento.</summary>
     public DateTimeOffset? ConcluidoEm { get; private set; }
 
-    /// <summary>Subject do administrador que disparou, ou <c>seed</c> no boot de desenvolvimento. Nunca PII de candidato.</summary>
+    /// <summary>
+    /// Resumo SHA-256 do pacote recebido (64 hexadecimais minúsculos); <see langword="null"/>
+    /// nas execuções anteriores ao envio do pacote pela API.
+    /// </summary>
+    public string? PacoteSha256 { get; private set; }
+
+    /// <summary>Tamanho em bytes do pacote recebido; <see langword="null"/> nas execuções anteriores ao envio pela API.</summary>
+    public long? PacoteTamanhoEmBytes { get; private set; }
+
+    /// <summary>Subject do administrador que disparou. Nunca PII de candidato.</summary>
     public string DisparadoPor { get; private set; } = string.Empty;
 
     /// <summary>Relatório por tabela (contadores, sem PII) serializado em JSON; preenchido ao terminar.</summary>
@@ -47,30 +56,30 @@ public sealed class GeoImportacaoExecucao : EntityBase
     }
 
     /// <summary>
-    /// Abre uma execução no estado <see cref="StatusImportacao.EmAndamento"/>. Valida o
-    /// formato da versão (AAAAMM) e a identificação do disparador antes de criar.
+    /// Abre uma execução no estado <see cref="StatusImportacao.EmAndamento"/> para o pacote
+    /// recebido. Valida o formato da versão do pacote (AAAAMM), o resumo SHA-256 e o tamanho,
+    /// e a identificação do disparador antes de criar.
     /// </summary>
-    /// <param name="versao">Release DNE no formato AAAAMM (6 dígitos, mês 01–12).</param>
-    /// <param name="disparadoPor">Subject do administrador ou <c>seed</c>.</param>
+    /// <param name="pacote">Pacote recebido: versão AAAAMM, resumo SHA-256 e tamanho em bytes.</param>
+    /// <param name="disparadoPor">Subject do administrador.</param>
     /// <param name="iniciadoEm">Instante de início (relógio injetado).</param>
-    public static Result<GeoImportacaoExecucao> Iniciar(string versao, string disparadoPor, DateTimeOffset iniciadoEm)
+    public static Result<GeoImportacaoExecucao> Iniciar(PacoteRecebido pacote, string disparadoPor, DateTimeOffset iniciadoEm)
     {
-        // Diferente das entidades reference data (criadas por ETL controlado), esta nasce de
-        // entrada da API — versão/disparador ausentes são erro de validação (→ 422), não de
-        // schema: null cai no IsNullOrWhiteSpace abaixo e vira Failure, sem lançar.
-        if (string.IsNullOrWhiteSpace(versao))
-        {
-            return Result<GeoImportacaoExecucao>.Failure(new DomainError(
-                GeoImportacaoErrorCodes.VersaoObrigatoria,
-                "Versão (AAAAMM) do dataset é obrigatória."));
-        }
+        ArgumentNullException.ThrowIfNull(pacote);
 
-        string versaoNormalizada = versao.Trim();
+        string versaoNormalizada = pacote.Versao?.Trim() ?? string.Empty;
         if (!EhVersaoValida(versaoNormalizada))
         {
             return Result<GeoImportacaoExecucao>.Failure(new DomainError(
                 GeoImportacaoErrorCodes.VersaoFormatoInvalido,
                 "Versão do dataset deve estar no formato AAAAMM (6 dígitos, mês 01–12)."));
+        }
+
+        if (!pacote.EhConsistente)
+        {
+            return Result<GeoImportacaoExecucao>.Failure(new DomainError(
+                GeoImportacaoErrorCodes.PacoteInvalido,
+                "O resumo SHA-256 e o tamanho do pacote recebido são obrigatórios."));
         }
 
         if (string.IsNullOrWhiteSpace(disparadoPor))
@@ -83,6 +92,8 @@ public sealed class GeoImportacaoExecucao : EntityBase
         var execucao = new GeoImportacaoExecucao
         {
             VersaoDataset = versaoNormalizada,
+            PacoteSha256 = pacote.Sha256,
+            PacoteTamanhoEmBytes = pacote.TamanhoEmBytes,
             DisparadoPor = disparadoPor.Trim(),
             Status = StatusImportacao.EmAndamento,
             IniciadoEm = iniciadoEm,

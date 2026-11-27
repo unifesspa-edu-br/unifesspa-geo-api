@@ -99,7 +99,11 @@ public static class GeoInfrastructureRegistration
         services.AddScoped<IGeoImportacaoService, RegistroDasImportacoes>();
         services.AddScoped<IGeoImportacaoExecutor, CargaDaImportacao>();
         services.AddSingleton<IGeoImportacaoFila, GeoImportacaoFila>();
-        services.AddSingleton(sp => new ArquivoDoPacoteDne(sp.GetRequiredService<IOptions<EtlOpcoes>>().Value.DiretorioDoPacote));
+        services.AddSingleton(sp =>
+        {
+            EtlOpcoes opcoes = sp.GetRequiredService<IOptions<EtlOpcoes>>().Value;
+            return new ArquivoDoPacoteDne(opcoes.DiretorioDoPacote, opcoes.QuantidadeMaximaDeEntradasDoPacote);
+        });
         services.AddSingleton<IFonteDaExecucaoDne, EsquemaDeCargaDne>();
         services.AddScoped<IGeoCepCacheInvalidador, RedisGeoCepCacheInvalidador>();
         // Lazy para o executor: difere a resolução da cadeia Redis (IConnectionMultiplexer

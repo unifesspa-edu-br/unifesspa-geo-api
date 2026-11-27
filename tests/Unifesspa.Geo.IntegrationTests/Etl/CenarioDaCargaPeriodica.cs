@@ -49,7 +49,7 @@ internal sealed class CenarioDaCargaPeriodica
     {
         await using GeoDbContext ctx = CriarContexto();
         GeoImportacaoExecucao execucao = GeoImportacaoExecucao
-            .Iniciar(versao, "teste", Relogio.GetUtcNow())
+            .Iniciar(PacotesDeTeste.Recebido(versao), "teste", Relogio.GetUtcNow())
             .Value!;
         ctx.ImportacaoExecucoes.Add(execucao);
         await ctx.SaveChangesAsync();

@@ -93,7 +93,7 @@ public sealed class ReconciliacaoComSeloDoCacheTests
         await using GeoDbContext contexto = _fixture.CreateDbContext();
         GeoImportacaoExecucao antiga = Concluida("202602", Instante);
         GeoImportacaoExecucao recente = Concluida("202603", Instante.AddDays(30));
-        GeoImportacaoExecucao andamento = GeoImportacaoExecucao.Iniciar("202604", "teste", Instante.AddDays(60)).Value!;
+        GeoImportacaoExecucao andamento = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202604"), "teste", Instante.AddDays(60)).Value!;
         contexto.ImportacaoExecucoes.AddRange(antiga, recente, andamento);
         await contexto.SaveChangesAsync();
         return (andamento.Id, antiga.Id, recente.Id);
@@ -101,7 +101,7 @@ public sealed class ReconciliacaoComSeloDoCacheTests
 
     private static GeoImportacaoExecucao Concluida(string versao, DateTimeOffset iniciadaEm)
     {
-        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(versao, "teste", iniciadaEm).Value!;
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(versao), "teste", iniciadaEm).Value!;
         execucao.Concluir(iniciadaEm.AddMinutes(10), "{}", "concluída");
         return execucao;
     }

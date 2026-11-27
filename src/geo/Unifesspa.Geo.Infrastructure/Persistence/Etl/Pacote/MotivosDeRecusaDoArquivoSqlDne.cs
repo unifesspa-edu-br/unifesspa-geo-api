@@ -5,6 +5,8 @@ internal static class MotivosDeRecusaDoArquivoSqlDne
 {
     public const string ArquivoAcimaDoLimite = "o arquivo descompactado ultrapassa o limite de tamanho.";
     public const string LinhaAcimaDoLimite = "a linha ultrapassa o limite de 64 KiB.";
+    public const string ComandoAcimaDoLimite = "o comando ultrapassa o limite de 64 KiB.";
+    public const string TextoSemFechamento = "o texto entre aspas não fecha em até 8 linhas.";
     public const string CodificacaoInvalida = "o arquivo não está em UTF-8 válido.";
     public const string ComandoForaDaGramatica = "comando fora da gramática aceita neste ponto do arquivo.";
     public const string CodigoAposComentario = "há texto depois do fim do comentário de bloco.";

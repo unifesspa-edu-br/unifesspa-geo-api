@@ -1234,28 +1234,20 @@
           "GeoImportacoes"
         ],
         "requestBody": {
+          "description": "Pacote dos Correios em formato zip, enviado como o corpo da requisi\u00E7\u00E3o.",
           "content": {
-            "application/json": {
+            "application/zip": {
               "schema": {
-                "$ref": "#/components/schemas/DispararImportacaoRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DispararImportacaoRequest"
-              }
-            },
-            "application/*\u002Bjson": {
-              "schema": {
-                "$ref": "#/components/schemas/DispararImportacaoRequest"
+                "type": "string",
+                "format": "binary"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "202": {
-            "description": "Accepted",
+          "200": {
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1274,12 +1266,22 @@
               }
             }
           },
-          "400": {
-            "description": "Bad Request",
+          "202": {
+            "description": "Accepted",
             "content": {
-              "application/problem\u002Bjson": {
+              "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/ImportacaoGeoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportacaoGeoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportacaoGeoDto"
                 }
               }
             }
@@ -1306,6 +1308,26 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -2136,17 +2158,6 @@
           }
         }
       },
-      "DispararImportacaoRequest": {
-        "required": [
-          "versao"
-        ],
-        "type": "object",
-        "properties": {
-          "versao": {
-            "type": "string"
-          }
-        }
-      },
       "DistritoDto": {
         "required": [
           "id",
@@ -2279,6 +2290,7 @@
           "concluidoEm",
           "disparadoPor",
           "mensagem",
+          "pacote",
           "relatorio"
         ],
         "type": "object",
@@ -2311,6 +2323,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "pacote": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PacoteDaImportacaoDto"
+              }
             ]
           },
           "relatorio": {
@@ -2516,6 +2538,26 @@
             "additionalProperties": {
               "type": "string"
             }
+          }
+        }
+      },
+      "PacoteDaImportacaoDto": {
+        "required": [
+          "sha256",
+          "tamanhoEmBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "tamanhoEmBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },

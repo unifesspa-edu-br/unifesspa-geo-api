@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 using Unifesspa.Geo.Application.Abstractions;
+using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Domain.Errors;
 using Unifesspa.Geo.Infrastructure.Persistence;
@@ -24,12 +25,13 @@ using Unifesspa.Geo.Kernel.Results;
 /// registro da execução, e fica com a carga enquanto ela estiver na fila ou em execução.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
-public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
+public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime, IDisposable
 {
     private static readonly DateTimeOffset Instante = new(2026, 11, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly GeoPostgisFixture _fixture;
     private readonly BancoDaCarga _banco;
+    private readonly EnvioDoPacoteParaTeste _envio = new();
     private readonly List<GeoImportacaoFila> _filas = [];
     private readonly List<CargaReservada> _cargasRetiradas = [];
 
@@ -56,6 +58,8 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
         }
     }
 
+    public void Dispose() => _envio.Dispose();
+
     [Fact(DisplayName = "Pedido com a trava ocupada recebe em_andamento, sem gravar execução nem enfileirar")]
     public async Task TravaOcupada_RecusaComEmAndamento_SemGravarNemEnfileirar()
     {
@@ -63,7 +67,7 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
         GeoImportacaoFila fila = NovaFila();
         await using IAsyncDisposable outraSessao = await TravaDaCargaParaTeste.AdquirirAsync(_fixture.ConnectionString);
 
-        Result<Guid> resultado = await IniciarAsync("202611", fila);
+        Result<EnvioDoPacoteRegistrado> resultado = await IniciarAsync("202611", fila);
 
         resultado.IsFailure.Should().BeTrue();
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.ImportacaoEmAndamento);
@@ -77,13 +81,13 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
         await _banco.LimparAsync();
         GeoImportacaoFila fila = NovaFila();
 
-        Result<Guid> resultado = await IniciarAsync("202611", fila);
+        Result<EnvioDoPacoteRegistrado> resultado = await IniciarAsync("202611", fila);
 
         resultado.IsSuccess.Should().BeTrue();
         await ConferirTravaOcupadaAsync("a trava segue com a execução enfileirada");
 
         IReadOnlyList<CargaReservada> enfileiradas = RetirarDaFila(fila);
-        enfileiradas.Should().ContainSingle().Which.ExecucaoId.Should().Be(resultado.Value);
+        enfileiradas.Should().ContainSingle().Which.ExecucaoId.Should().Be(resultado.Value!.ExecucaoId);
         await enfileiradas[0].DisposeAsync();
         await ConferirTravaLivreAsync("liberar a carga solta a trava");
     }
@@ -94,7 +98,7 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
         await _banco.LimparAsync();
         Guid concluida = await RegistrarConcluidaAsync("202610");
         GeoImportacaoFila fila = NovaFila();
-        Guid id = (await IniciarAsync("202611", fila)).Value;
+        Guid id = (await IniciarAsync("202611", fila)).Value!.ExecucaoId;
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
 
         await CriarPartida(cache).StartAsync(CancellationToken.None);
@@ -126,26 +130,30 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
     {
         await PrepararConcluidaAsync("202610");
 
-        Result<Guid> resultado = await IniciarAsync("202609", NovaFila());
+        Result<EnvioDoPacoteRegistrado> resultado = await IniciarAsync("202609", NovaFila());
 
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.VersaoNaoProgressiva);
         await ConferirTravaLivreAsync("a recusa não pode deixar a trava com o pedido");
     }
 
-    [Fact(DisplayName = "Conflito no índice de execução em andamento solta a trava")]
-    public async Task ConflitoNoIndiceUnico_SoltaATrava()
+    [Fact(DisplayName = "Conflito no índice de execução em andamento, surgido depois da consulta rápida, solta a trava e apaga o arquivo")]
+    public async Task ConflitoNoIndiceUnico_SoltaATravaEApagaOArquivo()
     {
         await _banco.LimparAsync();
-        await using (GeoDbContext contexto = _fixture.CreateDbContext())
-        {
-            contexto.ImportacaoExecucoes.Add(GeoImportacaoExecucao.Iniciar("202610", "teste", Instante).Value!);
-            await contexto.SaveChangesAsync();
-        }
+        using FluxoComGancho corpo = new(_envio.Receber("202611").Bytes, SemearExecucaoEmAndamentoAsync);
 
-        Result<Guid> resultado = await IniciarAsync("202611", NovaFila());
+        Result<EnvioDoPacoteRegistrado> resultado = await IniciarAsync(corpo, NovaFila(), NullLogger<RegistroDasImportacoes>.Instance);
 
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.ImportacaoEmAndamento);
         await ConferirTravaLivreAsync("o conflito não pode deixar a trava com o pedido");
+        _envio.NomesDosArquivos().Should().BeEmpty();
+    }
+
+    private async Task SemearExecucaoEmAndamentoAsync()
+    {
+        await using GeoDbContext contexto = _fixture.CreateDbContext();
+        contexto.ImportacaoExecucoes.Add(GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202610"), "teste", Instante).Value!);
+        await contexto.SaveChangesAsync();
     }
 
     private GeoReconciliacaoStartupHostedService CriarPartida(IGeoCepCacheInvalidador cache)
@@ -162,19 +170,25 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }
 
-    private Task<Result<Guid>> IniciarAsync(string versao, GeoImportacaoFila fila) =>
+    private Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(string versao, GeoImportacaoFila fila) =>
         IniciarAsync(versao, fila, NullLogger<RegistroDasImportacoes>.Instance);
 
-    private async Task<Result<Guid>> IniciarAsync(string versao, GeoImportacaoFila fila, ILogger<RegistroDasImportacoes> logger)
+    private async Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(string versao, GeoImportacaoFila fila, ILogger<RegistroDasImportacoes> logger)
+    {
+        using MemoryStream corpo = _envio.Receber(versao).Abrir();
+        return await IniciarAsync(corpo, fila, logger);
+    }
+
+    private async Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(Stream corpo, GeoImportacaoFila fila, ILogger<RegistroDasImportacoes> logger)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext();
-        RegistroDasImportacoes registro = new(
+        RegistroDasImportacoes registro = _envio.CriarRegistro(
             contexto,
             fila,
             TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
             TimeProvider.System,
             logger);
-        return await registro.IniciarAsync(versao, "teste", CancellationToken.None);
+        return await registro.IniciarAsync(corpo, "teste", CancellationToken.None);
     }
 
     private async Task PrepararConcluidaAsync(string versao)
@@ -186,7 +200,7 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
     private async Task<Guid> RegistrarConcluidaAsync(string versao)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext();
-        GeoImportacaoExecucao concluida = GeoImportacaoExecucao.Iniciar(versao, "teste", Instante).Value!;
+        GeoImportacaoExecucao concluida = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(versao), "teste", Instante).Value!;
         concluida.Concluir(Instante.AddMinutes(5), "{}", "concluída");
         contexto.ImportacaoExecucoes.Add(concluida);
         await contexto.SaveChangesAsync();

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 using Unifesspa.Geo.Application.Abstractions;
+using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Domain.Errors;
 using Unifesspa.Geo.Infrastructure.Observability;
@@ -26,10 +27,11 @@ using static Unifesspa.Geo.IntegrationTests.Etl.CenarioDaCargaPeriodica;
 /// não começaram ficam como falha, liberando novos disparos.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
-public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
+public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDisposable
 {
     private readonly GeoPostgisFixture _fixture;
     private readonly CenarioDaCargaPeriodica _cenario;
+    private readonly EnvioDoPacoteParaTeste _envio = new();
     private readonly List<GeoImportacaoFila> _filas = [];
 
     public ExecucaoEmSegundoPlanoDaCargaTests(GeoPostgisFixture fixture)
@@ -52,6 +54,8 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
             }
         }
     }
+
+    public void Dispose() => _envio.Dispose();
 
     [Fact(DisplayName = "#694: desligamento drena a fila e marca execuções enfileiradas como Falhou, liberando novos disparos")]
     public async Task Desligamento_DrenaFila_MarcaEnfileiradasFalhou()
@@ -97,14 +101,14 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
         fila.Completar();
 
         await using GeoDbContext ctx = _cenario.CriarContexto();
-        RegistroDasImportacoes registro = new(
+        RegistroDasImportacoes registro = _envio.CriarRegistro(
             ctx,
             fila,
             TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
             _cenario.Relogio,
             NullLogger<RegistroDasImportacoes>.Instance);
 
-        Result<Guid> resultado = await registro.IniciarAsync("202601", "teste", CancellationToken.None);
+        Result<EnvioDoPacoteRegistrado> resultado = await registro.IniciarAsync(_envio.Receber("202601").Abrir(), "teste", CancellationToken.None);
 
         resultado.IsFailure.Should().BeTrue();
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.NaoEnfileirada);
@@ -114,6 +118,7 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
         execucao.Status.Should().Be(StatusImportacao.Falhou, "registrada mas não enfileirada: marcada Falhou para não bloquear o índice único parcial");
         execucao.Mensagem.Should().Contain("desligamento");
 
+        _envio.NomesDosArquivos().Should().BeEmpty("o pacote não enfileirado é apagado");
         await ConferirTravaLivreAsync("canal fechado marca Falhou e solta a trava obtida no pedido");
     }
 
@@ -195,7 +200,7 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
         await trava!.DisposeAsync();
     }
 
-    private static GeoImportacaoBackgroundService CriarProcessoEmSegundoPlano(IGeoImportacaoFila fila, IGeoImportacaoExecutor executor)
+    private GeoImportacaoBackgroundService CriarProcessoEmSegundoPlano(IGeoImportacaoFila fila, IGeoImportacaoExecutor executor)
     {
         // Scope factory mínimo: o dreno do StopAsync resolve IGeoImportacaoExecutor do escopo.
         IServiceProvider sp = Substitute.For<IServiceProvider>();
@@ -208,6 +213,7 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
         return new GeoImportacaoBackgroundService(
             scopeFactory,
             fila,
+            _envio.Arquivos,
             NullLogger<GeoImportacaoBackgroundService>.Instance);
     }
 

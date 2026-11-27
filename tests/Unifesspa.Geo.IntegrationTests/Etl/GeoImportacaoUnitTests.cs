@@ -12,7 +12,7 @@ using Unifesspa.Geo.Infrastructure.Caching;
 using Unifesspa.Geo.Infrastructure.Core.Caching;
 using Unifesspa.Geo.Kernel.Results;
 
-/// <summary>Transições do registro de execução do ETL — Story #674.</summary>
+/// <summary>Transições do registro de execução do ETL.</summary>
 public sealed class GeoImportacaoExecucaoTests
 {
     private static readonly DateTimeOffset Agora = new(2026, 6, 18, 12, 0, 0, TimeSpan.Zero);
@@ -20,7 +20,7 @@ public sealed class GeoImportacaoExecucaoTests
     [Fact(DisplayName = "Iniciar com dados válidos cria a execução em andamento")]
     public void Iniciar_Valido_CriaEmAndamento()
     {
-        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar("202601", "admin-123", Agora);
+        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "admin-123", Agora);
 
         resultado.IsSuccess.Should().BeTrue();
         resultado.Value!.Status.Should().Be(StatusImportacao.EmAndamento);
@@ -35,25 +35,51 @@ public sealed class GeoImportacaoExecucaoTests
     [InlineData("abcdef")]
     public void Iniciar_VersaoInvalida_Falha(string versao)
     {
-        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(versao, "admin", Agora);
+        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(versao), "admin", Agora);
 
         resultado.IsFailure.Should().BeTrue();
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.VersaoFormatoInvalido);
     }
 
-    [Fact(DisplayName = "Iniciar com versão nula/vazia falha (entrada de API, não lança)")]
+    [Fact(DisplayName = "Iniciar com versão nula falha como formato inválido (não lança)")]
     public void Iniciar_VersaoNula_Falha()
     {
-        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(null!, "admin", Agora);
+        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(null!), "admin", Agora);
 
         resultado.IsFailure.Should().BeTrue();
-        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.VersaoObrigatoria);
+        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.VersaoFormatoInvalido);
+    }
+
+    [Fact(DisplayName = "Iniciar guarda o resumo SHA-256 e o tamanho do pacote recebido")]
+    public void Iniciar_Valido_GuardaOPacoteRecebido()
+    {
+        PacoteRecebido pacote = PacotesDeTeste.Recebido("202601", 'c', 123_456);
+
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(pacote, "admin", Agora).Value!;
+
+        execucao.PacoteSha256.Should().Be(new string('c', 64));
+        execucao.PacoteTamanhoEmBytes.Should().Be(123_456);
+    }
+
+    [Theory(DisplayName = "Iniciar com resumo fora de 64 hexadecimais minúsculos ou tamanho sem bytes falha como pacote inválido")]
+    [InlineData("abc", 10)]
+    [InlineData("", 10)]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", 10)]
+    [InlineData("gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", 10)]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0)]
+    public void Iniciar_PacoteInconsistente_Falha(string sha256, long tamanho)
+    {
+        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(
+            new PacoteRecebido("202601", sha256, tamanho), "admin", Agora);
+
+        resultado.IsFailure.Should().BeTrue();
+        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.PacoteInvalido);
     }
 
     [Fact(DisplayName = "Iniciar sem disparador falha")]
     public void Iniciar_SemDisparador_Falha()
     {
-        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar("202601", "  ", Agora);
+        Result<GeoImportacaoExecucao> resultado = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "  ", Agora);
 
         resultado.IsFailure.Should().BeTrue();
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.DisparadoPorObrigatorio);
@@ -62,7 +88,7 @@ public sealed class GeoImportacaoExecucaoTests
     [Fact(DisplayName = "Concluir a partir de EmAndamento grava status e relatório")]
     public void Concluir_DeEmAndamento_Sucede()
     {
-        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar("202601", "admin", Agora).Value!;
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "admin", Agora).Value!;
 
         Result resultado = execucao.Concluir(Agora.AddMinutes(5), "{}", "ok");
 
@@ -75,7 +101,7 @@ public sealed class GeoImportacaoExecucaoTests
     [Fact(DisplayName = "Concluir duas vezes é rejeitado na segunda (transição inválida)")]
     public void Concluir_Duplicado_Rejeita()
     {
-        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar("202601", "admin", Agora).Value!;
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "admin", Agora).Value!;
         execucao.Concluir(Agora, "{}", null);
 
         Result segunda = execucao.Concluir(Agora, "{}", null);
@@ -87,7 +113,7 @@ public sealed class GeoImportacaoExecucaoTests
     [Fact(DisplayName = "Falhar a partir de EmAndamento grava status e mensagem")]
     public void Falhar_DeEmAndamento_Sucede()
     {
-        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar("202601", "admin", Agora).Value!;
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "admin", Agora).Value!;
 
         Result resultado = execucao.Falhar(Agora, "erro de infra");
 

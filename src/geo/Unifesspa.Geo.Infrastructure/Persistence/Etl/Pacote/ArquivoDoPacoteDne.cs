@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 
+using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
@@ -18,11 +20,13 @@ internal sealed class ArquivoDoPacoteDne
     private const int TamanhoDoBloco = 81920;
 
     private readonly string _diretorio;
+    private readonly int _quantidadeMaximaDeEntradas;
 
-    public ArquivoDoPacoteDne(string diretorio)
+    public ArquivoDoPacoteDne(string diretorio, int quantidadeMaximaDeEntradas = EtlOpcoes.QuantidadePadraoDeEntradasDoPacote)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(diretorio);
         _diretorio = diretorio;
+        _quantidadeMaximaDeEntradas = quantidadeMaximaDeEntradas;
     }
 
     /// <summary>
@@ -42,7 +46,7 @@ internal sealed class ArquivoDoPacoteDne
         }
         catch
         {
-            Apagar(caminho);
+            ApagarSeExistir(caminho);
             throw;
         }
     }
@@ -50,7 +54,7 @@ internal sealed class ArquivoDoPacoteDne
     /// <summary>Abre o zip gravado para leitura; quem chama descarta o <see cref="ZipArchive"/>.</summary>
     public static ZipArchive AbrirZip(string caminho) => ZipFile.OpenRead(caminho);
 
-    /// <summary>Abre o fluxo descompactado da entrada da tabela, ou falha se o zip não a tiver.</summary>
+    /// <summary>Abre o fluxo descompactado da entrada da tabela (no topo ou na pasta do pacote), ou falha se o zip não tiver exatamente uma.</summary>
     public static async Task<Stream> AbrirEntradaAsync(
         ZipArchive zip,
         string versao,
@@ -58,9 +62,14 @@ internal sealed class ArquivoDoPacoteDne
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(zip);
-        ZipArchiveEntry entrada = zip.GetEntry(NomeDaTabelaDne.Entrada(versao, tabela))
-            ?? throw new InvalidOperationException("O pacote não tem a entrada da tabela.");
-        return await entrada.OpenAsync(cancellationToken).ConfigureAwait(false);
+        string nome = NomeDaTabelaDne.Entrada(versao, tabela);
+        ZipArchiveEntry[] candidatas = [.. zip.Entries.Where(e => string.Equals(e.Name, nome, StringComparison.Ordinal)).Take(2)];
+        if (candidatas.Length != 1)
+        {
+            throw new InvalidOperationException("O pacote não tem uma única entrada da tabela.");
+        }
+
+        return await candidatas[0].OpenAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public static void Apagar(string caminho) => File.Delete(caminho);
@@ -69,10 +78,23 @@ internal sealed class ArquivoDoPacoteDne
     public string CaminhoDe(Guid execucaoId) =>
         Path.Combine(_diretorio, execucaoId.ToString("N", CultureInfo.InvariantCulture));
 
-    /// <summary>Apaga o arquivo da execução se ele existir.</summary>
-    public void ApagarSeExistir(Guid execucaoId)
+    /// <summary>
+    /// Passa o arquivo recebido a ser o da execução: renomeia-o para o identificador dela
+    /// e devolve o novo caminho.
+    /// </summary>
+    public string AtribuirExecucao(string caminhoRecebido, Guid execucaoId)
     {
-        string caminho = CaminhoDe(execucaoId);
+        string destino = CaminhoDe(execucaoId);
+        File.Move(caminhoRecebido, destino);
+        return destino;
+    }
+
+    /// <summary>Apaga o arquivo da execução se ele existir.</summary>
+    public void ApagarSeExistir(Guid execucaoId) => ApagarSeExistir(CaminhoDe(execucaoId));
+
+    /// <summary>Apaga o arquivo do caminho informado se ele existir.</summary>
+    public static void ApagarSeExistir(string caminho)
+    {
         if (File.Exists(caminho))
         {
             Apagar(caminho);
@@ -202,7 +224,7 @@ internal sealed class ArquivoDoPacoteDne
         return total;
     }
 
-    private static Result<PacoteDneRecebido> Conferir(string caminho, ResumoDoCorpo resumo)
+    private Result<PacoteDneRecebido> Conferir(string caminho, ResumoDoCorpo resumo)
     {
         Result<IReadOnlyList<EntradaDoPacoteDne>> entradas = ListarEntradas(caminho);
         if (entradas.IsFailure)
@@ -210,24 +232,32 @@ internal sealed class ArquivoDoPacoteDne
             return Result<PacoteDneRecebido>.Failure(entradas.Error!);
         }
 
-        return ConferenciaDoPacoteDne.Conferir(entradas.Value!).Match(
+        return ConferenciaDoPacoteDne.Conferir(entradas.Value!, _quantidadeMaximaDeEntradas).Match(
             versao => Result<PacoteDneRecebido>.Success(new PacoteDneRecebido(caminho, resumo.Sha256, resumo.Tamanho, versao)),
             Result<PacoteDneRecebido>.Failure);
     }
 
-    private static Result<IReadOnlyList<EntradaDoPacoteDne>> ListarEntradas(string caminho)
+    private Result<IReadOnlyList<EntradaDoPacoteDne>> ListarEntradas(string caminho)
     {
         try
         {
-            using ZipArchive zip = ZipFile.OpenRead(caminho);
-            return Result<IReadOnlyList<EntradaDoPacoteDne>>.Success(
-                [.. zip.Entries.Select(e => new EntradaDoPacoteDne(e.FullName, e.Length, e.IsEncrypted))]);
+            using FileStream arquivo = File.OpenRead(caminho);
+            DomainError? recusa = FimDoDiretorioDoZip.Conferir(arquivo, _quantidadeMaximaDeEntradas);
+            return recusa is not null
+                ? Result<IReadOnlyList<EntradaDoPacoteDne>>.Failure(recusa)
+                : Result<IReadOnlyList<EntradaDoPacoteDne>>.Success(EntradasDe(arquivo));
         }
         catch (InvalidDataException)
         {
             return Result<IReadOnlyList<EntradaDoPacoteDne>>.Failure(
                 ErrosDoPacoteDne.PacoteInvalido("O arquivo enviado não é um zip válido."));
         }
+    }
+
+    private static List<EntradaDoPacoteDne> EntradasDe(Stream arquivo)
+    {
+        using ZipArchive zip = new(arquivo, ZipArchiveMode.Read, leaveOpen: true);
+        return [.. zip.Entries.Select(e => new EntradaDoPacoteDne(e.FullName, e.Length, e.IsEncrypted))];
     }
 
     private sealed record ResumoDoCorpo(string Sha256, long Tamanho);

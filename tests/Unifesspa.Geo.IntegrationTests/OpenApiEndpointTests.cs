@@ -60,6 +60,28 @@ public sealed class OpenApiEndpointTests : IClassFixture<GeoOpenApiFactory>
             "operacoes de administracao exigem role");
     }
 
+    [Fact(DisplayName = "POST de importação declara o corpo application/zip binário e as respostas do envio do pacote")]
+    public async Task EnvioDoPacote_DeclaraCorpoZipBinarioERespostas()
+    {
+        using JsonDocument doc = await LerSpecAsync();
+        JsonElement post = doc.RootElement.GetProperty("paths").GetProperty("/api/admin/geo/importacoes").GetProperty("post");
+
+        JsonElement corpo = post.GetProperty("requestBody");
+        corpo.GetProperty("required").GetBoolean().Should().BeTrue();
+        corpo.GetProperty("content").EnumerateObject().Select(c => c.Name).Should().Equal("application/zip");
+        JsonElement schema = corpo.GetProperty("content").GetProperty("application/zip").GetProperty("schema");
+        schema.GetProperty("type").GetString().Should().Be("string");
+        schema.GetProperty("format").GetString().Should().Be("binary");
+        post.GetProperty("responses").EnumerateObject().Select(r => r.Name)
+            .Should().BeEquivalentTo("200", "202", "401", "403", "409", "413", "415", "422", "500", "503");
+    }
+
+    private async Task<JsonDocument> LerSpecAsync()
+    {
+        using HttpClient client = _factory.CreateClient();
+        return JsonDocument.Parse(await client.GetStringAsync(new Uri("/openapi/geo.json", UriKind.Relative)));
+    }
+
     [Fact(DisplayName = "Spec runtime de Geo bate com baseline committed em contracts/")]
     public async Task SpecRuntime_DeveCasarComBaselineCommitted()
     {

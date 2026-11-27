@@ -11,12 +11,13 @@ public sealed class ValidadorDasOpcoesDoPacoteTests
 {
     private static readonly ValidadorDasOpcoesDoPacote Validador = new();
 
-    [Fact(DisplayName = "Os padrões são válidos: 128 MiB e um diretório informado")]
+    [Fact(DisplayName = "Os padrões são válidos: 128 MiB, 32 entradas e um diretório informado")]
     public void Padroes_SaoValidos()
     {
         EtlOpcoes opcoes = new();
 
         opcoes.TamanhoMaximoDoPacote.Should().Be(128L * 1024 * 1024);
+        opcoes.QuantidadeMaximaDeEntradasDoPacote.Should().Be(32);
         opcoes.DuracaoMaximaDaCarga.Should().Be(TimeSpan.FromHours(1));
         Validador.Validate(null, opcoes).Succeeded.Should().BeTrue();
     }
@@ -43,11 +44,34 @@ public sealed class ValidadorDasOpcoesDoPacoteTests
         resultado.FailureMessage.Should().Contain(nameof(EtlOpcoes.DiretorioDoPacote));
     }
 
-    [Fact(DisplayName = "As duas faltas voltam juntas")]
-    public void DuasFaltas_VoltamJuntas()
+    [Theory(DisplayName = "Quantidade máxima de entradas entre 16 e 256 é aceita")]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(256)]
+    public void QuantidadeDeEntradasNaFaixa_EhAceita(int quantidade)
     {
-        ValidateOptionsResult resultado = Validador.Validate(null, new EtlOpcoes { TamanhoMaximoDoPacote = 0, DiretorioDoPacote = "" });
+        Validador.Validate(null, new EtlOpcoes { QuantidadeMaximaDeEntradasDoPacote = quantidade }).Succeeded.Should().BeTrue();
+    }
 
-        resultado.Failures.Should().HaveCount(2);
+    [Theory(DisplayName = "Quantidade máxima de entradas abaixo de 16 ou acima de 256 é recusada na partida")]
+    [InlineData(15)]
+    [InlineData(0)]
+    [InlineData(257)]
+    public void QuantidadeDeEntradasForaDaFaixa_EhRecusada(int quantidade)
+    {
+        ValidateOptionsResult resultado = Validador.Validate(null, new EtlOpcoes { QuantidadeMaximaDeEntradasDoPacote = quantidade });
+
+        resultado.Failed.Should().BeTrue();
+        resultado.FailureMessage.Should().Contain(nameof(EtlOpcoes.QuantidadeMaximaDeEntradasDoPacote)).And.Contain("entre 16 e 256");
+    }
+
+    [Fact(DisplayName = "As três faltas voltam juntas")]
+    public void TresFaltas_VoltamJuntas()
+    {
+        ValidateOptionsResult resultado = Validador.Validate(
+            null,
+            new EtlOpcoes { TamanhoMaximoDoPacote = 0, DiretorioDoPacote = "", QuantidadeMaximaDeEntradasDoPacote = 1 });
+
+        resultado.Failures.Should().HaveCount(3);
     }
 }

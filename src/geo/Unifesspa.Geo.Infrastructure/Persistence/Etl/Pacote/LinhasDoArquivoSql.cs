@@ -20,6 +20,7 @@ internal sealed class LinhasDoArquivoSql
     private int _posicao;
     private int _disponivel;
     private int _tamanhoDaLinha;
+    private bool _terminouComQuebra;
 
     public LinhasDoArquivoSql(Stream fluxo, string tabela, long limiteDeBytes)
     {
@@ -32,6 +33,14 @@ internal sealed class LinhasDoArquivoSql
     /// <summary>Número da linha lida por último (a da leitura em curso, se ela falhar).</summary>
     public int NumeroDaLinha { get; private set; }
 
+    /// <summary>
+    /// Fim de linha realmente lido na última linha: <c>\r\n</c>, <c>\n</c>, ou vazio no fim do arquivo.
+    /// </summary>
+    public string FimDeLinha { get; private set; } = string.Empty;
+
+    /// <summary>Quando definido, as recusas citam esta linha (a de início de um comando de várias linhas).</summary>
+    public int? LinhaDoComando { get; set; }
+
     /// <summary>Bytes descompactados lidos do fluxo até aqui.</summary>
     public long BytesLidos { get; private set; }
 
@@ -39,6 +48,7 @@ internal sealed class LinhasDoArquivoSql
     public async ValueTask<string?> LerLinhaAsync(CancellationToken cancellationToken)
     {
         _tamanhoDaLinha = 0;
+        _terminouComQuebra = false;
         NumeroDaLinha++;
         while (true)
         {
@@ -54,7 +64,9 @@ internal sealed class LinhasDoArquivoSql
         }
     }
 
-    public ErroDeLeituraDoPacoteDneException Recusa(string motivo) => new(_tabela, NumeroDaLinha, motivo);
+    public ErroDeLeituraDoPacoteDneException Recusa(string motivo) => Recusa(motivo, LinhaDoComando ?? NumeroDaLinha);
+
+    public ErroDeLeituraDoPacoteDneException Recusa(string motivo, int numeroDaLinha) => new(_tabela, numeroDaLinha, motivo);
 
     private async ValueTask<bool> PreencherAsync(CancellationToken cancellationToken)
     {
@@ -82,7 +94,8 @@ internal sealed class LinhasDoArquivoSql
         trecho.CopyTo(_linha.AsSpan(_tamanhoDaLinha));
         _tamanhoDaLinha += trecho.Length;
         _posicao += trecho.Length + (quebra < 0 ? 0 : 1);
-        return quebra >= 0;
+        _terminouComQuebra = quebra >= 0;
+        return _terminouComQuebra;
     }
 
     private string? TerminarNoFimDoArquivo()
@@ -104,7 +117,9 @@ internal sealed class LinhasDoArquivoSql
             bytes = bytes[Encoding.UTF8.Preamble.Length..];
         }
 
-        bytes = bytes.EndsWith("\r"u8) ? bytes[..^1] : bytes;
+        bool retorno = bytes.EndsWith("\r"u8);
+        bytes = retorno ? bytes[..^1] : bytes;
+        FimDeLinha = !_terminouComQuebra ? string.Empty : retorno ? "\r\n" : "\n";
         if (bytes.Length > LimitesDoPacoteDne.BytesPorLinha)
         {
             throw Recusa(MotivosDeRecusaDoArquivoSqlDne.LinhaAcimaDoLimite);

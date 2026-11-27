@@ -82,7 +82,7 @@ public sealed class GeoReconciliacaoStartupHostedServiceTests
     private async Task<Guid> CriarEmAndamentoAsync(DateTimeOffset iniciadoEm)
     {
         await using GeoDbContext ctx = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar("202601", "teste", iniciadoEm).Value!;
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido("202601"), "teste", iniciadoEm).Value!;
         ctx.ImportacaoExecucoes.Add(execucao);
         await ctx.SaveChangesAsync();
         return execucao.Id;

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.OpenApi;
 using Serilog;
 
 using Unifesspa.Geo.API.Errors;
+using Unifesspa.Geo.API.Filters;
 using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.API.Hateoas;
 using Unifesspa.Geo.API.OpenApi;
@@ -27,7 +28,7 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // service.name canônico — single source of truth em GeoServiceNames evita
-// drift entre logs (Serilog/Loki) e traces (Tempo). Ver Selecao.API/Program.cs.
+// drift entre logs (Serilog/Loki) e traces (Tempo).
 const string nomeServico = GeoServiceNames.Geo;
 
 builder.Host.UseSerilog((context, loggerConfig) =>
@@ -48,19 +49,22 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddEndpointsApiExplorer();
 // OpenAPI 3.1 (ADR-0030) — spec em /openapi/geo.json.
 builder.Services.AddGeoOpenApi("geo", builder.Configuration);
-// Marca lat/long/raioKm da proximidade (#678) como required no contrato — são
+// Marca lat/long/raioKm da proximidade como required no contrato — são
 // validados em runtime (400 se ausentes), mas como query params double? o
 // ApiExplorer os descreveria como opcionais. AddOpenApi para o mesmo documento é
 // aditivo: anexa o transformer ao pipeline do doc "geo".
 builder.Services.AddOpenApi("geo", options =>
-    options.AddOperationTransformer<ProximidadeRequiredParametrosTransformer>());
+{
+    options.AddOperationTransformer<ProximidadeRequiredParametrosTransformer>();
+    // O corpo application/zip do envio do pacote é lido do fluxo da requisição, sem parâmetro de ação.
+    options.AddOperationTransformer<EnvioDoPacoteRequestBodyTransformer>();
+});
 
 builder.Services.AddSingleton<IDomainErrorRegistration, GeoDomainErrorRegistration>();
 builder.Services.AddDomainErrorMapper();
 
 // Criptografia (entries de idempotency at-rest) + cursor pagination (ADR-0026/0031).
-// AddCursorPagination já entra na fundação porque as Stories de API do Geo
-// (listagens de localidades) terão endpoints paginados.
+// AddCursorPagination atende as listagens paginadas de localidades.
 builder.Services.AddGeoEncryption(builder.Configuration);
 builder.Services.AddCursorPagination(builder.Configuration);
 // Idempotency-Key (ADR-0027) — store EF adjacente ao GeoDbContext, filter global
@@ -74,13 +78,18 @@ builder.Services.AddRequestLogging(builder.Configuration);
 // Observabilidade (ADR-0018) — tracing + metrics via OpenTelemetry SDK.
 builder.Services.AdicionarObservabilidade(nomeServico, builder.Configuration, builder.Environment);
 
+// Filtros do envio do pacote (rodam depois da autorização) e a permissão de um envio por vez.
+builder.Services.AddSingleton<EnvioDoPacoteEmCurso>();
+builder.Services.AddScoped<ValidacaoDoEnvioDoPacoteFilter>();
+builder.Services.AddScoped<UmEnvioPorVezFilter>();
+
 builder.Services.AddGeoApplication();
 builder.Services.AddGeoInfrastructure();
 
-// HATEOAS Level 1 (ADR-0029) do registro de execução do ETL (#674).
+// HATEOAS Level 1 (ADR-0029) do registro de execução do ETL.
 builder.Services.AddSingleton<IResourceLinksBuilder<ImportacaoGeoDto>, ImportacaoGeoLinksBuilder>();
 
-// HATEOAS Level 1 (ADR-0029) das leituras de reference data (#675): Estado e Cidade.
+// HATEOAS Level 1 (ADR-0029) das leituras de reference data: Estado e Cidade.
 builder.Services.AddSingleton<IResourceLinksBuilder<EstadoDto>, EstadoLinksBuilder>();
 builder.Services.AddSingleton<IResourceLinksBuilder<CidadeResumoDto>, CidadeResumoLinksBuilder>();
 builder.Services.AddSingleton<IResourceLinksBuilder<CidadeDetalheDto>, CidadeDetalheLinksBuilder>();
@@ -88,10 +97,10 @@ builder.Services.AddSingleton<IResourceLinksBuilder<DistritoDto>, DistritoLinksB
 builder.Services.AddSingleton<IResourceLinksBuilder<BairroDto>, BairroLinksBuilder>();
 builder.Services.AddSingleton<IResourceLinksBuilder<LogradouroResumoDto>, LogradouroResumoLinksBuilder>();
 
-// HATEOAS Level 1 (ADR-0029) do lookup de CEP (#676): _links para cidade e estado.
+// HATEOAS Level 1 (ADR-0029) do lookup de CEP: _links para cidade e estado.
 builder.Services.AddSingleton<IResourceLinksBuilder<CepResolvidoDto>, CepResolvidoLinksBuilder>();
 
-// HATEOAS Level 1 (ADR-0029) da proximidade geoespacial (#678): _links para cidade
+// HATEOAS Level 1 (ADR-0029) da proximidade geoespacial: _links para cidade
 // (e CEP no caso de logradouro). Limites (teto de raio, default/teto de top-N)
 // configuráveis via seção Geo:Proximidade (GeoProximidadeOptions), com defaults.
 builder.Services.AddSingleton<IResourceLinksBuilder<CidadeProximaDto>, CidadeProximaLinksBuilder>();
@@ -105,21 +114,21 @@ builder.Services.AddOptions<GeoProximidadeOptions>()
         "Geo:Proximidade — RaioMaxKm > 0, LimitMax >= 1 e 1 <= LimitPadrao <= LimitMax.")
     .ValidateOnStart();
 
-// TTL configurável do cache-aside de CEP (#676) — default 24h; também a memoização
-// em processo do selo de versão (#703, SeloTtl default 15s). Ambos em GeoCepCacheOptions.
+// TTL configurável do cache-aside de CEP — default 24h; também a memoização
+// em processo do selo de versão (SeloTtl default 15s). Ambos em GeoCepCacheOptions.
 builder.Services.Configure<GeoCepCacheOptions>(
     builder.Configuration.GetSection(GeoCepCacheOptions.SectionName));
-// Teto de fan-out de logradouros do reader de CEP (#705) — default 50 (GeoCepLookupOptions).
+// Teto de fan-out de logradouros do reader de CEP — default 50 (GeoCepLookupOptions).
 builder.Services.Configure<GeoCepLookupOptions>(
     builder.Configuration.GetSection(GeoCepLookupOptions.SectionName));
 
 // Migrations EF Core aplicadas no host StartAsync via IHostedService.
 // Registrado ANTES de UseWolverineOutboxCascading + AddWolverineMessaging
-// (invariante #419) — fitness MigrationBeforeWolverineRuntimeOrderTests cobre
+// (invariante de ordem) — fitness MigrationBeforeWolverineRuntimeOrderTests cobre
 // os entry points com a regra.
 builder.Services.AddDbContextMigrationsOnStartup<GeoDbContext>();
 
-// Gatilhos hospedados do ETL periódico (#674): worker que executa as cargas
+// Gatilhos hospedados do ETL periódico: worker que executa as cargas
 // enfileiradas + seed de dev. Registrado APÓS as migrations de propósito — seed e
 // reconciliação do worker tocam o banco, que precisa já ter a tabela
 // geo_importacao_execucao (ServicesStartConcurrently=false ⇒ ordem de start = ordem
@@ -127,8 +136,7 @@ builder.Services.AddDbContextMigrationsOnStartup<GeoDbContext>();
 builder.Services.AddGeoEtlGatilhos(builder.Configuration);
 
 // Wolverine como backbone CQRS/messaging (ADR-0003/0004/0005). Sem roteamento
-// específico em V1 — handlers de localidade entram nas Stories de API; o
-// Discovery.IncludeAssembly do Geo.Application já deixa o scanner preparado.
+// específico em V1; o Discovery.IncludeAssembly do Geo.Application já deixa o scanner preparado.
 builder.Host.UseWolverineOutboxCascading(
     builder.Configuration,
     connectionStringName: "GeoDb",
