@@ -60,10 +60,10 @@ internal sealed class GeoImportadorDistritoBairro
         Dictionary<int, Guid> cidadesPorIdDne =
             await ResolverCidadesPorIdDneAsync(fonte, cancellationToken).ConfigureAwait(false);
         Dictionary<int, LocalidadeResolvida> distritosPorIdDne =
-            await ImportarDistritosAsync(fonte, cidadesPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
+            await ImportarDistritosAsync(fonte, cidadesPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarFaixasDeDistritoAsync(fonte, distritosPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         Dictionary<int, LocalidadeResolvida> bairrosPorIdDne =
-            await ImportarBairrosAsync(fonte, cidadesPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
+            await ImportarBairrosAsync(fonte, cidadesPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarFaixasDeBairroAsync(fonte, bairrosPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarGrandesUsuariosAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarCepGeraisAsync(fonte, cidadesPorIdDne, distritosPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
@@ -71,7 +71,11 @@ internal sealed class GeoImportadorDistritoBairro
     }
 
     private async Task<Dictionary<int, LocalidadeResolvida>> ImportarDistritosAsync(
-        IGeoFonteDados fonte, Dictionary<int, Guid> cidadesPorIdDne, RelatorioImportacao relatorio, CancellationToken cancellationToken)
+        IGeoFonteDados fonte,
+        Dictionary<int, Guid> cidadesPorIdDne,
+        ProvenienciaDaCarga proveniencia,
+        RelatorioImportacao relatorio,
+        CancellationToken cancellationToken)
     {
         GravacaoPorChaveNatural<Distrito> gravacao = await GravacaoPorChaveNatural<Distrito>.AbrirAsync(
             _contexto.Distritos, d => LocalidadeParaCarga.ChaveDe(d.CidadeId, d.NomeNormalizado), relatorio.Tabela("distrito"), cancellationToken).ConfigureAwait(false);
@@ -81,7 +85,7 @@ internal sealed class GeoImportadorDistritoBairro
                 static d => new LocalidadeDaFonte(d.IdDistrito, d.Nome, d.NomeSemAcento, d.CidadeIdDne, d.Uf, d.Latitude, d.Longitude),
                 cancellationToken),
             cidadesPorIdDne,
-            fonte.Versao,
+            proveniencia,
             gravacao,
             static l => l.CriarDistrito(),
             static (e, l) => l.Atualizar(e),
@@ -111,7 +115,11 @@ internal sealed class GeoImportadorDistritoBairro
     }
 
     private async Task<Dictionary<int, LocalidadeResolvida>> ImportarBairrosAsync(
-        IGeoFonteDados fonte, Dictionary<int, Guid> cidadesPorIdDne, RelatorioImportacao relatorio, CancellationToken cancellationToken)
+        IGeoFonteDados fonte,
+        Dictionary<int, Guid> cidadesPorIdDne,
+        ProvenienciaDaCarga proveniencia,
+        RelatorioImportacao relatorio,
+        CancellationToken cancellationToken)
     {
         GravacaoPorChaveNatural<Bairro> gravacao = await GravacaoPorChaveNatural<Bairro>.AbrirAsync(
             _contexto.Bairros, b => LocalidadeParaCarga.ChaveDe(b.CidadeId, b.NomeNormalizado), relatorio.Tabela("bairro"), cancellationToken).ConfigureAwait(false);
@@ -121,7 +129,7 @@ internal sealed class GeoImportadorDistritoBairro
                 static b => new LocalidadeDaFonte(b.IdBairro, b.Nome, b.NomeSemAcento, b.CidadeIdDne, b.Uf, b.Latitude, b.Longitude),
                 cancellationToken),
             cidadesPorIdDne,
-            fonte.Versao,
+            proveniencia,
             gravacao,
             static l => l.CriarBairro(),
             static (e, l) => l.Atualizar(e),
@@ -170,7 +178,7 @@ internal sealed class GeoImportadorDistritoBairro
     private async Task<Dictionary<int, LocalidadeResolvida>> ImportarLocalidadesAsync<T>(
         IAsyncEnumerable<LocalidadeDaFonte> linhas,
         Dictionary<int, Guid> cidadesPorIdDne,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         GravacaoPorChaveNatural<T> gravacao,
         Func<LocalidadeParaCarga, Result<T>> criar,
         Func<T, LocalidadeParaCarga, Result> atualizar,
@@ -181,7 +189,7 @@ internal sealed class GeoImportadorDistritoBairro
         await foreach (LocalidadeDaFonte linha in linhas.ConfigureAwait(false))
         {
             gravacao.Contador.ContarLido();
-            if (LocalidadeParaCarga.De(linha, cidadesPorIdDne, versao, gravacao.Contador) is { } dados)
+            if (LocalidadeParaCarga.De(linha, cidadesPorIdDne, proveniencia, gravacao.Contador) is { } dados)
             {
                 T? entidade = gravacao.Gravar(dados.Chave, () => criar(dados), e => atualizar(e, dados));
                 RegistrarResolvida(idDneParaGuid, linha.IdDne, entidade?.Id, dados.CidadeId);

@@ -14,20 +14,19 @@ using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
 internal readonly record struct LocalidadeParaCarga(
     Guid CidadeId,
     string Uf,
-    string Nome,
-    string NomeNormalizado,
+    NomeComFormaDeBusca Nome,
     PosicaoGeografica Posicao,
     string? IdOrigemDne,
-    string Versao)
+    ProvenienciaDaCarga Proveniencia)
 {
-    public string Chave => ChaveDe(CidadeId, NomeNormalizado);
+    public string Chave => ChaveDe(CidadeId, Nome.NomeNormalizado!);
 
     public static string ChaveDe(Guid cidadeId, string nomeNormalizado) => $"{cidadeId:N}|{nomeNormalizado}";
 
     public static LocalidadeParaCarga? De(
         LocalidadeDaFonte linha,
         Dictionary<int, Guid> cidadesPorIdDne,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador)
     {
         string? nomeNormalizado = NormalizarObrigatorio(linha.NomeSemAcento ?? linha.Nome);
@@ -41,40 +40,35 @@ internal readonly record struct LocalidadeParaCarga(
             contador.ContarOrfao(IdDaFonteParaRelatorio(linha.IdDne));
             return null;
         }
-        return Montar(linha, cidadeId, nomeNormalizado, versao);
+        return Montar(linha, cidadeId, nomeNormalizado, proveniencia);
     }
 
     // Latitude e longitude saem do ponto já validado (limitado a ±90/±180): dado sujo
     // não pode estourar o numeric(9,6) da coluna.
-    private static LocalidadeParaCarga Montar(LocalidadeDaFonte linha, Guid cidadeId, string nomeNormalizado, string versao) =>
+    private static LocalidadeParaCarga Montar(
+        LocalidadeDaFonte linha,
+        Guid cidadeId,
+        string nomeNormalizado,
+        ProvenienciaDaCarga proveniencia) =>
         new(
             cidadeId,
             linha.Uf ?? string.Empty,
-            linha.Nome ?? string.Empty,
-            nomeNormalizado,
+            new NomeComFormaDeBusca(linha.Nome ?? string.Empty, nomeNormalizado),
             CoordenadaDne.DoPontoValidado(linha.Latitude, linha.Longitude),
             linha.IdDne?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            versao);
+            proveniencia);
 
     public Result<Distrito> CriarDistrito() =>
-        Distrito.Importar(
-            CidadeId, Uf, Nome, NomeNormalizado,
-            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
+        Distrito.Importar(CidadeId, Uf, Nome, Posicao, IdOrigemDne, Proveniencia);
 
     public Result Atualizar(Distrito distrito) =>
-        distrito.Atualizar(
-            CidadeId, Uf, Nome, NomeNormalizado,
-            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
+        distrito.Atualizar(CidadeId, Uf, Nome, Posicao, IdOrigemDne, Proveniencia);
 
     public Result<Bairro> CriarBairro() =>
-        Bairro.Importar(
-            CidadeId, Uf, Nome, NomeNormalizado,
-            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
+        Bairro.Importar(CidadeId, Uf, Nome, Posicao, IdOrigemDne, Proveniencia);
 
     public Result Atualizar(Bairro bairro) =>
-        bairro.Atualizar(
-            CidadeId, Uf, Nome, NomeNormalizado,
-            Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, IdOrigemDne, Versao);
+        bairro.Atualizar(CidadeId, Uf, Nome, Posicao, IdOrigemDne, Proveniencia);
 
     private static string? NormalizarObrigatorio(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : GeoTexto.NormalizarTexto(valor);

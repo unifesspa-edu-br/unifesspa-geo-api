@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.Domain.Entities;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -10,7 +11,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// Bairro — nível intermediário situado numa <see cref="Cidade"/>. Reference data
 /// sem soft-delete (ADR-0092). Sem código IBGE na fonte: a chave natural é
 /// <c>(cidade_id, nome_normalizado)</c>; o id sequencial da DNE fica em
-/// <see cref="IdOrigemDne"/> (referência instável entre releases).
+/// <see cref="IdOrigemDne"/> (referência instável entre versões).
 /// </summary>
 /// <remarks>
 /// <see cref="NomeNormalizado"/> é <strong>obrigatório</strong> porque compõe a
@@ -39,10 +40,10 @@ public sealed class Bairro : EntityBase
     /// <summary>Id sequencial de origem na DNE — referência instável, não é identidade nem único.</summary>
     public string? IdOrigemDne { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
-    /// <summary><see langword="false"/> quando a chave natural some da release vigente (stale do ETL).</summary>
+    /// <summary><see langword="false"/> quando a chave natural some da versão vigente (registro não vigente).</summary>
     public bool Vigente { get; private set; } = true;
 
     // Construtor privado para materialização do EF Core.
@@ -51,134 +52,90 @@ public sealed class Bairro : EntityBase
     }
 
     /// <summary>
-    /// Importa um Bairro a partir de valores já tipados (parse tolerante no ETL).
-    /// Valida o mínimo: <paramref name="cidadeId"/>, <paramref name="nome"/>,
-    /// <paramref name="nomeNormalizado"/> (compõe a chave natural) e proveniência.
+    /// Importa um Bairro a partir de valores já tipados (leitura tolerante na carga). Valida o
+    /// mínimo: <paramref name="cidadeId"/>, o nome e a forma de busca em <paramref name="nome"/>
+    /// (compõe a chave natural) e a versão da base em <paramref name="proveniencia"/>.
     /// </summary>
     public static Result<Bairro> Importar(
         Guid cidadeId,
         string uf,
-        string nome,
-        string nomeNormalizado,
-        decimal? latitude,
-        decimal? longitude,
-        Point? coordenada,
+        NomeComFormaDeBusca nome,
+        PosicaoGeografica posicao,
         string? idOrigemDne,
-        string versaoDataset,
-        bool vigente = true)
+        ProvenienciaDaCarga proveniencia)
     {
         ArgumentNullException.ThrowIfNull(uf);
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(nomeNormalizado);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (cidadeId == Guid.Empty)
+        DomainError? erro = Validar(cidadeId, nome, proveniencia);
+        if (erro is not null)
         {
-            return Result<Bairro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroCidadeObrigatoria,
-                "Cidade do Bairro é obrigatória."));
+            return Result<Bairro>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result<Bairro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroNomeObrigatorio,
-                "Nome do Bairro é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(nomeNormalizado))
-        {
-            return Result<Bairro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroNomeNormalizadoObrigatorio,
-                "Nome normalizado do Bairro é obrigatório (compõe a chave natural)."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<Bairro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do Bairro é obrigatória."));
-        }
-
-        var bairro = new Bairro
-        {
-            CidadeId = cidadeId,
-            Uf = GeoTexto.NormalizarChaveMaiuscula(uf),
-            Nome = nome.Trim(),
-            NomeNormalizado = GeoTexto.NormalizarTexto(nomeNormalizado),
-            Latitude = latitude,
-            Longitude = longitude,
-            Coordenada = coordenada,
-            IdOrigemDne = GeoTexto.NormalizarOpcional(idOrigemDne),
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var bairro = new Bairro();
+        bairro.Aplicar(cidadeId, uf, nome, posicao, idOrigemDne, proveniencia);
 
         return Result<Bairro>.Success(bairro);
     }
 
     /// <summary>
-    /// Reaplica os dados de uma release sobre um Bairro já existente (upsert in place
-    /// do ETL), preservando <see cref="EntityBase.Id"/> (referenciado por faixas e por
-    /// <see cref="Logradouro"/>) e a chave natural <c>(cidade_id, nome_normalizado)</c>.
+    /// Reaplica os dados de uma versão da base sobre um Bairro já existente (atualização pela
+    /// chave natural da carga), preservando <see cref="EntityBase.Id"/> (referenciado por faixas
+    /// e por <see cref="Logradouro"/>) e a chave natural <c>(cidade_id, nome_normalizado)</c>.
     /// Valida o mínimo <strong>antes</strong> de mutar — em falha, o estado não é tocado.
     /// </summary>
     public Result Atualizar(
         Guid cidadeId,
         string uf,
-        string nome,
-        string nomeNormalizado,
-        decimal? latitude,
-        decimal? longitude,
-        Point? coordenada,
+        NomeComFormaDeBusca nome,
+        PosicaoGeografica posicao,
         string? idOrigemDne,
-        string versaoDataset,
-        bool vigente = true)
+        ProvenienciaDaCarga proveniencia)
     {
         ArgumentNullException.ThrowIfNull(uf);
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(nomeNormalizado);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (cidadeId == Guid.Empty)
+        DomainError? erro = Validar(cidadeId, nome, proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroCidadeObrigatoria,
-                "Cidade do Bairro é obrigatória."));
+            return Result.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroNomeObrigatorio,
-                "Nome do Bairro é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(nomeNormalizado))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroNomeNormalizadoObrigatorio,
-                "Nome normalizado do Bairro é obrigatório (compõe a chave natural)."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.BairroVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do Bairro é obrigatória."));
-        }
-
-        CidadeId = cidadeId;
-        Uf = GeoTexto.NormalizarChaveMaiuscula(uf);
-        Nome = nome.Trim();
-        NomeNormalizado = GeoTexto.NormalizarTexto(nomeNormalizado);
-        Latitude = latitude;
-        Longitude = longitude;
-        Coordenada = coordenada;
-        IdOrigemDne = GeoTexto.NormalizarOpcional(idOrigemDne);
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(cidadeId, uf, nome, posicao, idOrigemDne, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(Guid cidadeId, NomeComFormaDeBusca nome, ProvenienciaDaCarga proveniencia) =>
+        cidadeId == Guid.Empty
+            ? new DomainError(GeoReferenceDataErrorCodes.BairroCidadeObrigatoria, "Cidade do Bairro é obrigatória.")
+            : string.IsNullOrWhiteSpace(nome.Nome)
+                ? new DomainError(GeoReferenceDataErrorCodes.BairroNomeObrigatorio, "Nome do Bairro é obrigatório.")
+                : string.IsNullOrWhiteSpace(nome.NomeNormalizado)
+                    ? new DomainError(
+                        GeoReferenceDataErrorCodes.BairroNomeNormalizadoObrigatorio,
+                        "Nome normalizado do Bairro é obrigatório (compõe a chave natural).")
+                    : proveniencia.TemVersao
+                        ? null
+                        : new DomainError(
+                            GeoReferenceDataErrorCodes.BairroVersaoDatasetObrigatoria,
+                            "Versão do dataset (proveniência) do Bairro é obrigatória.");
+
+    private void Aplicar(
+        Guid cidadeId,
+        string uf,
+        NomeComFormaDeBusca nome,
+        PosicaoGeografica posicao,
+        string? idOrigemDne,
+        ProvenienciaDaCarga proveniencia)
+    {
+        CidadeId = cidadeId;
+        Uf = GeoTexto.NormalizarChaveMaiuscula(uf);
+        Nome = nome.Nome;
+        NomeNormalizado = nome.NomeNormalizado!;
+        (Latitude, Longitude, Coordenada) = posicao;
+        IdOrigemDne = GeoTexto.NormalizarOpcional(idOrigemDne);
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }

@@ -7,6 +7,7 @@ using Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence;
 
 /// <summary>
@@ -91,8 +92,10 @@ public sealed class DistritoBairroPersistenceTests
         CidadeSemeada seedX = CidadeSemeada.Nova();
         CidadeSemeada seedY = CidadeSemeada.Nova();
 
-        Bairro bX = GeoTestKeys.Ok(Bairro.Importar(seedX.Cidade.Id, "SP", "Centro", "centro", null, null, null, null, VersaoDataset));
-        Bairro bY = GeoTestKeys.Ok(Bairro.Importar(seedY.Cidade.Id, "RJ", "Centro", "centro", null, null, null, null, VersaoDataset));
+        Bairro bX = GeoTestKeys.Ok(Bairro.Importar(
+            seedX.Cidade.Id, "SP", new NomeComFormaDeBusca("Centro", "centro"), default, null, new ProvenienciaDaCarga(VersaoDataset)));
+        Bairro bY = GeoTestKeys.Ok(Bairro.Importar(
+            seedY.Cidade.Id, "RJ", new NomeComFormaDeBusca("Centro", "centro"), default, null, new ProvenienciaDaCarga(VersaoDataset)));
 
         await _banco.GravarAsync([.. seedX.EntidadesCom(), .. seedY.EntidadesCom(), bX, bY]);
 
@@ -125,5 +128,6 @@ public sealed class DistritoBairroPersistenceTests
     }
 
     private static Distrito NovoDistrito(Guid cidadeId, string nome, string nomeNormalizado, string idOrigemDne) =>
-        GeoTestKeys.Ok(Distrito.Importar(cidadeId, "SP", nome, nomeNormalizado, null, null, null, idOrigemDne, VersaoDataset));
+        GeoTestKeys.Ok(Distrito.Importar(
+            cidadeId, "SP", new NomeComFormaDeBusca(nome, nomeNormalizado), default, idOrigemDne, new ProvenienciaDaCarga(VersaoDataset)));
 }
