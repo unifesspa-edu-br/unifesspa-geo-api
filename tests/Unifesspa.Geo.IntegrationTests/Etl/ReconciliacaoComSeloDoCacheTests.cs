@@ -69,12 +69,7 @@ public sealed class ReconciliacaoComSeloDoCacheTests
         bool travaRetidaAoSelar = false;
         _cache.InvalidarAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(async _ =>
         {
-            IAsyncDisposable? outra = await CriarTrava().TentarAdquirirAsync(CancellationToken.None);
-            travaRetidaAoSelar = outra is null;
-            if (outra is not null)
-            {
-                await outra.DisposeAsync();
-            }
+            travaRetidaAoSelar = await TravaEstaRetidaAsync();
         });
 
         await CriarServico().StartAsync(CancellationToken.None);
@@ -99,6 +94,17 @@ public sealed class ReconciliacaoComSeloDoCacheTests
         await CriarServico(new FabricaDeFonteFixa(), pacotes.Arquivos).StartAsync(CancellationToken.None);
 
         (await _banco.ExecucaoAsync(orfa)).Mensagem.Should().Be(EncerramentoDasCargasAbandonadas.MensagemDaCargaAbandonada);
+    }
+
+    private async Task<bool> TravaEstaRetidaAsync()
+    {
+        IAsyncDisposable? outra = await CriarTrava().TentarAdquirirAsync(CancellationToken.None);
+        if (outra is not null)
+        {
+            await outra.DisposeAsync();
+        }
+
+        return outra is null;
     }
 
     private async Task ConferirSeloAsync(Guid recente, Guid antiga)

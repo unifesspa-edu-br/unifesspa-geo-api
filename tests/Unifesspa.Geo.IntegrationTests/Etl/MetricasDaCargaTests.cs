@@ -28,12 +28,10 @@ using static Unifesspa.Geo.IntegrationTests.Etl.CenarioDaCargaPeriodica;
 [Collection(GeoPostgisCollection.Name)]
 public sealed class MetricasDaCargaTests
 {
-    private readonly GeoPostgisFixture _fixture;
     private readonly CenarioDaCargaPeriodica _cenario;
 
     public MetricasDaCargaTests(GeoPostgisFixture fixture)
     {
-        _fixture = fixture;
         _cenario = new CenarioDaCargaPeriodica(fixture);
     }
 
@@ -42,41 +40,17 @@ public sealed class MetricasDaCargaTests
     {
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601");
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-        });
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"));
+        using CapturaDasMetricasDaCarga captura = new();
 
-        List<MedidaMetrica<long>> longs = [];
-        List<MedidaMetrica<double>> doubles = [];
+        await ExecutarCargaAsync(id, fonteFactory);
 
-        await using GeoDbContext ctx = _cenario.CriarContexto();
-        using GeoEtlMetrics metricas = new();
-        using MeterListener listener = CriarListener(longs, doubles);
-        listener.Start();
-
-        Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
-        CargaDaImportacao executor = _cenario.CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
-        await executor.ExecutarAsync(await _cenario.ReservarAsync(id), CancellationToken.None);
-
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
+        GeoImportacaoExecucao execucao = await _cenario.LerExecucaoAsync(id);
         execucao.Status.Should().Be(StatusImportacao.Concluida);
+        ConferirUmaExecucaoComStatus(captura, "concluida");
+        ConferirLinhasReportadas(captura, execucao);
 
-        RelatorioImportacaoDto relatorio = JsonSerializer.Deserialize<RelatorioImportacaoDto>(
-            execucao.RelatorioJson!, RelatorioJsonCamelCase)!;
-        long linhasEsperadas = relatorio.Inseridos + relatorio.Atualizados;
-
-        List<MedidaMetrica<long>> execucoes = [.. longs.Where(m => string.Equals(m.Nome, "geo.etl.execucoes", StringComparison.Ordinal))];
-        execucoes.Should().ContainSingle();
-        execucoes[0].Valor.Should().Be(1);
-        Status(execucoes[0].Tags).Should().Be("concluida");
-
-        List<MedidaMetrica<long>> linhas = [.. longs.Where(m => string.Equals(m.Nome, "geo.etl.linhas", StringComparison.Ordinal))];
-        linhas.Should().ContainSingle();
-        linhas[0].Valor.Should().Be(linhasEsperadas, "as linhas reportadas batem com inseridos + atualizados do relatório");
-
-        doubles.Should().Contain(m => m.Nome == "geo.etl.duracao" && Status(m.Tags) == "concluida");
+        captura.Decimais.Should().Contain(m => m.Nome == "geo.etl.duracao" && CapturaDasMetricasDaCarga.Status(m.Tags) == "concluida");
     }
 
     [Fact(DisplayName = "#693: carga falhada emite geo.etl.execucoes/duracao com status=falhou (sem linhas)")]
@@ -84,61 +58,44 @@ public sealed class MetricasDaCargaTests
     {
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601");
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = new FonteComFalhaNasCidades(FonteCompleta("202601")),
-        });
+        FabricaDeFonteFixa fonteFactory = new(new FonteComFalhaNasCidades(FonteCompleta("202601")));
+        using CapturaDasMetricasDaCarga captura = new();
 
-        List<MedidaMetrica<long>> longs = [];
-        List<MedidaMetrica<double>> doubles = [];
+        await ExecutarCargaAsync(id, fonteFactory);
 
+        GeoImportacaoExecucao execucao = await _cenario.LerExecucaoAsync(id);
+        execucao.Status.Should().Be(StatusImportacao.Falhou);
+        ConferirUmaExecucaoComStatus(captura, "falhou");
+
+        captura.Decimais.Should().Contain(m => m.Nome == "geo.etl.duracao" && CapturaDasMetricasDaCarga.Status(m.Tags) == "falhou");
+        captura.Inteiras.Should().NotContain(m => m.Nome == "geo.etl.linhas", "RegistrarFalha não contabiliza linhas");
+    }
+
+    private static void ConferirUmaExecucaoComStatus(CapturaDasMetricasDaCarga captura, string status)
+    {
+        List<MedidaMetrica<long>> execucoes = captura.InteirasDe("geo.etl.execucoes");
+        execucoes.Should().ContainSingle();
+        execucoes[0].Valor.Should().Be(1);
+        CapturaDasMetricasDaCarga.Status(execucoes[0].Tags).Should().Be(status);
+    }
+
+    private static void ConferirLinhasReportadas(CapturaDasMetricasDaCarga captura, GeoImportacaoExecucao execucao)
+    {
+        RelatorioImportacaoDto relatorio = JsonSerializer.Deserialize<RelatorioImportacaoDto>(
+            execucao.RelatorioJson!, RelatorioJsonCamelCase)!;
+        long linhasEsperadas = relatorio.Inseridos + relatorio.Atualizados;
+
+        List<MedidaMetrica<long>> linhas = captura.InteirasDe("geo.etl.linhas");
+        linhas.Should().ContainSingle();
+        linhas[0].Valor.Should().Be(linhasEsperadas, "as linhas reportadas batem com inseridos + atualizados do relatório");
+    }
+
+    private async Task ExecutarCargaAsync(Guid id, FabricaDeFonteFixa fonteFactory)
+    {
         await using GeoDbContext ctx = _cenario.CriarContexto();
         using GeoEtlMetrics metricas = new();
-        using MeterListener listener = CriarListener(longs, doubles);
-        listener.Start();
-
         Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
         CargaDaImportacao executor = _cenario.CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
         await executor.ExecutarAsync(await _cenario.ReservarAsync(id), CancellationToken.None);
-
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
-        execucao.Status.Should().Be(StatusImportacao.Falhou);
-
-        List<MedidaMetrica<long>> execucoes = [.. longs.Where(m => string.Equals(m.Nome, "geo.etl.execucoes", StringComparison.Ordinal))];
-        execucoes.Should().ContainSingle();
-        execucoes[0].Valor.Should().Be(1);
-        Status(execucoes[0].Tags).Should().Be("falhou");
-
-        doubles.Should().Contain(m => m.Nome == "geo.etl.duracao" && Status(m.Tags) == "falhou");
-        longs.Should().NotContain(m => m.Nome == "geo.etl.linhas", "RegistrarFalha não contabiliza linhas");
     }
-
-    // Escuta apenas os instrumentos geo.etl.* do Meter do serviço Geo, copiando as tags do span
-    // (não capturável em lambda) para um array. xUnit serializa os testes da coleção, então só a
-    // carga sob teste emite enquanto este listener está vivo.
-    private static MeterListener CriarListener(List<MedidaMetrica<long>> longs, List<MedidaMetrica<double>> doubles)
-    {
-        MeterListener listener = new()
-        {
-            InstrumentPublished = (instrumento, l) =>
-            {
-                if (string.Equals(instrumento.Meter.Name, GeoServiceNames.Geo, StringComparison.Ordinal) &&
-                    instrumento.Name.StartsWith("geo.etl.", StringComparison.Ordinal))
-                {
-                    l.EnableMeasurementEvents(instrumento);
-                }
-            },
-        };
-        listener.SetMeasurementEventCallback<long>((instrumento, medida, tags, estado) =>
-            longs.Add(new MedidaMetrica<long>(instrumento.Name, medida, tags.ToArray())));
-        listener.SetMeasurementEventCallback<double>((instrumento, medida, tags, estado) =>
-            doubles.Add(new MedidaMetrica<double>(instrumento.Name, medida, tags.ToArray())));
-        return listener;
-    }
-
-    private static string? Status(KeyValuePair<string, object?>[] tags) =>
-        tags.SingleOrDefault(t => string.Equals(t.Key, "status", StringComparison.Ordinal)).Value as string;
-
-    private readonly record struct MedidaMetrica<T>(string Nome, T Valor, KeyValuePair<string, object?>[] Tags);
 }
