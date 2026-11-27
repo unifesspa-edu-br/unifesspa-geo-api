@@ -1,7 +1,6 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Authentication;
 
 using System.Security.Claims;
-using System.Text.Json;
 
 using Microsoft.AspNetCore.Authentication;
 
@@ -35,52 +34,31 @@ public sealed class KeycloakRolesClaimsTransformation : IClaimsTransformation
             return Task.FromResult(principal);
         }
 
-        Claim? realmAccess = identity.FindFirst(KeycloakClaims.RealmAccess);
-        if (realmAccess is null || string.IsNullOrWhiteSpace(realmAccess.Value))
-        {
-            return Task.FromResult(principal);
-        }
+        AcrescentarSemRepetir(identity, PapeisDoRealm(identity));
 
-        string[] roles;
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(realmAccess.Value);
-            if (!doc.RootElement.TryGetProperty("roles", out JsonElement rolesElement)
-                || rolesElement.ValueKind != JsonValueKind.Array)
-            {
-                return Task.FromResult(principal);
-            }
+        return Task.FromResult(principal);
+    }
 
-            roles = [.. rolesElement.EnumerateArray()
-                .Where(e => e.ValueKind == JsonValueKind.String)
-                .Select(e => e.GetString()!)
-                .Where(role => !string.IsNullOrWhiteSpace(role))];
-        }
-        catch (JsonException)
-        {
-            // Claim malformado — provavelmente não-Keycloak. Retornar principal sem mutar.
-            return Task.FromResult(principal);
-        }
+    private static string[] PapeisDoRealm(ClaimsIdentity identity)
+    {
+        string? realmAccess = identity.FindFirst(KeycloakClaims.RealmAccess)?.Value;
 
-        if (roles.Length == 0)
-        {
-            return Task.FromResult(principal);
-        }
+        // Claim malformado (nulo) — provavelmente não-Keycloak: o principal segue sem mudança.
+        return [.. (PapeisDoKeycloak.Ler(realmAccess, recurso: null, out _) ?? [])
+            .Where(role => !string.IsNullOrWhiteSpace(role))];
+    }
 
-        // Adiciona apenas roles que ainda não estão presentes — idempotente em caso de
-        // re-execução da pipeline (ex.: cookie auth + redirecionamento).
+    // Adiciona apenas roles que ainda não estão presentes — idempotente em caso de
+    // re-execução da pipeline (ex.: cookie auth + redirecionamento).
+    private static void AcrescentarSemRepetir(ClaimsIdentity identity, string[] roles)
+    {
         HashSet<string> existing = new(
             identity.FindAll(ClaimTypes.Role).Select(c => c.Value),
             StringComparer.Ordinal);
 
-        foreach (string role in roles)
+        foreach (string role in roles.Where(existing.Add))
         {
-            if (existing.Add(role))
-            {
-                identity.AddClaim(new Claim(ClaimTypes.Role, role));
-            }
+            identity.AddClaim(new Claim(ClaimTypes.Role, role));
         }
-
-        return Task.FromResult(principal);
     }
 }

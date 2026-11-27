@@ -41,6 +41,17 @@ public static class OidcAuthenticationConfiguration
 
         bool requireHttps = !environment.IsDevelopment();
 
+        AddOpcoesDeAutenticacao(services, configuration, requireHttps);
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+        ConfigurarJwtBearer(services, requireHttps);
+        AddContextoDoUsuario(services);
+        AddVerificacaoDoProvedorDeIdentidade(services);
+
+        return services.AddAuthorization();
+    }
+
+    private static void AddOpcoesDeAutenticacao(IServiceCollection services, IConfiguration configuration, bool requireHttps)
+    {
         services.AddOptions<AuthOptions>()
             .Bind(configuration.GetSection(AuthOptions.SectionName))
             .ValidateDataAnnotations()
@@ -53,42 +64,47 @@ public static class OidcAuthenticationConfiguration
                 options => !options.ValidateAudience || !string.IsNullOrWhiteSpace(options.Audience),
                 "Auth:Audience must be set when Auth:ValidateAudience is true.")
             .ValidateOnStart();
+    }
 
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer();
-
+    private static void ConfigurarJwtBearer(IServiceCollection services, bool requireHttps)
+    {
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IOptions<AuthOptions>, ILoggerFactory>((jwtOptions, authAccessor, loggerFactory) =>
-            {
-                AuthOptions auth = authAccessor.Value;
-
-                jwtOptions.Authority = auth.Authority;
-                jwtOptions.Audience = auth.ValidateAudience ? auth.Audience : null;
-                jwtOptions.RequireHttpsMetadata = requireHttps;
-                jwtOptions.MapInboundClaims = false;
-
-                jwtOptions.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateAudience = auth.ValidateAudience,
-                    ValidAudience = auth.ValidateAudience ? auth.Audience : null,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ClockSkew = auth.ClockSkew,
-                };
-
-                jwtOptions.Events
-                    .WithStructuredLogging(
-                        loggerFactory.CreateLogger("Unifesspa.Geo.Authentication.JwtBearer"))
-                    .WithProblemDetails();
-            });
+                AplicarOpcoesDoJwt(jwtOptions, authAccessor.Value, requireHttps, loggerFactory));
 
         // IProblemDetailsService disponibiliza `CustomizeProblemDetails` e o
         // writer único usado pelos hooks de JwtBearer (challenge/forbidden).
         // Sem este registro, JwtBearerProblemDetailsEvents cai no fallback
         // manual — funcional, mas sem enriquecimento global.
         services.AddProblemDetails();
+    }
 
+    private static void AplicarOpcoesDoJwt(JwtBearerOptions jwtOptions, AuthOptions auth, bool requireHttps, ILoggerFactory loggerFactory)
+    {
+        jwtOptions.Authority = auth.Authority;
+        jwtOptions.Audience = auth.ValidateAudience ? auth.Audience : null;
+        jwtOptions.RequireHttpsMetadata = requireHttps;
+        jwtOptions.MapInboundClaims = false;
+        jwtOptions.TokenValidationParameters = ValidacaoDoToken(auth);
+        jwtOptions.Events
+            .WithStructuredLogging(
+                loggerFactory.CreateLogger("Unifesspa.Geo.Authentication.JwtBearer"))
+            .WithProblemDetails();
+    }
+
+    private static TokenValidationParameters ValidacaoDoToken(AuthOptions auth) =>
+        new()
+        {
+            ValidateIssuer = true,
+            ValidateAudience = auth.ValidateAudience,
+            ValidAudience = auth.ValidateAudience ? auth.Audience : null,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ClockSkew = auth.ClockSkew,
+        };
+
+    private static void AddContextoDoUsuario(IServiceCollection services)
+    {
         services.AddHttpContextAccessor();
         services.AddScoped<IUserContext, HttpUserContext>();
 
@@ -101,7 +117,10 @@ public static class OidcAuthenticationConfiguration
         // [Authorize] onde anônimo é estado impossível.
         services.AddScoped<IRequiredUserContext>(sp =>
             new RequiredUserContext(sp.GetRequiredService<IUserContext>()));
+    }
 
+    private static void AddVerificacaoDoProvedorDeIdentidade(IServiceCollection services)
+    {
         services.AddHttpClient(nameof(OidcDiscoveryHealthCheck))
             .ConfigureHttpClient(static cliente => cliente.Timeout = OidcDiscoveryHealthCheck.LimiteDeEspera);
         services.AddHealthChecks()
@@ -109,10 +128,5 @@ public static class OidcAuthenticationConfiguration
                 name: "oidc-discovery",
                 failureStatus: HealthStatus.Degraded,
                 tags: ["auth"]);
-
-        // TODO(#26-followup): registrar policies por role/permissão (Admin, Gestor, Avaliador, Candidato).
-        services.AddAuthorization();
-
-        return services;
     }
 }

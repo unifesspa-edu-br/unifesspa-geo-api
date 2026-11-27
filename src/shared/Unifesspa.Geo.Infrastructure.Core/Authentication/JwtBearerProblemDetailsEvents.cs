@@ -29,28 +29,36 @@ internal static class JwtBearerProblemDetailsEvents
     {
         ArgumentNullException.ThrowIfNull(events);
 
-        Func<JwtBearerChallengeContext, Task> previousChallenge = events.OnChallenge;
-        events.OnChallenge = async context =>
+        events.OnChallenge = ResponderNaoAutenticado(events.OnChallenge);
+        events.OnForbidden = ResponderAcessoNegado(events.OnForbidden);
+
+        return events;
+    }
+
+    // HandleResponse desliga o caminho default do JwtBearerHandler,
+    // que normalmente popula WWW-Authenticate. AuthenticationProblemDetailsWriter
+    // re-emite o header (RFC 7235 §4.1 / RFC 9110 §11.6.1 exigem em 401),
+    // alinhado com ADR-0034.
+    private static Func<JwtBearerChallengeContext, Task> ResponderNaoAutenticado(
+        Func<JwtBearerChallengeContext, Task> anterior) =>
+        async context =>
         {
-            await previousChallenge(context).ConfigureAwait(false);
+            await anterior(context).ConfigureAwait(false);
 
             if (context.Handled || context.Response.HasStarted)
                 return;
 
-            // HandleResponse desliga o caminho default do JwtBearerHandler,
-            // que normalmente popula WWW-Authenticate. AuthenticationProblemDetailsWriter
-            // re-emite o header (RFC 7235 §4.1 / RFC 9110 §11.6.1 exigem em 401),
-            // alinhado com ADR-0034.
             context.HandleResponse();
             await AuthenticationProblemDetailsWriter
                 .WriteUnauthorizedAsync(context.HttpContext)
                 .ConfigureAwait(false);
         };
 
-        Func<ForbiddenContext, Task> previousForbidden = events.OnForbidden;
-        events.OnForbidden = async context =>
+    private static Func<ForbiddenContext, Task> ResponderAcessoNegado(
+        Func<ForbiddenContext, Task> anterior) =>
+        async context =>
         {
-            await previousForbidden(context).ConfigureAwait(false);
+            await anterior(context).ConfigureAwait(false);
 
             if (context.Response.HasStarted)
                 return;
@@ -59,7 +67,4 @@ internal static class JwtBearerProblemDetailsEvents
                 .WriteForbiddenAsync(context.HttpContext)
                 .ConfigureAwait(false);
         };
-
-        return events;
-    }
 }

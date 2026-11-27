@@ -78,24 +78,12 @@ public sealed partial class HttpUserContext : IUserContext
             .Distinct(RoleComparer)
             .ToArray();
 
-    private string? GetFirstClaimValue(string[] claimTypes)
-    {
-        if (_user is null)
-        {
-            return null;
-        }
-
-        foreach (string claimType in claimTypes)
-        {
-            string? value = _user.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
+    private string? GetFirstClaimValue(string[] claimTypes) =>
+        _user is null
+            ? null
+            : claimTypes
+                .Select(claimType => _user.FindFirst(claimType)?.Value)
+                .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
     private string? GetSingleClaimValue(string claimType)
     {
@@ -131,45 +119,13 @@ public sealed partial class HttpUserContext : IUserContext
 
     private string[] ParseRolesFromJsonClaim(string claimName, string? claimValue, string? resourceName)
     {
-        if (string.IsNullOrWhiteSpace(claimValue))
+        string[]? papeis = PapeisDoKeycloak.Ler(claimValue, resourceName, out JsonException? falha);
+        if (papeis is null)
         {
-            return [];
+            LogMalformedClaim(_logger, claimName, resourceName, falha);
         }
 
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(claimValue);
-            JsonElement scope = document.RootElement;
-
-            if (resourceName is not null &&
-                (!scope.TryGetProperty(resourceName, out scope) || scope.ValueKind != JsonValueKind.Object))
-            {
-                return [];
-            }
-
-            if (!scope.TryGetProperty(KeycloakClaims.Roles, out JsonElement rolesArray) ||
-                rolesArray.ValueKind != JsonValueKind.Array)
-            {
-                return [];
-            }
-
-            // Filtra elementos não-string ANTES de GetString(): um
-            // realm_access.roles malformado (número, objeto) faria GetString()
-            // lançar InvalidOperationException, que não cai no catch
-            // JsonException abaixo — viraria 500. Mesma defesa de
-            // KeycloakRolesClaimsTransformation.
-            return rolesArray
-                .EnumerateArray()
-                .Where(static role => role.ValueKind == JsonValueKind.String)
-                .Select(static role => role.GetString())
-                .OfType<string>()
-                .ToArray();
-        }
-        catch (JsonException ex)
-        {
-            LogMalformedClaim(_logger, claimName, resourceName, ex);
-            return [];
-        }
+        return papeis ?? [];
     }
 
     [LoggerMessage(
@@ -179,5 +135,5 @@ public sealed partial class HttpUserContext : IUserContext
         ILogger logger,
         string claimName,
         string? resourceName,
-        Exception exception);
+        Exception? exception);
 }

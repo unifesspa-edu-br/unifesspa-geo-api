@@ -19,22 +19,29 @@ internal static partial class JwtBearerLoggingEvents
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(logger);
 
-        Func<AuthenticationFailedContext, Task> previousFailed = events.OnAuthenticationFailed;
-        events.OnAuthenticationFailed = async context =>
-        {
-            LogAuthenticationFailed(logger, context.Exception.GetType().Name, context.Exception);
-            await previousFailed(context).ConfigureAwait(false);
-        };
-
-        Func<JwtBearerChallengeContext, Task> previousChallenge = events.OnChallenge;
-        events.OnChallenge = async context =>
-        {
-            LogChallenge(logger, context.Error ?? "no-error", context.ErrorDescription ?? "no-description");
-            await previousChallenge(context).ConfigureAwait(false);
-        };
+        events.OnAuthenticationFailed = RegistrarFalha(events.OnAuthenticationFailed, logger);
+        events.OnChallenge = RegistrarDesafio(events.OnChallenge, logger);
 
         return events;
     }
+
+    private static Func<AuthenticationFailedContext, Task> RegistrarFalha(
+        Func<AuthenticationFailedContext, Task> anterior,
+        ILogger logger) =>
+        async context =>
+        {
+            LogAuthenticationFailed(logger, context.Exception.GetType().Name, context.Exception);
+            await anterior(context).ConfigureAwait(false);
+        };
+
+    private static Func<JwtBearerChallengeContext, Task> RegistrarDesafio(
+        Func<JwtBearerChallengeContext, Task> anterior,
+        ILogger logger) =>
+        async context =>
+        {
+            LogChallenge(logger, context.Error ?? "no-error", context.ErrorDescription ?? "no-description");
+            await anterior(context).ConfigureAwait(false);
+        };
 
     [LoggerMessage(
         Level = LogLevel.Warning,
