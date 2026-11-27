@@ -40,20 +40,20 @@ public sealed partial class GlobalExceptionMiddleware
         {
             await _next(context).ConfigureAwait(false);
         }
-        catch (ValidationException ex)
-        {
-            LogValidationError(_logger, context.Request.Path, ex);
-            await EscreverRespostaValidacao(context, ex).ConfigureAwait(false);
-        }
         catch (Exception ex)
         {
-            LogUnhandledError(_logger, context.Request.Path, ex);
-            await EscreverRespostaErro(context).ConfigureAwait(false);
+            await ResponderAFalhaAsync(context, ex).ConfigureAwait(false);
         }
     }
 
-    private async Task EscreverRespostaValidacao(HttpContext context, ValidationException exception)
+    private Task ResponderAFalhaAsync(HttpContext context, Exception falha) =>
+        falha is ValidationException validacao
+            ? ResponderValidacaoRecusadaAsync(context, validacao)
+            : ResponderErroInesperadoAsync(context, falha);
+
+    private async Task ResponderValidacaoRecusadaAsync(HttpContext context, ValidationException exception)
     {
+        LogValidationError(_logger, context.Request.Path, exception);
         Dictionary<string, object?> corpo = ProblemaNaResposta.Corpo(_problemTypeUriFactory, ErrosDaFronteiraHttp.ErroDeValidacao);
         // Invariante: e.ErrorMessage não deve conter PII nem o valor rejeitado.
         // Usar {PropertyValue} em templates FluentValidation viola essa restrição.
@@ -64,12 +64,15 @@ public sealed partial class GlobalExceptionMiddleware
         await ProblemaNaResposta.EscreverAsync(context, ErrosDaFronteiraHttp.ErroDeValidacao, corpo).ConfigureAwait(false);
     }
 
-    private Task EscreverRespostaErro(HttpContext context) =>
-        ProblemaNaResposta.EscreverAsync(
+    private Task ResponderErroInesperadoAsync(HttpContext context, Exception falha)
+    {
+        LogUnhandledError(_logger, context.Request.Path, falha);
+        return ProblemaNaResposta.EscreverAsync(
             context,
             _problemTypeUriFactory,
             ErrosDaFronteiraHttp.ErroInesperado,
             "Ocorreu um erro inesperado. Tente novamente mais tarde.");
+    }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Erro de validação no request {Path}")]
     private static partial void LogValidationError(ILogger logger, PathString path, Exception ex);
