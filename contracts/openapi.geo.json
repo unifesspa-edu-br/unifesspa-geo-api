@@ -68,7 +68,7 @@
           "Profile"
         ],
         "summary": "Retorna o perfil do usu\u00E1rio autenticado",
-        "description": "Retorna atributos de identidade e institucionais (CPF, NomeSocial) extra\u00EDdos do access token. Requer autentica\u00E7\u00E3o.",
+        "description": "Retorna identificador, nome, e-mail e pap\u00E9is do usu\u00E1rio, extra\u00EDdos do access token. Requer autentica\u00E7\u00E3o.",
         "operationId": "GetAuthenticatedUserProfile",
         "responses": {
           "200": {
@@ -2770,8 +2770,6 @@
           "userId",
           "name",
           "email",
-          "cpf",
-          "nomeSocial",
           "roles",
           "timestamp"
         ],
@@ -2790,20 +2788,6 @@
             ]
           },
           "email": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "cpf": {
-            "pattern": "^\\d{11}$",
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "CPF (apenas d\u00EDgitos, sem formata\u00E7\u00E3o). PII \u2014 sempre mascarar em logs (\u0027***.999.999-**\u0027, ADR-0011)."
-          },
-          "nomeSocial": {
             "type": [
               "null",
               "string"

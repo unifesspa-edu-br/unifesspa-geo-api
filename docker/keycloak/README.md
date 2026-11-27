@@ -197,8 +197,6 @@ Resposta esperada de `/api/profile/me`:
   "userId": "c1787064-fc4b-481a-9cbe-d8715932d4a0",
   "name": "Usuário Candidato",
   "email": "candidato@teste.unifesspa.edu.br",
-  "cpf": "24843803480",
-  "nomeSocial": "Candidato Teste",
   "roles": ["candidato"],
   "timestamp": "2026-04-25T01:06:24.367+00:00"
 }

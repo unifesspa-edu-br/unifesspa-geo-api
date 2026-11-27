@@ -30,13 +30,11 @@ public static class ProfileEndpointsExtensions
                     userContext.UserId,
                     userContext.Name,
                     userContext.Email,
-                    userContext.Cpf,
-                    userContext.NomeSocial,
                     userContext.Roles,
                     clock.GetUtcNow())))
             .WithName("GetAuthenticatedUserProfile")
             .WithSummary("Retorna o perfil do usuário autenticado")
-            .WithDescription("Retorna atributos de identidade e institucionais (CPF, NomeSocial) extraídos do access token. Requer autenticação.")
+            .WithDescription("Retorna identificador, nome, e-mail e papéis do usuário, extraídos do access token. Requer autenticação.")
             .Produces<UserProfileResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
