@@ -41,7 +41,7 @@ A operação é rara (cerca de três vezes por ano, por uma única pessoa com o 
 - A carga em segundo plano lê o SQL com um leitor de gramática fechada: reconhece só os comandos conhecidos do pacote, valida nomes e colunas contra uma lista fechada e nunca executa SQL do arquivo. Os dados vão para tabelas de um esquema temporário do próprio banco do Geo e daí para a base publicada.
 - A base é publicada numa única transação, junto com a conclusão da execução. Se qualquer parte falhar, a versão anterior continua publicada.
 - Uma trava consultiva do PostgreSQL é obtida no próprio pedido e mantida até o fim da carga. Há uma carga por vez; na partida, a trava livre indica que toda execução ainda em andamento foi abandonada.
-- O arquivo, o esquema temporário e a trava são descartados em sucesso, em falha e na partida do serviço.
+- O arquivo e o esquema temporário são descartados em sucesso e em falha; na partida do serviço, o arquivo é apagado e o esquema temporário só é descartado quando a instância obtém a trava. A trava não é descartada na partida: ela só é tentada (ver a emenda de 27/11/2026).
 - Enviar de novo o pacote cujo resumo SHA-256 é o da última carga concluída devolve 200 com essa execução, sem repetir a carga. Não existe opção de forçar a recarga do mesmo pacote.
 - A versão do pacote não pode ser anterior à última aplicada. A versão vem do conteúdo, nunca do nome do arquivo.
 
@@ -75,3 +75,11 @@ A operação é rara (cerca de três vezes por ano, por uma única pessoa com o 
 - Testes de integração cobrem o envio (200, 202, 401, 403, 409, 413, 415, 422), a conferência do zip, a repetição e a reversão integral em falha.
 - A carga em homologação, com o pacote completo, precede a produção; a produção só recebe a versão nova por ordem do Tech Lead.
 - Infraestrutura: o volume em memória, o diretório do pacote e o limite de memória ficam no chart de implantação, a cargo da equipe de infraestrutura.
+
+## Emenda de 27/11/2026
+
+Esclarece dois itens do resultado da decisão, sem mudá-la.
+
+**Ordem do pedido.** Antes de ler o corpo, o envio é recusado com 409 se houver execução em andamento registrada ou outro envio sendo recebido na mesma instância. Depois o corpo é gravado no volume em memória e o diretório do zip é conferido (413, 415, 422). Só então a trava consultiva é obtida; seguem a guarda de versão (409), a repetição do pacote já publicado (200) e o registro da execução (202). A trava não cobre o recebimento: dois envios simultâneos em instâncias diferentes são recebidos cada um no volume da sua instância, e o que não obtém a trava recebe 409 e tem o arquivo apagado. Cada instância guarda no máximo um pacote.
+
+**Descarte.** O arquivo do pacote é apagado assim que o esquema temporário é populado, em toda recusa do pedido (inclusive a repetição com 200), em toda falha ou cancelamento e, na partida, com tudo o que houver no diretório do pacote. O esquema temporário é descartado ao fim da carga, em sucesso ou falha, e na partida quando a instância obtém a trava. A trava é solta ao fim da carga ou na recusa posterior a ela, e não sobrevive ao processo; na partida ela só é tentada, para saber se as execuções em andamento foram abandonadas.

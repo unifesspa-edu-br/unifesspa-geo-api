@@ -86,8 +86,8 @@ A publicação é uma única transação. Falha, cancelamento, estouro de `Geo:E
 ## O que é descartado, e quando
 
 - **O arquivo do pacote** fica num volume em memória do pod (`Geo:Etl:DiretorioDoPacote`), com permissão `0600`, sem cifra no aplicativo. É apagado logo que a carga termina de popular o esquema temporário, em qualquer recusa (409, 413, 422, 200 por repetição), em qualquer falha ou cancelamento e na partida do serviço.
-- **O esquema temporário** `carga_dne_{execução}`, no banco do Geo, é descartado ao fim da carga, em sucesso ou falha, e também na partida do serviço.
-- **A trava da carga** (trava consultiva do PostgreSQL, uma por vez) é obtida no pedido, acompanha a execução e é solta ao fim.
+- **O esquema temporário** `carga_dne_{execução}`, no banco do Geo, é descartado ao fim da carga, em sucesso ou falha, e também na partida do serviço, quando a instância obtém a trava.
+- **A trava da carga** (trava consultiva do PostgreSQL, uma por vez) é obtida no pedido, depois da conferência do pacote, acompanha a execução e é solta ao fim.
 - Depois de um reinício do serviço, o pacote precisa ser reenviado. Na partida, o serviço só marca como `Falhou` as execuções em andamento quando consegue obter a trava da carga, isto é, quando nenhuma instância está carregando. Se outra instância segura a trava, a execução dela está viva e nada é alterado.
 - Evite implantar uma nova versão durante uma carga: o serviço antigo cancela a carga e desfaz a transação.
 
@@ -125,7 +125,7 @@ Toda a publicação de uma versão — topo (`pais`, `estado`, `cidade`), folhas
 
 ### Trava da carga e reinício do serviço
 
-- **Ordem do pedido:** o endpoint obtém a trava consultiva do PostgreSQL (`pg_try_advisory_lock`, em conexão própria) antes da guarda de versão e do registro da execução como `EmAndamento`. Com a trava ocupada, responde 409 `em_andamento` sem gravar nada. Recusa posterior (versão anterior à aplicada, conflito de registro, fila fechada) solta a trava.
+- **Ordem do pedido:** o endpoint recebe e confere o pacote e só então obtém a trava consultiva do PostgreSQL (`pg_try_advisory_lock`, em conexão própria), antes da guarda de versão e do registro da execução como `EmAndamento`. A trava não cobre o recebimento do pacote. Com a trava ocupada, responde 409 `em_andamento` sem gravar nada. Recusa posterior (versão anterior à aplicada, conflito de registro, fila fechada) solta a trava.
 - **Duração:** a trava acompanha a execução pela fila em memória e só é solta quando a carga termina, depois de marcar o resultado (`Concluida` ou `Falhou`). No desligamento, as cargas ainda na fila são marcadas `Falhou` antes de a trava ser solta.
 - **Reinício:** na partida, o serviço tenta obter a mesma trava. Se conseguir, toda execução `EmAndamento` está abandonada (execução viva sempre tem a trava), marca todas como `Falhou` e sincroniza o selo do cache de CEP com a última execução `Concluida`, na mesma seção sob a trava. Se a trava estiver ocupada, outra instância está carregando (por exemplo, durante a implantação com duas instâncias): nada é alterado e o selo fica a cargo de quem detém a trava, que o grava ao confirmar a carga.
 
