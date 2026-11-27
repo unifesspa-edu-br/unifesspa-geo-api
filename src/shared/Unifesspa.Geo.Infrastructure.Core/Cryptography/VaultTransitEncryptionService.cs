@@ -4,10 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using VaultSharp;
-using VaultSharp.Core;
-using VaultSharp.V1.AuthMethods;
-using VaultSharp.V1.AuthMethods.Kubernetes;
-using VaultSharp.V1.AuthMethods.Token;
 using VaultSharp.V1.Commons;
 using VaultSharp.V1.SecretsEngines.Transit;
 
@@ -17,14 +13,8 @@ using VaultSharp.V1.SecretsEngines.Transit;
 /// </summary>
 internal sealed partial class VaultTransitEncryptionService : IGeoEncryptionService, IDisposable
 {
-    private volatile VaultClient _vault;
-    private readonly string _vaultAddress;
-    private readonly string _jwtPath;
-    private readonly string? _role;
+    private readonly ConexaoAoVault _conexao;
     private readonly string _transitMount;
-    private readonly string? _vaultToken;
-    private readonly bool _useKubernetesAuth;
-    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly ILogger<VaultTransitEncryptionService> _logger;
 
     public VaultTransitEncryptionService(IOptions<EncryptionOptions> options, ILogger<VaultTransitEncryptionService> logger)
@@ -33,48 +23,8 @@ internal sealed partial class VaultTransitEncryptionService : IGeoEncryptionServ
         ArgumentNullException.ThrowIfNull(logger);
 
         _logger = logger;
-
-        EncryptionOptions opts = options.Value;
-
-        if (string.IsNullOrWhiteSpace(opts.VaultAddress))
-        {
-            throw new InvalidOperationException(
-                "Geo:Encryption:VaultAddress é obrigatório quando Provider = 'vault'.");
-        }
-
-        bool hasRole = !string.IsNullOrWhiteSpace(opts.KubernetesRole);
-        bool hasToken = !string.IsNullOrWhiteSpace(opts.VaultToken);
-
-        // EncryptionOptionsValidator já enforça exatamente um dos dois quando Provider=vault.
-        // As guardas defensivas abaixo cobrem o fluxo de testes que instancia o serviço
-        // diretamente (sem passar pelo validator), tornando a violação explícita em vez
-        // de um NullReferenceException mais adiante em CreateVaultClient. Mensagens
-        // separadas facilitam o diagnóstico — ambos definidos vs nenhum definido têm
-        // ações corretivas distintas.
-        if (hasRole && hasToken)
-        {
-            throw new InvalidOperationException(
-                "Geo:Encryption: KubernetesRole e VaultToken são mutuamente exclusivos quando Provider = 'vault'. " +
-                "Em produção use KubernetesRole; em testes/dev use VaultToken. " +
-                "Ver EncryptionOptionsValidator e docs/guia-config-cifragem.md.");
-        }
-
-        if (!hasRole && !hasToken)
-        {
-            throw new InvalidOperationException(
-                "Geo:Encryption: nem KubernetesRole nem VaultToken estão definidos quando Provider = 'vault'. " +
-                "Configure GEO__ENCRYPTION__KUBERNETESROLE (produção) ou GEO__ENCRYPTION__VAULTTOKEN (testes/dev). " +
-                "Ver EncryptionOptionsValidator e docs/guia-config-cifragem.md.");
-        }
-
-        _vaultAddress = opts.VaultAddress;
-        _jwtPath = opts.KubernetesJwtPath;
-        _role = opts.KubernetesRole;
-        _transitMount = opts.VaultTransitMount;
-        _vaultToken = opts.VaultToken;
-        _useKubernetesAuth = hasRole;
-
-        _vault = CreateVaultClient();
+        _conexao = new ConexaoAoVault(options.Value);
+        _transitMount = options.Value.VaultTransitMount;
     }
 
     public async Task<byte[]> EncryptAsync(string keyName, byte[] plaintext, CancellationToken cancellationToken = default)
@@ -83,25 +33,9 @@ internal sealed partial class VaultTransitEncryptionService : IGeoEncryptionServ
         ArgumentNullException.ThrowIfNull(plaintext);
 
         // VaultSharp 1.17.5.1 Transit não expõe CancellationToken — parâmetro recebido mas não propagável.
-        try
-        {
-            return await ExecuteWithAuthRetryAsync(keyName, async vault =>
-            {
-                string base64Plain = Convert.ToBase64String(plaintext);
-                EncryptRequestOptions request = new() { Base64EncodedPlainText = base64Plain };
-
-                Secret<EncryptionResponse> response = await vault.V1.Secrets.Transit
-                    .EncryptAsync(keyName, request, _transitMount)
-                    .ConfigureAwait(false);
-
-                LogEncrypt(_logger, keyName);
-                return System.Text.Encoding.UTF8.GetBytes(response.Data.CipherText);
-            }).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not EncryptionFailureException)
-        {
-            throw new EncryptionFailureException(keyName, ex);
-        }
+        return await TraducaoDaFalhaDeCifragem.ExecutarAsync(keyName, () => _conexao.ExecutarComReautenticacaoAsync(
+            vault => CifrarNoTransitAsync(vault, keyName, plaintext),
+            () => LogAuthRefresh(_logger, keyName))).ConfigureAwait(false);
     }
 
     public async Task<byte[]> DecryptAsync(string keyName, byte[] ciphertext, CancellationToken cancellationToken = default)
@@ -110,103 +44,37 @@ internal sealed partial class VaultTransitEncryptionService : IGeoEncryptionServ
         ArgumentNullException.ThrowIfNull(ciphertext);
 
         // VaultSharp 1.17.5.1 Transit não expõe CancellationToken — parâmetro recebido mas não propagável.
-        try
-        {
-            return await ExecuteWithAuthRetryAsync(keyName, async vault =>
-            {
-                string vaultCiphertext = System.Text.Encoding.UTF8.GetString(ciphertext);
-                DecryptRequestOptions request = new() { CipherText = vaultCiphertext };
-
-                Secret<DecryptionResponse> response = await vault.V1.Secrets.Transit
-                    .DecryptAsync(keyName, request, _transitMount)
-                    .ConfigureAwait(false);
-
-                LogDecrypt(_logger, keyName);
-                return Convert.FromBase64String(response.Data.Base64EncodedPlainText);
-            }).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not EncryptionFailureException)
-        {
-            throw new EncryptionFailureException(keyName, ex);
-        }
+        return await TraducaoDaFalhaDeCifragem.ExecutarAsync(keyName, () => _conexao.ExecutarComReautenticacaoAsync(
+            vault => DecifrarNoTransitAsync(vault, keyName, ciphertext),
+            () => LogAuthRefresh(_logger, keyName))).ConfigureAwait(false);
     }
 
-    public void Dispose() => _refreshLock.Dispose();
+    public void Dispose() => _conexao.Dispose();
 
-    private VaultClient CreateVaultClient()
+    private async Task<byte[]> CifrarNoTransitAsync(VaultClient vault, string keyName, byte[] plaintext)
     {
-        // O auth method é determinado pela configuração validada (EncryptionOptionsValidator
-        // garante exatamente um entre KubernetesRole e VaultToken). Sem heurística de
-        // File.Exists: se a config disser "K8s" mas o JWT não estiver disponível em disco,
-        // falha-se com mensagem específica em vez de cair silenciosamente para token estático
-        // (cenário que produziria NullReferenceException agora que VaultToken é mutuamente
-        // exclusivo com KubernetesRole).
-        IAuthMethodInfo authMethod = _useKubernetesAuth
-            ? new KubernetesAuthMethodInfo(_role, ReadJwtOrThrow())
-            : new TokenAuthMethodInfo(_vaultToken!);
+        string base64Plain = Convert.ToBase64String(plaintext);
+        EncryptRequestOptions request = new() { Base64EncodedPlainText = base64Plain };
 
-        return new VaultClient(new VaultClientSettings(_vaultAddress, authMethod));
+        Secret<EncryptionResponse> response = await vault.V1.Secrets.Transit
+            .EncryptAsync(keyName, request, _transitMount)
+            .ConfigureAwait(false);
+
+        LogEncrypt(_logger, keyName);
+        return System.Text.Encoding.UTF8.GetBytes(response.Data.CipherText);
     }
 
-    private string ReadJwtOrThrow()
+    private async Task<byte[]> DecifrarNoTransitAsync(VaultClient vault, string keyName, byte[] ciphertext)
     {
-        if (string.IsNullOrWhiteSpace(_jwtPath))
-        {
-            throw new InvalidOperationException(
-                "Geo:Encryption:KubernetesJwtPath está vazio. Configure o path do JWT do " +
-                "ServiceAccount (default: /var/run/secrets/kubernetes.io/serviceaccount/token).");
-        }
+        string vaultCiphertext = System.Text.Encoding.UTF8.GetString(ciphertext);
+        DecryptRequestOptions request = new() { CipherText = vaultCiphertext };
 
-        if (!File.Exists(_jwtPath))
-        {
-            throw new InvalidOperationException(
-                $"JWT do ServiceAccount não encontrado em '{_jwtPath}'. " +
-                "Verifique se o ServiceAccount está montado no Pod (automountServiceAccountToken=true) " +
-                "e se o caminho Geo:Encryption:KubernetesJwtPath corresponde ao volume do token.");
-        }
+        Secret<DecryptionResponse> response = await vault.V1.Secrets.Transit
+            .DecryptAsync(keyName, request, _transitMount)
+            .ConfigureAwait(false);
 
-        string content = File.ReadAllText(_jwtPath);
-
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            throw new InvalidOperationException(
-                $"JWT do ServiceAccount em '{_jwtPath}' está vazio. " +
-                "O kubelet costuma re-popular o token automaticamente; verificar logs do pod e " +
-                "o estado do volume projetado do ServiceAccount.");
-        }
-
-        return content;
-    }
-
-    private async Task RefreshVaultClientAsync()
-    {
-        await _refreshLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            _vault = CreateVaultClient();
-        }
-        finally
-        {
-            _refreshLock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Executa <paramref name="operation"/> com retry automático quando o Vault retorna 403.
-    /// O retry relê o JWT do disco, garantindo que tokens K8s rotacionados sejam absorvidos sem restart.
-    /// </summary>
-    private async Task<T> ExecuteWithAuthRetryAsync<T>(string keyName, Func<VaultClient, Task<T>> operation)
-    {
-        try
-        {
-            return await operation(_vault).ConfigureAwait(false);
-        }
-        catch (VaultApiException vex) when (vex.StatusCode == 403)
-        {
-            LogAuthRefresh(_logger, keyName);
-            await RefreshVaultClientAsync().ConfigureAwait(false);
-            return await operation(_vault).ConfigureAwait(false);
-        }
+        LogDecrypt(_logger, keyName);
+        return Convert.FromBase64String(response.Data.Base64EncodedPlainText);
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Vault encrypt concluído para chave '{KeyName}'")]
