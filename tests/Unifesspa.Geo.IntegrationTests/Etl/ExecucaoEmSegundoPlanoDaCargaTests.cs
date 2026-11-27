@@ -64,7 +64,7 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
 
         await using GeoDbContext ctx = _cenario.CriarContexto();
         using GeoEtlMetrics metricas = new();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal));
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal));
         Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
         CargaDaImportacao executor = _cenario.CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
 
@@ -123,7 +123,7 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601");
 
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
         });
@@ -166,7 +166,7 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime
         using GeoEtlMetrics metricas = new();
         Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
         CargaDaImportacao real = _cenario.CriarExecutor(
-            ctx, new FonteFactoryFake(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)), cacheLazy, metricas);
+            ctx, new FonteFactoryFake(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)), cacheLazy, metricas);
         ExecutorComSinal executor = new(new ExecutorQueFalha(real));
         using GeoImportacaoBackgroundService processo = CriarProcessoEmSegundoPlano(fila, executor);
 

@@ -10,11 +10,14 @@ using Microsoft.Extensions.Options;
 
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Executa a carga DNE em segundo plano, sob a trava consultiva obtida no pedido, em transação
-/// única no <see cref="GeoDbContext"/>, garantindo publicação atômica ou reversão integral.
+/// única no <see cref="GeoDbContext"/>, garantindo publicação atômica ou reversão integral. A fonte
+/// da execução (esquema de carga e arquivo do pacote) é preparada e descartada pelo importador da
+/// versão; o arquivo do pacote é apagado ao fim em qualquer desfecho, antes de soltar a trava.
 /// </summary>
 internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
 {
@@ -76,6 +79,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
         if (execucao is null || execucao.Status != StatusImportacao.EmAndamento)
         {
             LogExecucaoIgnorada(_logger, execucaoId);
+            await _finalizacao.DescartarPacoteAsync(execucaoId).ConfigureAwait(false);
             return;
         }
 
@@ -88,7 +92,14 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
         DateTimeOffset inicioCarga = _relogio.GetUtcNow();
         using PrazoDaCarga prazo = new(_duracaoMaximaDaCarga, _relogio, cancelamentoExterno);
 
-        await ExecutarProtegidoAsync(execucao, inicio, inicioCarga, prazo).ConfigureAwait(false);
+        try
+        {
+            await ExecutarProtegidoAsync(execucao, inicio, inicioCarga, prazo).ConfigureAwait(false);
+        }
+        finally
+        {
+            await _finalizacao.DescartarPacoteAsync(execucao.Id).ConfigureAwait(false);
+        }
     }
 
     private async Task ExecutarProtegidoAsync(
@@ -136,7 +147,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
         CancellationToken cancellationToken)
     {
         ResultadoDaVersao resultado = await _importadorVersao
-            .ImportarAsync(execucao.VersaoDataset, inicioCarga, cancellationToken)
+            .ImportarAsync(execucao.Id, execucao.VersaoDataset, inicioCarga, cancellationToken)
             .ConfigureAwait(false);
 
         if (resultado.MotivoRecusa != MotivoRecusaDaVersao.Nenhum)
@@ -249,11 +260,17 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
     private async Task TratarFalhaGeralAsync(Guid execucaoId, string versao, long inicio, Exception excecao)
     {
         await _finalizacao
-            .MarcarFalhaAsync(execucaoId, "Falha na carga da DNE.", CancellationToken.None)
+            .MarcarFalhaAsync(execucaoId, MensagemDaFalha(excecao), CancellationToken.None)
             .ConfigureAwait(false);
         _finalizacao.RegistrarMetricaFalha(versao, inicio);
         LogFalhou(_logger, execucaoId, versao, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
     }
+
+    // A recusa do pacote traz só a tabela (da lista fechada), o número da linha e um motivo fixo.
+    private static string MensagemDaFalha(Exception excecao) =>
+        excecao is ErroDeLeituraDoPacoteDneException recusa
+            ? $"Pacote recusado: {recusa.Message}"
+            : "Falha na carga da DNE.";
 
     private static TimeSpan ValidarDuracaoMaxima(TimeSpan duracao) =>
         duracao > TimeSpan.Zero

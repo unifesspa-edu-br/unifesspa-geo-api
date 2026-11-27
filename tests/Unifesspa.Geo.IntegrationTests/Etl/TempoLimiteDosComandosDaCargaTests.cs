@@ -70,7 +70,8 @@ public sealed class TempoLimiteDosComandosDaCargaTests
             CriarImportador(contexto, prazo),
             NullLogger<GeoImportadorLocalidades>.Instance);
 
-        await importadorDasFolhas.ImportarAsync(new FonteEmMemoria(), CancellationToken.None);
+        await using FonteEmMemoria fonte = new();
+        await importadorDasFolhas.ImportarAsync(fonte, CancellationToken.None);
         await transacao.CommitAsync();
     }
 

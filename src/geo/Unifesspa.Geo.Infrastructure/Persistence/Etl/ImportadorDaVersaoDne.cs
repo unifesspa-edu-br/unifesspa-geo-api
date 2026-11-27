@@ -6,7 +6,8 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 /// <summary>
 /// Executa o encadeamento de carga da versão DNE dentro da transação única do
 /// <see cref="GeoDbContext"/>: topo, guarda de versão vazia, folhas, guarda de
-/// folhas vazias, marcação de não vigentes e consolidação do relatório.
+/// folhas vazias, marcação de não vigentes e consolidação do relatório. Prepara a fonte da execução
+/// e a descarta ao terminar, com sucesso ou não.
 /// </summary>
 internal sealed class ImportadorDaVersaoDne
 {
@@ -15,32 +16,40 @@ internal sealed class ImportadorDaVersaoDne
     private readonly GeoDbContext _contexto;
     private readonly IGeoImportador _importadorTopo;
     private readonly IGeoImportadorLocalidades _importadorFolhas;
-    private readonly IGeoFonteDadosFactory _fonteFactory;
+    private readonly IFonteDaExecucaoDne _fonteDaExecucao;
     private readonly TimeProvider _relogio;
 
     public ImportadorDaVersaoDne(
         GeoDbContext contexto,
         IGeoImportador importadorTopo,
         IGeoImportadorLocalidades importadorFolhas,
-        IGeoFonteDadosFactory fonteFactory,
+        IFonteDaExecucaoDne fonteDaExecucao,
         TimeProvider relogio)
     {
         ArgumentNullException.ThrowIfNull(contexto);
         ArgumentNullException.ThrowIfNull(importadorTopo);
         ArgumentNullException.ThrowIfNull(importadorFolhas);
-        ArgumentNullException.ThrowIfNull(fonteFactory);
+        ArgumentNullException.ThrowIfNull(fonteDaExecucao);
         ArgumentNullException.ThrowIfNull(relogio);
 
         _contexto = contexto;
         _importadorTopo = importadorTopo;
         _importadorFolhas = importadorFolhas;
-        _fonteFactory = fonteFactory;
+        _fonteDaExecucao = fonteDaExecucao;
         _relogio = relogio;
     }
 
-    public async Task<ResultadoDaVersao> ImportarAsync(string versao, DateTimeOffset inicioCarga, CancellationToken cancellationToken)
+    public async Task<ResultadoDaVersao> ImportarAsync(Guid execucaoId, string versao, DateTimeOffset inicioCarga, CancellationToken cancellationToken)
     {
-        IGeoFonteDados fonte = _fonteFactory.Criar(versao);
+        IFonteDaCargaDne fonte = await _fonteDaExecucao.PrepararAsync(execucaoId, versao, cancellationToken).ConfigureAwait(false);
+        await using (fonte.ConfigureAwait(false))
+        {
+            return await ImportarDaFonteAsync(fonte, versao, inicioCarga, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<ResultadoDaVersao> ImportarDaFonteAsync(IGeoFonteDados fonte, string versao, DateTimeOffset inicioCarga, CancellationToken cancellationToken)
+    {
         RelatorioImportacao relTopo = await _importadorTopo.ImportarAsync(fonte, cancellationToken).ConfigureAwait(false);
         ContadorTabela cidade = relTopo.Tabela("cidade");
         if (cidade.Inseridos + cidade.Atualizados == 0)

@@ -124,7 +124,7 @@ builder.Services.AddDbContextMigrationsOnStartup<GeoDbContext>();
 // reconciliação do worker tocam o banco, que precisa já ter a tabela
 // geo_importacao_execucao (ServicesStartConcurrently=false ⇒ ordem de start = ordem
 // de registro). Mantém-se antes do Wolverine, coerente com o invariante de ordem.
-builder.Services.AddGeoEtlGatilhos(builder.Configuration, builder.Environment);
+builder.Services.AddGeoEtlGatilhos(builder.Configuration);
 
 // Wolverine como backbone CQRS/messaging (ADR-0003/0004/0005). Sem roteamento
 // específico em V1 — handlers de localidade entram nas Stories de API; o

@@ -1,11 +1,8 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 /// <summary>
-/// Configuração da carga de atualização periódica do Geo, seção
-/// <c>Geo:Etl</c>. Os defaults são seguros para produção/teste: o processo em segundo plano fica ligado
-/// (consome disparos do endpoint admin) e o seed de desenvolvimento fica
-/// <strong>desligado</strong> — só a compose de dev o liga, garantindo que os testes
-/// (que rodam como <c>Development</c>) nunca semeiem.
+/// Configuração da carga da base dos Correios, seção <c>Geo:Etl</c>. Os padrões são seguros
+/// para produção e teste: o processo em segundo plano fica ligado (consome os envios do endpoint admin).
 /// </summary>
 public sealed class EtlOpcoes
 {
@@ -20,21 +17,6 @@ public sealed class EtlOpcoes
     /// </summary>
     public bool ProcessoEmSegundoPlanoHabilitado { get; set; } = true;
 
-    /// <summary>Liga o seed automático no boot de desenvolvimento (base vazia). Default <see langword="false"/>.</summary>
-    public bool SeedHabilitado { get; set; }
-
-    /// <summary>Versão (AAAAMM) do dataset usada pelo seed de desenvolvimento.</summary>
-    public string VersaoSeed { get; set; } = "202610";
-
-    /// <summary>
-    /// Schema onde os dumps DNE são restaurados no banco de staging dedicado
-    /// (<c>ConnectionStrings:GeoStagingDb</c>, issue #12), lido pela <c>DneStagingFonte</c>.
-    /// Default <c>public</c> — os dumps (Navicat) qualificam <c>"public"."tbl_cep_..."</c>
-    /// explicitamente, então o <c>public</c> nativo do banco de staging os recebe sem
-    /// nenhuma reescrita de schema.
-    /// </summary>
-    public string StagingSchema { get; set; } = "public";
-
     /// <summary>
     /// Duração máxima de uma execução da carga antes do cancelamento automático e reversão
     /// integral da transação. Padrão de 1 hora; deve ser maior que zero.
@@ -47,4 +29,15 @@ public sealed class EtlOpcoes
     /// prazo padrão da conexão. Padrão de 30 minutos; deve ser maior que zero e caber em segundos inteiros.
     /// </summary>
     public TimeSpan TempoLimiteDosComandosDaCarga { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// Tamanho máximo, em bytes, do pacote enviado. Padrão de 128 MiB; deve ser maior que zero.
+    /// </summary>
+    public long TamanhoMaximoDoPacote { get; set; } = 128L * 1024 * 1024;
+
+    /// <summary>
+    /// Diretório onde o pacote enviado fica enquanto a carga não popula o esquema de carga
+    /// (em produção, o volume em memória do pod). Padrão: <c>pacotes-dne</c> no diretório temporário do sistema.
+    /// </summary>
+    public string DiretorioDoPacote { get; set; } = Path.Combine(Path.GetTempPath(), "pacotes-dne");
 }

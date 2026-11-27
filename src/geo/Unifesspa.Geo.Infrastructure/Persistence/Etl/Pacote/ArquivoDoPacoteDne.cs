@@ -65,8 +65,47 @@ internal sealed class ArquivoDoPacoteDne
 
     public static void Apagar(string caminho) => File.Delete(caminho);
 
-    private string CaminhoDe(Guid execucaoId) =>
+    /// <summary>Caminho do arquivo da execução: o nome é o identificador, nunca o nome enviado pelo cliente.</summary>
+    public string CaminhoDe(Guid execucaoId) =>
         Path.Combine(_diretorio, execucaoId.ToString("N", CultureInfo.InvariantCulture));
+
+    /// <summary>Apaga o arquivo da execução se ele existir.</summary>
+    public void ApagarSeExistir(Guid execucaoId)
+    {
+        string caminho = CaminhoDe(execucaoId);
+        if (File.Exists(caminho))
+        {
+            Apagar(caminho);
+        }
+    }
+
+    /// <summary>Apaga tudo o que houver no diretório de pacotes (resíduo de um processo anterior); devolve quantos itens removeu.</summary>
+    public int LimparDiretorio()
+    {
+        if (!Directory.Exists(_diretorio))
+        {
+            return 0;
+        }
+
+        string[] itens = [.. Directory.EnumerateFileSystemEntries(_diretorio)];
+        foreach (string item in itens)
+        {
+            ApagarItem(item);
+        }
+
+        return itens.Length;
+    }
+
+    private static void ApagarItem(string item)
+    {
+        if (Directory.Exists(item))
+        {
+            Directory.Delete(item, recursive: true);
+            return;
+        }
+
+        File.Delete(item);
+    }
 
     private async Task<ResumoDoCorpo?> GravarAsync(
         Stream corpo,

@@ -56,12 +56,12 @@ internal sealed class CenarioDaCargaPeriodica
         return execucao.Id;
     }
 
-    public Task ExecutarAsync(Guid execucaoId, IGeoFonteDadosFactory fonteFactory, IGeoCepCacheInvalidador cache) =>
+    public Task ExecutarAsync(Guid execucaoId, IFonteDaExecucaoDne fonteFactory, IGeoCepCacheInvalidador cache) =>
         ExecutarComLazyAsync(execucaoId, fonteFactory, new Lazy<IGeoCepCacheInvalidador>(() => cache));
 
     // Cada execução começa depois da anterior: a marcação de não vigentes compara os
     // carimbos gravados com o instante em que a carga iniciou.
-    public async Task ExecutarComLazyAsync(Guid execucaoId, IGeoFonteDadosFactory fonteFactory, Lazy<IGeoCepCacheInvalidador> cacheLazy)
+    public async Task ExecutarComLazyAsync(Guid execucaoId, IFonteDaExecucaoDne fonteFactory, Lazy<IGeoCepCacheInvalidador> cacheLazy)
     {
         Relogio.Avancar(TimeSpan.FromMinutes(1));
         await using GeoDbContext ctx = CriarContexto();
@@ -76,7 +76,7 @@ internal sealed class CenarioDaCargaPeriodica
 
     public CargaDaImportacao CriarExecutor(
         GeoDbContext ctx,
-        IGeoFonteDadosFactory fonteFactory,
+        IFonteDaExecucaoDne fonteFactory,
         Lazy<IGeoCepCacheInvalidador> cacheLazy,
         GeoEtlMetrics metricas)
     {
@@ -87,7 +87,7 @@ internal sealed class CenarioDaCargaPeriodica
         return new CargaDaImportacao(
             ctx,
             CriarImportadorVersao(ctx, fonteFactory, configuracao),
-            CriarFinalizacao(cacheLazy, metricas),
+            CriarFinalizacao(cacheLazy, metricas, fonteFactory),
             Relogio,
             Options.Create(new EtlOpcoes()),
             NullLogger<CargaDaImportacao>.Instance);
@@ -141,7 +141,7 @@ internal sealed class CenarioDaCargaPeriodica
 
     private ImportadorDaVersaoDne CriarImportadorVersao(
         GeoDbContext ctx,
-        IGeoFonteDadosFactory fonteFactory,
+        IFonteDaExecucaoDne fonteFactory,
         IConfiguration configuracao)
     {
         GeoImportadorPaisEstadoCidade topo = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
@@ -153,7 +153,8 @@ internal sealed class CenarioDaCargaPeriodica
 
     private FinalizacaoDaCargaDne CriarFinalizacao(
         Lazy<IGeoCepCacheInvalidador> cacheLazy,
-        GeoEtlMetrics metricas)
+        GeoEtlMetrics metricas,
+        IFonteDaExecucaoDne fonteDaExecucao)
     {
         ServiceCollection services = new();
         services.AddScoped(_ => CriarContexto());
@@ -163,6 +164,7 @@ internal sealed class CenarioDaCargaPeriodica
             provider.GetRequiredService<IServiceScopeFactory>(),
             cacheLazy,
             metricas,
+            fonteDaExecucao,
             Relogio,
             NullLogger<FinalizacaoDaCargaDne>.Instance);
     }

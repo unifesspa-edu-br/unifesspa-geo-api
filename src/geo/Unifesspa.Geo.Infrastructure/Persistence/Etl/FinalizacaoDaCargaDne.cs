@@ -10,6 +10,7 @@ using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Observability;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 
 /// <summary>
 /// Trata a finalização, o selo do cache de CEP, a verificação de confirmação incerta
@@ -20,6 +21,7 @@ internal sealed partial class FinalizacaoDaCargaDne
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly Lazy<IGeoCepCacheInvalidador> _cacheInvalidador;
     private readonly GeoEtlMetrics _metricas;
+    private readonly IFonteDaExecucaoDne _fonteDaExecucao;
     private readonly TimeProvider _relogio;
     private readonly ILogger<FinalizacaoDaCargaDne> _logger;
 
@@ -27,20 +29,36 @@ internal sealed partial class FinalizacaoDaCargaDne
         IServiceScopeFactory scopeFactory,
         Lazy<IGeoCepCacheInvalidador> cacheInvalidador,
         GeoEtlMetrics metricas,
+        IFonteDaExecucaoDne fonteDaExecucao,
         TimeProvider relogio,
         ILogger<FinalizacaoDaCargaDne> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(cacheInvalidador);
         ArgumentNullException.ThrowIfNull(metricas);
+        ArgumentNullException.ThrowIfNull(fonteDaExecucao);
         ArgumentNullException.ThrowIfNull(relogio);
         ArgumentNullException.ThrowIfNull(logger);
 
         _scopeFactory = scopeFactory;
         _cacheInvalidador = cacheInvalidador;
         _metricas = metricas;
+        _fonteDaExecucao = fonteDaExecucao;
         _relogio = relogio;
         _logger = logger;
+    }
+
+    /// <summary>Apaga o arquivo do pacote da execução, se ainda existir; uma falha ao apagar só é registrada.</summary>
+    public async Task DescartarPacoteAsync(Guid execucaoId)
+    {
+        try
+        {
+            await _fonteDaExecucao.DescartarPacoteAsync(execucaoId).ConfigureAwait(false);
+        }
+        catch (Exception excecao) when (excecao is IOException or UnauthorizedAccessException)
+        {
+            LogFalhaAoApagarPacote(_logger, execucaoId, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
+        }
     }
 
     public async Task ConcluirComSeloAsync(Guid execucaoId, string versao, long inicioTimestamp, RelatorioImportacaoDto relatorio)
@@ -157,6 +175,9 @@ internal sealed partial class FinalizacaoDaCargaDne
             LogFalhaSeloCache(_logger, versao, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: falha ao apagar o arquivo do pacote da execução {ExecucaoId}; será removido na próxima partida. Diagnóstico: {Diagnostico}")]
+    private static partial void LogFalhaAoApagarPacote(ILogger logger, Guid execucaoId, string diagnostico);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Geo: carga {ExecucaoId} concluída (versão {Versao}, inseridos={Inseridos}, atualizados={Atualizados}, degradados={Degradados}).")]
     private static partial void LogConcluida(ILogger logger, Guid execucaoId, string versao, int inseridos, int atualizados, int degradados);

@@ -36,7 +36,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
             ["202602"] = FonteSomenteMaraba("202602"),
@@ -79,7 +79,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
         primeira.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
         FonteEmMemoria segunda = FonteSomenteMaraba("202602");
         segunda.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = primeira,
             ["202602"] = segunda,
@@ -103,8 +103,8 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
         completa.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
         FonteEmMemoria semSaoPaulo = FonteSomenteMaraba("202601");
         semSaoPaulo.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        FonteFactoryFake primeira = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal) { ["202601"] = completa });
-        FonteFactoryFake segunda = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal) { ["202601"] = semSaoPaulo });
+        FonteFactoryFake primeira = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal) { ["202601"] = completa });
+        FonteFactoryFake segunda = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal) { ["202601"] = semSaoPaulo });
 
         await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), primeira, cache);
         await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), segunda, cache);
@@ -127,7 +127,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
         fonte.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
         fonte.CepGerais.Add(DadosDne.CepGeral("68525100", 1, distritoIdDne: 10));
         fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(Maraba, populacao: "100"));
-        FonteFactoryFake fabrica = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal) { ["202601"] = fonte });
+        FonteFactoryFake fabrica = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal) { ["202601"] = fonte });
 
         await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fabrica, cache);
         await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fabrica, cache);
@@ -159,7 +159,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
         recargaCorrompida.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
         recargaCorrompida.Logradouros.Add(DadosDne.Logradouro("68500999", "Rua Nova", 1));
 
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
             ["202602"] = recargaCorrompida,
@@ -197,7 +197,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
         folhasVazias.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
         folhasVazias.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
 
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
             ["202602"] = folhasVazias,

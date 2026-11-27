@@ -45,7 +45,7 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
         await _cenario.LimparAsync();
         MemoriaCacheFake cache = new();
         IGeoCepCacheInvalidador invalidador = new RedisGeoCepCacheInvalidador(cache, NullLogger<RedisGeoCepCacheInvalidador>.Instance);
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
         });
@@ -74,7 +74,7 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
         });
@@ -104,7 +104,7 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = new FonteComFalhaNasCidades(FonteCompleta("202601")),
         });
@@ -142,7 +142,7 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     public async Task SeloComCacheIndisponivel_NaoFalhaCarga()
     {
         await _cenario.LimparAsync();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
         });

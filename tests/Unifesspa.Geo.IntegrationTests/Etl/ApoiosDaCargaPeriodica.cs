@@ -27,21 +27,31 @@ internal sealed class MemoriaCacheFake : ICacheService
         Task.FromResult<IAsyncDisposable?>(null);
 }
 
-internal sealed class FonteFactoryFake : IGeoFonteDadosFactory
+internal sealed class FonteFactoryFake : IFonteDaExecucaoDne
 {
-    private readonly IReadOnlyDictionary<string, IGeoFonteDados> _porVersao;
+    private readonly IReadOnlyDictionary<string, IFonteDaCargaDne> _porVersao;
 
-    public FonteFactoryFake(IReadOnlyDictionary<string, IGeoFonteDados> porVersao)
+    public FonteFactoryFake(IReadOnlyDictionary<string, IFonteDaCargaDne> porVersao)
     {
         _porVersao = porVersao;
     }
 
-    public IGeoFonteDados Criar(string versao) => _porVersao[versao];
+    public Task<IFonteDaCargaDne> PrepararAsync(Guid execucaoId, string versao, CancellationToken cancellationToken) =>
+        Task.FromResult(_porVersao[versao]);
+
+    public Task DescartarPacoteAsync(Guid execucaoId) => Task.CompletedTask;
+
+    public Task<int> DescartarSobrasAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 }
 
 // Simula cancelamento (desligamento) no meio da carga: o executor da carga deve marcar a
 // execução como terminal e repropagar o OperationCanceledException.
-internal sealed class FonteFactoryCancelada : IGeoFonteDadosFactory
+internal sealed class FonteFactoryCancelada : IFonteDaExecucaoDne
 {
-    public IGeoFonteDados Criar(string versao) => throw new OperationCanceledException();
+    public Task<IFonteDaCargaDne> PrepararAsync(Guid execucaoId, string versao, CancellationToken cancellationToken) =>
+        throw new OperationCanceledException();
+
+    public Task DescartarPacoteAsync(Guid execucaoId) => Task.CompletedTask;
+
+    public Task<int> DescartarSobrasAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 }
