@@ -38,27 +38,10 @@ public sealed class OpenApiEndpointTests : IClassFixture<GeoOpenApiFactory>
         using JsonDocument doc = JsonDocument.Parse(body);
         JsonElement root = doc.RootElement;
 
-        root.GetProperty("openapi").GetString().Should().StartWith("3.");
-        root.GetProperty("info").GetProperty("title").GetString().Should().Be("Uni+ — Módulo Geo");
-        root.GetProperty("info").GetProperty("version").GetString().Should().Be("1.0.0");
-
-        JsonElement bearer = root
-            .GetProperty("components")
-            .GetProperty("securitySchemes")
-            .GetProperty("Bearer");
-        bearer.GetProperty("type").GetString().Should().Be("http");
-        bearer.GetProperty("scheme").GetString().Should().Be("bearer");
-
-        JsonElement estadosGet = root.GetProperty("paths").GetProperty("/api/estados").GetProperty("get");
-        estadosGet.GetProperty("security")[0].GetProperty("Bearer").GetArrayLength().Should().Be(0);
-        estadosGet.GetProperty("responses").TryGetProperty("401", out _).Should().BeTrue();
-        estadosGet.GetProperty("responses").TryGetProperty("403", out _).Should().BeFalse(
-            "consultas Geo exigem token do realm, mas nao role administrativa");
-
-        JsonElement adminPost = root.GetProperty("paths").GetProperty("/api/admin/geo/importacoes").GetProperty("post");
-        adminPost.GetProperty("security")[0].GetProperty("Bearer").GetArrayLength().Should().Be(0);
-        adminPost.GetProperty("responses").TryGetProperty("403", out _).Should().BeTrue(
-            "operacoes de administracao exigem role");
+        AssertMetadataDoDocumento(root);
+        AssertEsquemaDeSegurancaBearer(root);
+        AssertSegurancaDasConsultasDeEstados(root);
+        AssertSegurancaDaImportacao(root);
     }
 
     [Fact(DisplayName = "POST de importação declara o corpo application/zip binário e as respostas do envio do pacote")]
@@ -75,6 +58,40 @@ public sealed class OpenApiEndpointTests : IClassFixture<GeoOpenApiFactory>
         schema.GetProperty("format").GetString().Should().Be("binary");
         post.GetProperty("responses").EnumerateObject().Select(r => r.Name)
             .Should().BeEquivalentTo("200", "202", "401", "403", "409", "413", "415", "422", "500", "503");
+    }
+
+    private static void AssertMetadataDoDocumento(JsonElement root)
+    {
+        root.GetProperty("openapi").GetString().Should().StartWith("3.");
+        root.GetProperty("info").GetProperty("title").GetString().Should().Be("Uni+ — Módulo Geo");
+        root.GetProperty("info").GetProperty("version").GetString().Should().Be("1.0.0");
+    }
+
+    private static void AssertEsquemaDeSegurancaBearer(JsonElement root)
+    {
+        JsonElement bearer = root
+            .GetProperty("components")
+            .GetProperty("securitySchemes")
+            .GetProperty("Bearer");
+        bearer.GetProperty("type").GetString().Should().Be("http");
+        bearer.GetProperty("scheme").GetString().Should().Be("bearer");
+    }
+
+    private static void AssertSegurancaDasConsultasDeEstados(JsonElement root)
+    {
+        JsonElement estadosGet = root.GetProperty("paths").GetProperty("/api/estados").GetProperty("get");
+        estadosGet.GetProperty("security")[0].GetProperty("Bearer").GetArrayLength().Should().Be(0);
+        estadosGet.GetProperty("responses").TryGetProperty("401", out _).Should().BeTrue();
+        estadosGet.GetProperty("responses").TryGetProperty("403", out _).Should().BeFalse(
+            "consultas Geo exigem token do realm, mas nao role administrativa");
+    }
+
+    private static void AssertSegurancaDaImportacao(JsonElement root)
+    {
+        JsonElement adminPost = root.GetProperty("paths").GetProperty("/api/admin/geo/importacoes").GetProperty("post");
+        adminPost.GetProperty("security")[0].GetProperty("Bearer").GetArrayLength().Should().Be(0);
+        adminPost.GetProperty("responses").TryGetProperty("403", out _).Should().BeTrue(
+            "operacoes de administracao exigem role");
     }
 
     private async Task<JsonDocument> LerSpecAsync()
