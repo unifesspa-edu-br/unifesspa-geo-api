@@ -90,43 +90,65 @@ public static class OpenTelemetryConfiguration
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
 
-        bool enabled = configuration.GetValue(EnabledConfigurationKey, defaultValue: true);
-        if (!enabled)
+        if (!ObservabilidadeAtivada(configuration))
         {
             return services;
         }
 
         Sampler sampler = SelecionarSampler(environment);
+        return RegistrarOpenTelemetry(services, nomeServico, environment, sampler);
+    }
 
-        IEnumerable<KeyValuePair<string, object>> resourceAttributes = new[]
-        {
-            new KeyValuePair<string, object>(
-                DeploymentEnvironmentResourceAttribute,
-                environment.EnvironmentName),
-        };
+    /// <summary>
+    /// Indica se a observabilidade está ligada (<see cref="EnabledConfigurationKey"/>,
+    /// ligada por padrão). Regra única para o OpenTelemetry e para o sink OTLP do Serilog.
+    /// </summary>
+    internal static bool ObservabilidadeAtivada(IConfiguration configuration)
+        => configuration.GetValue(EnabledConfigurationKey, defaultValue: true);
 
+    private static IServiceCollection RegistrarOpenTelemetry(
+        IServiceCollection services,
+        string nomeServico,
+        IHostEnvironment environment,
+        Sampler sampler)
+    {
         services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource
-                .AddService(serviceName: nomeServico, serviceNamespace: ServiceNamespaceResourceValue)
-                .AddAttributes(resourceAttributes))
-            .WithTracing(tracing => tracing
-                .SetSampler(sampler)
-                .AddSource(nomeServico)
-                .AddSource(WolverineActivityAndMeterName)
-                .AddAspNetCoreInstrumentation(opts =>
-                    opts.Filter = ctx => EhRotaInstrumentavel(ctx.Request.Path))
-                .AddHttpClientInstrumentation()
-                .AddEntityFrameworkCoreInstrumentation()
-                .AddOtlpExporter())
-            .WithMetrics(metrics => metrics
-                .AddMeter(nomeServico)
-                .AddMeter(WolverineActivityAndMeterName)
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation()
-                .AddOtlpExporter());
+            .ConfigureResource(resource => DescreverServico(resource, nomeServico, environment))
+            .WithTracing(tracing => ConfigurarRastreamento(tracing, nomeServico, sampler))
+            .WithMetrics(metrics => ConfigurarMetricas(metrics, nomeServico));
 
         return services;
+    }
+
+    private static void DescreverServico(ResourceBuilder resource, string nomeServico, IHostEnvironment environment)
+    {
+        resource
+            .AddService(serviceName: nomeServico, serviceNamespace: ServiceNamespaceResourceValue)
+            .AddAttributes([new KeyValuePair<string, object>(DeploymentEnvironmentResourceAttribute, environment.EnvironmentName)]);
+    }
+
+    private static void ConfigurarRastreamento(TracerProviderBuilder tracing, string nomeServico, Sampler sampler)
+    {
+        tracing
+            .SetSampler(sampler)
+            .AddSource(nomeServico)
+            .AddSource(WolverineActivityAndMeterName)
+            .AddAspNetCoreInstrumentation(opts =>
+                opts.Filter = ctx => EhRotaInstrumentavel(ctx.Request.Path))
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation()
+            .AddOtlpExporter();
+    }
+
+    private static void ConfigurarMetricas(MeterProviderBuilder metrics, string nomeServico)
+    {
+        metrics
+            .AddMeter(nomeServico)
+            .AddMeter(WolverineActivityAndMeterName)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddOtlpExporter();
     }
 
     /// <summary>

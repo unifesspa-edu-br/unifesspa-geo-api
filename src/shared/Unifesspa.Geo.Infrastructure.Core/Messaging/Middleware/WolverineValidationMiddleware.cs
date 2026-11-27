@@ -41,34 +41,40 @@ public static class WolverineValidationMiddleware
             return;
         }
 
-        Type validatorType = typeof(IValidator<>).MakeGenericType(envelope.Message.GetType());
+        IValidator[] validators = ValidadoresDaMensagem(envelope.Message, services);
+        if (await FalhasAsync(validators, envelope.Message, cancellationToken).ConfigureAwait(false) is { Count: > 0 } failures)
+        {
+            throw new ValidationException(failures);
+        }
+    }
 
-        IValidator[] validators = ((IEnumerable<object?>)services.GetServices(validatorType))
+    private static IValidator[] ValidadoresDaMensagem(object mensagem, IServiceProvider services)
+    {
+        Type validatorType = typeof(IValidator<>).MakeGenericType(mensagem.GetType());
+
+        return ((IEnumerable<object?>)services.GetServices(validatorType))
             .OfType<IValidator>()
             .ToArray();
+    }
 
+    private static async Task<List<ValidationFailure>> FalhasAsync(
+        IValidator[] validators,
+        object mensagem,
+        CancellationToken cancellationToken)
+    {
         if (validators.Length == 0)
         {
-            return;
+            return [];
         }
 
         // ValidationContext<object> aceita qualquer mensagem por instância, e o
         // IValidator não-genérico expõe ValidateAsync(IValidationContext, ct) —
         // suficiente porque a validação opera sobre a instância completa.
-        ValidationContext<object> context = new(envelope.Message);
-
+        ValidationContext<object> context = new(mensagem);
         ValidationResult[] results = await Task.WhenAll(
             validators.Select(v => v.ValidateAsync(context, cancellationToken)))
             .ConfigureAwait(false);
 
-        List<ValidationFailure> failures = results
-            .SelectMany(r => r.Errors)
-            .Where(f => f is not null)
-            .ToList();
-
-        if (failures.Count > 0)
-        {
-            throw new ValidationException(failures);
-        }
+        return results.SelectMany(r => r.Errors).Where(f => f is not null).ToList();
     }
 }
