@@ -102,7 +102,8 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
     public GeoDbContext CreateDbContext(IReadOnlyList<IInterceptor> interceptadoresAdicionais) =>
         CreateDbContext(TimeProvider.System, interceptadoresAdicionais);
 
-    private GeoDbContext CreateDbContext(TimeProvider relogio, IReadOnlyList<IInterceptor> interceptadoresAdicionais)
+    /// <summary>Igual a <see cref="CreateDbContext()"/>, com o relógio e os interceptadores informados.</summary>
+    public GeoDbContext CreateDbContext(TimeProvider relogio, IReadOnlyList<IInterceptor> interceptadoresAdicionais)
     {
         ArgumentNullException.ThrowIfNull(interceptadoresAdicionais);
 
