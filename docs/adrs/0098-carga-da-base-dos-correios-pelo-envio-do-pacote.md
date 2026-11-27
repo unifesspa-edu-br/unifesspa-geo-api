@@ -95,3 +95,5 @@ O banco pode soltar a trava com a carga ainda executando, quando cai a conexão 
 A conclusão só é gravada se a execução ainda está em andamento, na mesma transação da publicação. Se a execução já foi encerrada como falha, a conclusão é recusada, a transação inteira é desfeita e a base anterior continua publicada; a versão da carga antiga não conta como aplicada e o mesmo pacote pode ser reenviado. O encerramento, por sua vez, não grava falha sobre uma carga que acabou de concluir: nesse caso nada é encerrado e o envio segue.
 
 Consequências: o histórico nunca conta uma carga concluída que não vale, e depois de uma queda da trava com a carga viva o pacote precisa ser reenviado. A decisão anterior não é reaberta.
+
+**Sinal de vida da trava.** A conexão que segura a trava manda sinal de vida pelo protocolo do PostgreSQL em intervalo configurável (`Geo:Etl`, 30 s por padrão), para não ser derrubada por ociosidade pela rede nem pelo banco. O sinal só da camada de rede foi descartado: não conta como atividade para o PostgreSQL e, com os valores do sistema, começa tarde demais.
