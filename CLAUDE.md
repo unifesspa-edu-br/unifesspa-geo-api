@@ -115,9 +115,22 @@ test). As migrations tocam o banco e precisam acontecer antes do runtime de mens
 ## Convenções e armadilhas específicas
 
 - **`TreatWarningsAsErrors=true`** em todo o repo (`Directory.Build.props`) + `AnalysisLevel=latest-all`.
-  Nunca silenciar warning inline; supressões justificadas vão em `GlobalSuppressions.cs`.
-- **Controllers devem ser `public`** (o `ControllerFeatureProvider` só descobre tipos públicos) —
-  daí o `CA1515` suprimido por classe com justificativa.
+  **Supressão de aviso é proibida** (ADR-0099): nada de `[SuppressMessage]`, `GlobalSuppressions.cs`,
+  `#pragma warning disable` nem `<NoWarn>`; o aviso se corrige no código e o desenho ruim que ele
+  revela se refaz. Regra que não vale para uma camada inteira (configuração de mapeamento do banco,
+  migrações geradas) se desliga no `.editorconfig` por caminho, com o porquê em uma linha. Nenhuma
+  supressão nova entra; as que existem são dívida (issue #89).
+- **Métricas**, medidas pelo build em produção e em teste (vale o número do aviso): método até 15
+  linhas (`MA0051`), arquivo até 400 linhas de código (`S104`), até 7 parâmetros (`S107`), complexidade
+  cognitiva até 15 (`S3776`) e ciclomática até 10 (`S1541`). O projeto com dívida só avisa
+  (`WarningsNotAsErrors`); o que zera a dívida entra em `MetricasBarradas` e passa a barrar o build.
+  Código novo ou tocado cumpre os limites: quem toca um método acima do limite o refatora no mesmo
+  trabalho. Relatório por projeto em `artifacts/analise/`. A dívida está na issue #90.
+- **Temporário:** a regra `MA0048` (nome do arquivo igual ao do tipo) está como sugestão até a issue
+  #99 fechar; quem cria arquivo novo já cumpre a regra.
+- **Controllers devem ser `public`** (o `ControllerFeatureProvider` só descobre tipos públicos); o
+  `CA1515` suprimido hoje em cada controller é dívida (#89) a trocar por decisão de camada no
+  `.editorconfig`.
 - O analyzer transitivo `MR.EntityFrameworkCore.KeysetPagination.Analyzers` é **removido em build**
   por um target em `Directory.Build.props` (emite `CS9057` que viraria erro no publish Docker). Não
   reverter; a regra de chave não-nula é garantida por design + testes, não pelo analyzer.
@@ -152,10 +165,11 @@ Sem `Co-Authored-By` e sem qualquer atribuição de IA em commits ou PRs (regra 
 
 ## ADRs
 
-Decisões do módulo em `docs/adrs/` (0090–0098): contexto dedicado (0090), PostGIS/NTS (0091),
+Decisões do módulo em `docs/adrs/` (0090–0099): contexto dedicado (0090), PostGIS/NTS (0091),
 ETL DNE (0092), rate limiting na borda (0093), keyset via MR sob cursor opaco (0094), chave de
 ordenação não-nula (0095), endereço como referência estruturada (0096), nome do município pelo
-IBGE (0097), carga da base dos Correios pelo envio do pacote (0098).
+IBGE (0097), carga da base dos Correios pelo envio do pacote (0098), tamanho e complexidade medidos pelo
+build e nenhuma supressão de aviso (0099).
 
 ADRs com numeração `00xx` fora dessa faixa (ex.: 0029, 0054, 0063) pertencem ao acervo do
 `uniplus-api`/`uniplus-docs` e **não existem neste repo**. Referencie-os apenas como menção
