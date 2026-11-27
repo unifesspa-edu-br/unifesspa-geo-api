@@ -22,7 +22,7 @@ using Unifesspa.Geo.Infrastructure.Cep;
 /// </list>
 /// </summary>
 /// <remarks>
-/// <para><strong>Invariante 8 dígitos zero-padded (#704):</strong> o predicado de range
+/// <para><strong>Invariante 8 dígitos zero-padded:</strong> o predicado de range
 /// das faixas (<c>cep_inicial &lt;= @cep AND cep_final &gt;= @cep</c>) usa a comparação
 /// lexicográfica de string nativa do Postgres. Ela só equivale à comparação
 /// <em>numérica</em> de CEP porque os três lados (o CEP de entrada e os limites das
@@ -70,53 +70,64 @@ internal sealed partial class CepReader : ICepReader
     // (1) Logradouro pelo CEP. CEP não é único: retorna os logradouros ordenados pela
     // chave de desempate estável (nome_normalizado, distrito_id, bairro_id, Id) — o Id
     // (Guid v7) é o tie-breaker final, garantindo o mesmo primário/ordem entre execuções.
-    // A materialização é limitada ao teto defensivo (#705): um CEP patológico (anomalia
-    // da fonte) não materializa milhares de linhas num endpoint de consulta. Probe n+1 para
-    // distinguir truncamento real de cardinalidade igual ao teto.
     private async Task<CepResolvidoDto?> ResolverPorLogradouroAsync(string cep, CancellationToken cancellationToken)
     {
-        List<CepLogradouroLinha> linhas = await (
-            from l in _dbContext.Logradouros.AsNoTracking()
-            where l.Vigente && l.Cep == cep
-            join c in _dbContext.Cidades.AsNoTracking().Where(c => c.Vigente) on l.CidadeId equals c.Id
-            orderby l.NomeNormalizado, l.DistritoId, l.BairroId, l.Id
-            select new CepLogradouroLinha(
-                l.Tipo,
-                l.Nome,
-                l.Latitude,
-                l.Longitude,
-                c.CodigoIbge,
-                c.Nome,
-                c.Uf,
-                _dbContext.Distritos
-                    .Where(d => d.Vigente && d.Id == l.DistritoId)
-                    .Select(d => (string?)d.Nome)
-                    .FirstOrDefault(),
-                _dbContext.Bairros
-                    .Where(b => b.Vigente && b.Id == l.BairroId)
-                    .Select(b => (string?)b.Nome)
-                    .FirstOrDefault()))
-            .Take(_tetoLogradouros + 1)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        List<CepLogradouroLinha> linhas = await LogradourosDoCepAteOTetoAsync(cep, cancellationToken).ConfigureAwait(false);
 
         if (linhas.Count == 0)
         {
             return null;
         }
 
-        // Probe excedeu o teto → trunca o extra e sinaliza (não mascara a anomalia).
+        string? complemento = await ComplementoUnicoDoCepAsync(cep, cancellationToken).ConfigureAwait(false);
+
+        return linhas[0].ComoPrimario(cep, complemento) with
+        {
+            Alternativos = [.. linhas.Skip(1).Select(static l => l.ComoAlternativo())],
+        };
+    }
+
+    // A materialização é limitada ao teto defensivo: um CEP patológico (anomalia da fonte)
+    // não materializa milhares de linhas num endpoint de consulta. Lê uma linha além do teto
+    // para distinguir truncamento real de cardinalidade igual ao teto.
+    private async Task<List<CepLogradouroLinha>> LogradourosDoCepAteOTetoAsync(string cep, CancellationToken cancellationToken)
+    {
+        List<CepLogradouroLinha> linhas = await LogradourosVigentesDoCep(cep)
+            .Take(_tetoLogradouros + 1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // Excedeu o teto → trunca o extra e sinaliza (não mascara a anomalia).
         if (linhas.Count > _tetoLogradouros)
         {
             linhas.RemoveAt(linhas.Count - 1);
             LogFanOutTruncado(_logger, cep, _tetoLogradouros);
         }
 
-        CepLogradouroLinha primario = linhas[0];
+        return linhas;
+    }
 
-        // Complemento (lado par/ímpar, faixa) é atributo do CEP, sem FK ao logradouro e
-        // potencialmente múltiplo. Só preenche quando há exatamente UM — escolha
-        // determinística e auditável; ambíguo (0 ou >1) fica null.
+    private IQueryable<CepLogradouroLinha> LogradourosVigentesDoCep(string cep) =>
+        from l in _dbContext.Logradouros.AsNoTracking()
+        where l.Vigente && l.Cep == cep
+        join c in _dbContext.Cidades.AsNoTracking().Where(c => c.Vigente) on l.CidadeId equals c.Id
+        from d in _dbContext.Distritos.Where(d => d.Vigente && d.Id == l.DistritoId).DefaultIfEmpty()
+        from b in _dbContext.Bairros.Where(b => b.Vigente && b.Id == l.BairroId).DefaultIfEmpty()
+        orderby l.NomeNormalizado, l.DistritoId, l.BairroId, l.Id
+        select new CepLogradouroLinha(
+            l.Tipo,
+            l.Nome,
+            l.Latitude,
+            l.Longitude,
+            new CidadeDoEndereco(c.CodigoIbge, c.Nome, c.Uf),
+            d == null ? null : d.Nome,
+            b == null ? null : b.Nome);
+
+    // Complemento (lado par/ímpar, faixa) é atributo do CEP, sem FK ao logradouro e
+    // potencialmente múltiplo. Só preenche quando há exatamente UM — escolha
+    // determinística e auditável; ambíguo (0 ou >1) fica null.
+    private async Task<string?> ComplementoUnicoDoCepAsync(string cep, CancellationToken cancellationToken)
+    {
         List<string> complementos = await _dbContext.LogradouroComplementos
             .AsNoTracking()
             .Where(lc => lc.Vigente && lc.Cep == cep)
@@ -124,29 +135,8 @@ internal sealed partial class CepReader : ICepReader
             .Take(2)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        string? complemento = complementos.Count == 1 ? complementos[0] : null;
 
-        IReadOnlyList<LogradouroAlternativoDto> alternativos = [.. linhas
-            .Skip(1)
-            .Select(l => new LogradouroAlternativoDto(l.Tipo, l.Nome, l.BairroNome, l.DistritoNome, l.Latitude, l.Longitude))];
-
-        return new CepResolvidoDto(
-            Cep: cep,
-            Tipo: primario.Tipo,
-            Logradouro: primario.Nome,
-            Complemento: complemento,
-            Bairro: primario.BairroNome,
-            Distrito: primario.DistritoNome,
-            Cidade: primario.CidadeNome,
-            CodigoIbge: primario.CodigoIbge,
-            Uf: primario.Uf,
-            Latitude: primario.Latitude,
-            Longitude: primario.Longitude,
-            NivelResolucao: CepResolucao.NivelLogradouro,
-            Origem: CepResolucao.OrigemLogradouro)
-        {
-            Alternativos = alternativos,
-        };
+        return complementos.Count == 1 ? complementos[0] : null;
     }
 
     // (2) CepGrandeUsuario (CEP exclusivo de órgão). O grande usuário só guarda
@@ -155,82 +145,53 @@ internal sealed partial class CepReader : ICepReader
     // territorializar → null (não resolve).
     private async Task<CepResolvidoDto?> ResolverPorGrandeUsuarioAsync(string cep, CancellationToken cancellationToken)
     {
-        string? nome = await _dbContext.CepGrandesUsuarios
-            .AsNoTracking()
-            .Where(g => g.Vigente && g.Cep == cep)
-            .Select(g => g.Nome)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        if (nome is null)
+        if (await NomeDoGrandeUsuarioVigenteAsync(cep, cancellationToken).ConfigureAwait(false) is not { } nome)
         {
             return null;
         }
 
         CepTerritorioCidade? cidade = await ResolverCidadePorFaixaAsync(cep, cancellationToken).ConfigureAwait(false);
-        if (cidade is null)
-        {
-            return null;
-        }
 
-        return new CepResolvidoDto(
-            Cep: cep,
-            Tipo: null,
-            Logradouro: nome,
-            Complemento: null,
-            Bairro: null,
-            Distrito: null,
-            Cidade: cidade.Nome,
-            CodigoIbge: cidade.CodigoIbge,
-            Uf: cidade.Uf,
-            Latitude: cidade.Latitude,
-            Longitude: cidade.Longitude,
-            NivelResolucao: CepResolucao.NivelCidade,
-            Origem: CepResolucao.OrigemGrandeUsuario);
+        return cidade?.ComoCepResolvido(
+            cep,
+            logradouro: nome,
+            bairro: null,
+            distrito: null,
+            CepResolucao.NivelCidade,
+            CepResolucao.OrigemGrandeUsuario);
     }
+
+    private Task<string?> NomeDoGrandeUsuarioVigenteAsync(string cep, CancellationToken cancellationToken) =>
+        _dbContext.CepGrandesUsuarios
+            .AsNoTracking()
+            .Where(g => g.Vigente && g.Cep == cep)
+            .Select(g => g.Nome)
+            .FirstOrDefaultAsync(cancellationToken);
 
     // (3) CEP geral oficial de cidade/distrito: resolução exata (não inferida por faixa).
     // Nível distrito quando o registro traz distrito vigente; senão, cidade. A coordenada
     // é a do próprio CEP geral; quando ele não a traz, usa a da cidade.
     private async Task<CepResolvidoDto?> ResolverPorCepGeralAsync(string cep, CancellationToken cancellationToken)
     {
-        CepGeralLinha? linha = await (
-            from g in _dbContext.CepGerais.AsNoTracking()
-            where g.Vigente && g.Cep == cep
-            join c in _dbContext.Cidades.AsNoTracking().Where(c => c.Vigente) on g.CidadeId equals c.Id
-            select new CepGeralLinha(
-                c.CodigoIbge,
-                c.Nome,
-                c.Uf,
-                g.Latitude ?? c.Latitude,
-                g.Longitude ?? c.Longitude,
-                _dbContext.Distritos
-                    .Where(d => d.Vigente && d.Id == g.DistritoId)
-                    .Select(d => (string?)d.Nome)
-                    .FirstOrDefault()))
+        CepGeralLinha? linha = await CepGeralVigente(cep)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        if (linha is null)
-        {
-            return null;
-        }
-
-        return new CepResolvidoDto(
-            Cep: cep,
-            Tipo: null,
-            Logradouro: null,
-            Complemento: null,
-            Bairro: null,
-            Distrito: linha.DistritoNome,
-            Cidade: linha.CidadeNome,
-            CodigoIbge: linha.CodigoIbge,
-            Uf: linha.Uf,
-            Latitude: linha.Latitude,
-            Longitude: linha.Longitude,
-            NivelResolucao: linha.DistritoNome is null ? CepResolucao.NivelCidade : CepResolucao.NivelDistrito,
-            Origem: CepResolucao.OrigemCepGeral);
+        return linha?.ComoCepResolvido(cep);
     }
+
+    private IQueryable<CepGeralLinha> CepGeralVigente(string cep) =>
+        from g in _dbContext.CepGerais.AsNoTracking()
+        where g.Vigente && g.Cep == cep
+        join c in _dbContext.Cidades.AsNoTracking().Where(c => c.Vigente) on g.CidadeId equals c.Id
+        select new CepGeralLinha(
+            new CidadeDoEndereco(c.CodigoIbge, c.Nome, c.Uf),
+            g.Latitude ?? c.Latitude,
+            g.Longitude ?? c.Longitude,
+            _dbContext.Distritos
+                .Where(d => d.Vigente && d.Id == g.DistritoId)
+                .Select(d => (string?)d.Nome)
+                .FirstOrDefault());
 
     // (4) Faixa: cidade que contém o CEP; enriquece com bairro/distrito quando houver
     // faixa mais específica. Nível/origem refletem o mais específico (bairro > distrito
@@ -245,29 +206,18 @@ internal sealed partial class CepReader : ICepReader
 
         string? bairroNome = await ResolverNomePorFaixaBairroAsync(cep, cidade.Id, cancellationToken).ConfigureAwait(false);
         string? distritoNome = await ResolverNomePorFaixaDistritoAsync(cep, cidade.Id, cancellationToken).ConfigureAwait(false);
+        (string nivel, string origem) = NivelEOrigemDaFaixa(bairroNome, distritoNome);
 
-        (string nivel, string origem) = (bairroNome, distritoNome) switch
+        return cidade.ComoCepResolvido(cep, logradouro: null, bairroNome, distritoNome, nivel, origem);
+    }
+
+    private static (string Nivel, string Origem) NivelEOrigemDaFaixa(string? bairroNome, string? distritoNome) =>
+        (bairroNome, distritoNome) switch
         {
             (not null, _) => (CepResolucao.NivelBairro, CepResolucao.OrigemFaixaBairro),
             (null, not null) => (CepResolucao.NivelDistrito, CepResolucao.OrigemFaixaDistrito),
             _ => (CepResolucao.NivelCidade, CepResolucao.OrigemFaixaCidade),
         };
-
-        return new CepResolvidoDto(
-            Cep: cep,
-            Tipo: null,
-            Logradouro: null,
-            Complemento: null,
-            Bairro: bairroNome,
-            Distrito: distritoNome,
-            Cidade: cidade.Nome,
-            CodigoIbge: cidade.CodigoIbge,
-            Uf: cidade.Uf,
-            Latitude: cidade.Latitude,
-            Longitude: cidade.Longitude,
-            NivelResolucao: nivel,
-            Origem: origem);
-    }
 
     // Faixa de CEP da cidade que contém o CEP. O predicado de range
     // (cep_inicial <= cep <= cep_final) vai em SQL parametrizado (FromSqlInterpolated):
@@ -283,7 +233,7 @@ internal sealed partial class CepReader : ICepReader
             from f in _dbContext.CidadeFaixasCep.FromSqlInterpolated(faixaSql).AsNoTracking()
             join c in _dbContext.Cidades.AsNoTracking().Where(c => c.Vigente) on f.CidadeId equals c.Id
             orderby c.Id
-            select new CepTerritorioCidade(c.Id, c.CodigoIbge, c.Nome, c.Uf, c.Latitude, c.Longitude))
+            select new CepTerritorioCidade(c.Id, new CidadeDoEndereco(c.CodigoIbge, c.Nome, c.Uf), c.Latitude, c.Longitude))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -316,33 +266,95 @@ internal sealed partial class CepReader : ICepReader
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    private sealed record CidadeDoEndereco(string CodigoIbge, string Nome, string Uf);
+
     // Projeções read-only (evitam materializar a entidade inteira).
     private sealed record CepLogradouroLinha(
         string? Tipo,
         string Nome,
         decimal? Latitude,
         decimal? Longitude,
-        string CodigoIbge,
-        string CidadeNome,
-        string Uf,
+        CidadeDoEndereco Cidade,
         string? DistritoNome,
-        string? BairroNome);
+        string? BairroNome)
+    {
+        public CepResolvidoDto ComoPrimario(string cep, string? complemento)
+        {
+            return new CepResolvidoDto(
+                Cep: cep,
+                Tipo: Tipo,
+                Logradouro: Nome,
+                Complemento: complemento,
+                Bairro: BairroNome,
+                Distrito: DistritoNome,
+                Cidade: Cidade.Nome,
+                CodigoIbge: Cidade.CodigoIbge,
+                Uf: Cidade.Uf,
+                Latitude: Latitude,
+                Longitude: Longitude,
+                NivelResolucao: CepResolucao.NivelLogradouro,
+                Origem: CepResolucao.OrigemLogradouro);
+        }
+
+        public LogradouroAlternativoDto ComoAlternativo() =>
+            new(Tipo, Nome, BairroNome, DistritoNome, Latitude, Longitude);
+    }
 
     private sealed record CepGeralLinha(
-        string CodigoIbge,
-        string CidadeNome,
-        string Uf,
+        CidadeDoEndereco Cidade,
         decimal? Latitude,
         decimal? Longitude,
-        string? DistritoNome);
+        string? DistritoNome)
+    {
+        public CepResolvidoDto ComoCepResolvido(string cep)
+        {
+            return new CepResolvidoDto(
+                Cep: cep,
+                Tipo: null,
+                Logradouro: null,
+                Complemento: null,
+                Bairro: null,
+                Distrito: DistritoNome,
+                Cidade: Cidade.Nome,
+                CodigoIbge: Cidade.CodigoIbge,
+                Uf: Cidade.Uf,
+                Latitude: Latitude,
+                Longitude: Longitude,
+                NivelResolucao: DistritoNome is null ? CepResolucao.NivelCidade : CepResolucao.NivelDistrito,
+                Origem: CepResolucao.OrigemCepGeral);
+        }
+    }
 
     private sealed record CepTerritorioCidade(
         Guid Id,
-        string CodigoIbge,
-        string Nome,
-        string Uf,
+        CidadeDoEndereco Cidade,
         decimal? Latitude,
-        decimal? Longitude);
+        decimal? Longitude)
+    {
+        public CepResolvidoDto ComoCepResolvido(
+            string cep,
+            string? logradouro,
+            string? bairro,
+            string? distrito,
+            string nivel,
+            string origem)
+        {
+            return new CepResolvidoDto(
+                Cep: cep,
+                Tipo: null,
+                Logradouro: logradouro,
+                Complemento: null,
+                Bairro: bairro,
+                Distrito: distrito,
+                Cidade: Cidade.Nome,
+                CodigoIbge: Cidade.CodigoIbge,
+                Uf: Cidade.Uf,
+                Latitude: Latitude,
+                Longitude: Longitude,
+                NivelResolucao: nivel,
+                Origem: origem);
+        }
+    }
 
     [LoggerMessage(
         Level = LogLevel.Warning,
