@@ -138,8 +138,10 @@ public sealed class GeoImportacaoExecucao : EntityBase
 
     // AAAAMM: 6 dígitos, ano qualquer, mês 01–12. A comparação de stale entre
     // versões é lexicográfica (válida porque o comprimento é fixo).
-    private static bool EhVersaoValida(string versao)
+    public static bool EhVersaoValida(string versao)
     {
+        ArgumentNullException.ThrowIfNull(versao);
+
         if (versao.Length != 6 || !versao.All(char.IsAsciiDigit))
         {
             return false;

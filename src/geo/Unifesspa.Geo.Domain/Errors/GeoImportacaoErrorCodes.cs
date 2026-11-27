@@ -27,4 +27,10 @@ public static class GeoImportacaoErrorCodes
 
     /// <summary>Transição de estado inválida (ex.: concluir uma execução que não está em andamento).</summary>
     public const string TransicaoInvalida = "GeoImportacao.TransicaoInvalida";
+
+    /// <summary>O pacote enviado não cumpre a conferência do diretório do zip (→ 422).</summary>
+    public const string PacoteInvalido = "GeoImportacao.PacoteInvalido";
+
+    /// <summary>O pacote enviado ultrapassa o tamanho máximo configurado (→ 413).</summary>
+    public const string PacoteAcimaDoLimite = "GeoImportacao.PacoteAcimaDoLimite";
 }
