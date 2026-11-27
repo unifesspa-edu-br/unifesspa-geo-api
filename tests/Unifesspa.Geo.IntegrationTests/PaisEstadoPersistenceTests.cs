@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence;
 
 /// <summary>
@@ -113,7 +114,7 @@ public sealed class PaisEstadoPersistenceTests
         Pais lido = await leitura.Paises.SingleAsync(p => p.Id == pais.Id);
 
         lido.Vigente.Should().BeFalse(
-            "a marcação de stale (vigente=false) precisa chegar ao banco — não pode ser substituída pelo default true");
+            "a marcação de não vigente (vigente=false) precisa chegar ao banco — não pode ser substituída pelo default true");
     }
 
     private static async Task ConferirPaisEEstadoAsync(GeoDbContext leitura, CenarioDoEstadoDoPara cenario)
@@ -172,7 +173,7 @@ public sealed class PaisEstadoPersistenceTests
     }
 
     private static Pais NovoPais(string siglaIso, string sigla, string nome, bool vigente = true) =>
-        GeoTestKeys.Ok(Pais.Importar(siglaIso, sigla, nome, null, null, null, null, VersaoDataset, vigente));
+        GeoTestKeys.Ok(Pais.Importar(siglaIso, sigla, nome, default, new ProvenienciaDaCarga(VersaoDataset, vigente)));
 
     private static Estado NovoEstado(Guid paisId, string uf, string nome) =>
         GeoTestKeys.Ok(Estado.Importar(paisId, uf, nome, null, null, null, null, null, null, null, null, null, VersaoDataset));

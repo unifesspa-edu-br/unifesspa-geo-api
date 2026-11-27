@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Domain.Entities;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -12,8 +13,8 @@ using Unifesspa.Geo.Kernel.Results;
 /// </summary>
 /// <remarks>
 /// Chave natural <see cref="SiglaIso"/> (ISO 3166-1 alpha-3, ex.: <c>BRA</c>) —
-/// base da idempotência do upsert do ETL. Toda entidade reference data carrega a
-/// proveniência de release (<see cref="VersaoDataset"/> + <see cref="Vigente"/>),
+/// base da atualização pela chave natural na carga. Toda entidade de referência carrega a
+/// proveniência da carga (<see cref="VersaoDataset"/> + <see cref="Vigente"/>),
 /// distinta de qualquer atributo de atividade do próprio dado.
 /// </remarks>
 public sealed class Pais : EntityBase
@@ -38,13 +39,13 @@ public sealed class Pais : EntityBase
     /// <summary>Código do país no Siscomex, quando informado.</summary>
     public string? CodigoSiscomex { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
     /// <summary>
-    /// <see langword="false"/> quando a chave natural deixou de aparecer na release
-    /// vigente, sem remover a linha (política de stale do ETL). Distinto de qualquer
-    /// indicador de atividade do dado.
+    /// <see langword="false"/> quando a chave natural deixou de aparecer na versão
+    /// vigente, sem remover a linha (política de registros não vigentes da carga). Distinto de
+    /// qualquer indicador de atividade do dado.
     /// </summary>
     public bool Vigente { get; private set; } = true;
 
@@ -54,107 +55,81 @@ public sealed class Pais : EntityBase
     }
 
     /// <summary>
-    /// Importa um País a partir de valores já tipados (o parse tolerante mora no
-    /// ETL/F3). Valida só o mínimo: chave natural (<paramref name="siglaIso"/>),
-    /// <paramref name="nome"/> e proveniência (<paramref name="versaoDataset"/>)
-    /// não vazios — dado externo autoritativo não tem regra de negócio mutável.
+    /// Importa um País a partir de valores já tipados (a leitura tolerante mora na carga).
+    /// Valida só o mínimo: chave natural (<paramref name="siglaIso"/>), <paramref name="nome"/> e
+    /// a versão da base em <paramref name="proveniencia"/> não vazios — dado externo
+    /// autoritativo não tem regra de negócio mutável.
     /// </summary>
     public static Result<Pais> Importar(
         string siglaIso,
         string sigla,
         string nome,
-        string? codigoBcb,
-        string? codigoRfb,
-        string? codigoSped,
-        string? codigoSiscomex,
-        string versaoDataset,
-        bool vigente = true)
+        CodigosDoPaisNosCadastrosFederais codigos,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(siglaIso);
         ArgumentNullException.ThrowIfNull(sigla);
         ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(siglaIso))
+        DomainError? erro = Validar(siglaIso, nome, proveniencia);
+        if (erro is not null)
         {
-            return Result<Pais>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.PaisSiglaIsoObrigatoria,
-                "Sigla ISO do País é obrigatória."));
+            return Result<Pais>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result<Pais>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.PaisNomeObrigatorio,
-                "Nome do País é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<Pais>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.PaisVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do País é obrigatória."));
-        }
-
-        var pais = new Pais
-        {
-            SiglaIso = GeoTexto.NormalizarChaveMaiuscula(siglaIso),
-            Sigla = GeoTexto.NormalizarChaveMaiuscula(sigla),
-            Nome = nome.Trim(),
-            CodigoBcb = GeoTexto.NormalizarOpcional(codigoBcb),
-            CodigoRfb = GeoTexto.NormalizarOpcional(codigoRfb),
-            CodigoSped = GeoTexto.NormalizarOpcional(codigoSped),
-            CodigoSiscomex = GeoTexto.NormalizarOpcional(codigoSiscomex),
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var pais = new Pais { SiglaIso = GeoTexto.NormalizarChaveMaiuscula(siglaIso) };
+        pais.Aplicar(sigla, nome, codigos, proveniencia);
 
         return Result<Pais>.Success(pais);
     }
 
     /// <summary>
-    /// Reaplica os dados de uma release sobre um País já existente (upsert in place
-    /// do ETL), preservando <see cref="EntityBase.Id"/> e a chave natural
-    /// <see cref="SiglaIso"/>. Valida o mínimo <strong>antes</strong> de mutar — em
-    /// falha, o estado da entidade não é tocado (atomicidade da mutação).
+    /// Reaplica os dados de uma versão da base sobre um País já existente (atualização pela
+    /// chave natural da carga), preservando <see cref="EntityBase.Id"/> e a chave natural
+    /// <see cref="SiglaIso"/>. Valida o mínimo <strong>antes</strong> de mutar — em falha, o
+    /// estado da entidade não é tocado (atomicidade da mutação).
     /// </summary>
     public Result Atualizar(
         string sigla,
         string nome,
-        string? codigoBcb,
-        string? codigoRfb,
-        string? codigoSped,
-        string? codigoSiscomex,
-        string versaoDataset,
-        bool vigente = true)
+        CodigosDoPaisNosCadastrosFederais codigos,
+        ProvenienciaDaCarga proveniencia)
     {
         ArgumentNullException.ThrowIfNull(sigla);
         ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(nome))
+        DomainError? erro = Validar(SiglaIso, nome, proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.PaisNomeObrigatorio,
-                "Nome do País é obrigatório."));
+            return Result.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.PaisVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do País é obrigatória."));
-        }
-
-        Sigla = GeoTexto.NormalizarChaveMaiuscula(sigla);
-        Nome = nome.Trim();
-        CodigoBcb = GeoTexto.NormalizarOpcional(codigoBcb);
-        CodigoRfb = GeoTexto.NormalizarOpcional(codigoRfb);
-        CodigoSped = GeoTexto.NormalizarOpcional(codigoSped);
-        CodigoSiscomex = GeoTexto.NormalizarOpcional(codigoSiscomex);
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(sigla, nome, codigos, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(string siglaIso, string nome, ProvenienciaDaCarga proveniencia) =>
+        string.IsNullOrWhiteSpace(siglaIso)
+            ? new DomainError(GeoReferenceDataErrorCodes.PaisSiglaIsoObrigatoria, "Sigla ISO do País é obrigatória.")
+            : string.IsNullOrWhiteSpace(nome)
+                ? new DomainError(GeoReferenceDataErrorCodes.PaisNomeObrigatorio, "Nome do País é obrigatório.")
+                : proveniencia.TemVersao
+                    ? null
+                    : new DomainError(
+                        GeoReferenceDataErrorCodes.PaisVersaoDatasetObrigatoria,
+                        "Versão do dataset (proveniência) do País é obrigatória.");
+
+    private void Aplicar(
+        string sigla,
+        string nome,
+        CodigosDoPaisNosCadastrosFederais codigos,
+        ProvenienciaDaCarga proveniencia)
+    {
+        Sigla = GeoTexto.NormalizarChaveMaiuscula(sigla);
+        Nome = nome.Trim();
+        (CodigoBcb, CodigoRfb, CodigoSped, CodigoSiscomex) = codigos;
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }

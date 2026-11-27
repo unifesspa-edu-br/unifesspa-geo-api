@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>País, estado, indicador e faixa de CEP completos, para provar a gravação e a releitura.</summary>
@@ -22,8 +23,8 @@ internal sealed record CenarioDoEstadoDoPara(Pais Brasil, Estado Para, EstadoInd
     private static Pais NovoPais() =>
         GeoTestKeys.Ok(Pais.Importar(
             siglaIso: GeoTestKeys.SiglaIso(), sigla: "BR", nome: "Brasil",
-            codigoBcb: "1058", codigoRfb: "105", codigoSped: null, codigoSiscomex: null,
-            versaoDataset: VersaoDataset));
+            codigos: new CodigosDoPaisNosCadastrosFederais("1058", "105", null, null),
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 
     private static Estado NovoEstado(Pais brasil) =>
         GeoTestKeys.Ok(Estado.Importar(
