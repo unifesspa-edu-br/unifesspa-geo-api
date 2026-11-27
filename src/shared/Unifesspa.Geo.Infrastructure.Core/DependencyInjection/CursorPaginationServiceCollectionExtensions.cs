@@ -22,6 +22,26 @@ public static class CursorPaginationServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        AddOpcoesDaPaginacao(services, configuration);
+
+        AddCodificadorEErros(services);
+
+        ComporRespostaDeBindingInvalido(services);
+
+        return services;
+    }
+
+    private static void AddCodificadorEErros(IServiceCollection services)
+    {
+        services.AddSingleton<CursorEncoder>();
+        // TryAdd: respeita TimeProvider já registrado pelo host (testes
+        // determinísticos, hosts com clock controlado, replay). AddSingleton
+        // direto sobrescreveria silenciosamente esse override.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<Errors.IDomainErrorRegistration, PaginationDomainErrorRegistration>();
+    }
+
+    private static void AddOpcoesDaPaginacao(IServiceCollection services, IConfiguration configuration) =>
         services
             .AddOptions<CursorPaginationOptions>()
             .Bind(configuration.GetSection(CursorPaginationOptions.SectionName))
@@ -35,13 +55,7 @@ public static class CursorPaginationServiceCollectionExtensions
             .Validate(static o => o.CursorTtl > TimeSpan.Zero, "CursorPaginationOptions.CursorTtl deve ser positivo.")
             .ValidateOnStart();
 
-        services.AddSingleton<CursorEncoder>();
-        // TryAdd: respeita TimeProvider já registrado pelo host (testes
-        // determinísticos, hosts com clock controlado, replay). AddSingleton
-        // direto sobrescreveria silenciosamente esse override.
-        services.TryAddSingleton(TimeProvider.System);
-        services.AddSingleton<Errors.IDomainErrorRegistration, PaginationDomainErrorRegistration>();
-
+    private static void ComporRespostaDeBindingInvalido(IServiceCollection services) =>
         services.PostConfigure<ApiBehaviorOptions>(options =>
         {
             // Compõe com o factory default: tenta cursor binding error primeiro;
@@ -50,7 +64,4 @@ public static class CursorPaginationServiceCollectionExtensions
             options.InvalidModelStateResponseFactory = context =>
                 CursorPaginationProblemFactory.TryBuild(context) ?? previous(context);
         });
-
-        return services;
-    }
 }

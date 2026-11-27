@@ -49,29 +49,40 @@ public static partial class MigrationServiceCollectionExtensions
             TContext context = scope.ServiceProvider.GetRequiredService<TContext>();
             ILogger<TContext> logger = scope.ServiceProvider.GetRequiredService<ILogger<TContext>>();
 
-            IEnumerable<string> pending = await context.Database
-                .GetPendingMigrationsAsync(cancellationToken)
-                .ConfigureAwait(false);
-            string[] pendingArray = [.. pending];
-            string contextName = typeof(TContext).Name;
-
-            if (pendingArray.Length == 0)
-            {
-                LogNoPendingMigrations(logger, contextName);
-                return;
-            }
-
-#pragma warning disable CA1873 // Avaliação cara protegida por IsEnabled — caminho de startup, baixíssima frequência.
-            if (logger.IsEnabled(LogLevel.Information))
-            {
-                LogApplyingMigrations(logger, pendingArray.Length, contextName, string.Join(", ", pendingArray));
-            }
-#pragma warning restore CA1873
-
-            await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
-
-            LogMigrationsApplied(logger, contextName);
+            await AplicarPendentesAsync(context, logger, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static async Task AplicarPendentesAsync<TContext>(
+        TContext context,
+        ILogger<TContext> logger,
+        CancellationToken cancellationToken)
+        where TContext : DbContext
+    {
+        string contextName = typeof(TContext).Name;
+        string[] pendingArray = [.. await context.Database.GetPendingMigrationsAsync(cancellationToken).ConfigureAwait(false)];
+
+        if (pendingArray.Length == 0)
+        {
+            LogNoPendingMigrations(logger, contextName);
+            return;
+        }
+
+        AnunciarMigrationsPendentes(logger, pendingArray, contextName);
+
+        await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+
+        LogMigrationsApplied(logger, contextName);
+    }
+
+    private static void AnunciarMigrationsPendentes(ILogger logger, string[] pendingArray, string contextName)
+    {
+#pragma warning disable CA1873 // Avaliação cara protegida por IsEnabled — caminho de startup, baixíssima frequência.
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            LogApplyingMigrations(logger, pendingArray.Length, contextName, string.Join(", ", pendingArray));
+        }
+#pragma warning restore CA1873
     }
 
     /// <summary>

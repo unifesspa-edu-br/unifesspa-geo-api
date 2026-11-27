@@ -48,6 +48,16 @@ public static class CorsConfiguration
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
 
+        AddOpcoesDeCors(services, configuration, environment);
+        AddPoliticaPadrao(services, environment);
+
+        return services;
+    }
+
+    private static void AddOpcoesDeCors(
+        IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment) =>
         services.AddOptions<CorsOptions>()
             .Bind(configuration.GetSection(CorsOptions.SectionName))
             .Validate(
@@ -55,6 +65,8 @@ public static class CorsConfiguration
                 "CORS AllowedOrigins must be configured outside Development. Set 'Cors:AllowedOrigins' with the list of trusted frontend origins.")
             .ValidateOnStart();
 
+    private static void AddPoliticaPadrao(IServiceCollection services, IHostEnvironment environment)
+    {
         services.AddCors();
 
         services.AddOptions<FrameworkCorsOptions>()
@@ -65,8 +77,6 @@ public static class CorsConfiguration
                     DefaultPolicyName,
                     builder => ConfigurePolicy(builder, opts, environment));
             });
-
-        return services;
     }
 
     /// <summary>

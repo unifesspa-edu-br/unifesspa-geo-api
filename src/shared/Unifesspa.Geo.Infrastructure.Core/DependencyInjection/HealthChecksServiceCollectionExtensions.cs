@@ -55,6 +55,17 @@ public static class HealthChecksServiceCollectionExtensions
 
         IHealthChecksBuilder hc = services.AddHealthChecks();
 
+        AdicionarPostgresSeConfigurado(hc, configuration, connectionStringName);
+        AdicionarRedisSeConfigurado(hc, configuration);
+
+        return services;
+    }
+
+    private static void AdicionarPostgresSeConfigurado(
+        IHealthChecksBuilder hc,
+        IConfiguration configuration,
+        string connectionStringName)
+    {
         string? pgConn = configuration.GetConnectionString(connectionStringName);
         if (!string.IsNullOrWhiteSpace(pgConn))
         {
@@ -63,14 +74,15 @@ public static class HealthChecksServiceCollectionExtensions
                 instance: new PostgresHealthCheck(pgConn),
                 tags: [ReadyTag, "db"]);
         }
+    }
 
+    private static void AdicionarRedisSeConfigurado(IHealthChecksBuilder hc, IConfiguration configuration)
+    {
         if (!string.IsNullOrWhiteSpace(configuration[$"{Caching.RedisOptions.SectionName}:{nameof(Caching.RedisOptions.ConnectionString)}"]))
         {
             hc.AddCheck<RedisHealthCheck>(
                 name: "redis",
                 tags: [ReadyTag, "cache"]);
         }
-
-        return services;
     }
 }
