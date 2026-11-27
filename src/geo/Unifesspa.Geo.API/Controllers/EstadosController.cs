@@ -1,17 +1,20 @@
 namespace Unifesspa.Geo.API.Controllers;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using Unifesspa.Geo.API.Errors;
+using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.Estados;
+using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Infrastructure.Core.Pagination;
+using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Endpoints autenticados de leitura de Estados (UFs) — reference data
@@ -26,17 +29,22 @@ using Unifesspa.Geo.Infrastructure.Core.Pagination;
     "Performance",
     "CA1515:Consider making public types internal",
     Justification = "ASP.NET Core ControllerFeatureProvider só descobre controllers public.")]
-public sealed partial class EstadosController : ControllerBase
+public sealed class EstadosController : ControllerBase
 {
     private const string ResourceTag = "estados";
 
     private readonly IQueryBus _queryBus;
     private readonly IResourceLinksBuilder<EstadoDto> _linksBuilder;
+    private readonly IDomainErrorMapper _mapper;
 
-    public EstadosController(IQueryBus queryBus, IResourceLinksBuilder<EstadoDto> linksBuilder)
+    public EstadosController(
+        IQueryBus queryBus,
+        IResourceLinksBuilder<EstadoDto> linksBuilder,
+        IDomainErrorMapper mapper)
     {
         _queryBus = queryBus;
         _linksBuilder = linksBuilder;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -77,18 +85,13 @@ public sealed partial class EstadosController : ControllerBase
     [VendorMediaType(Resource = "estado", Versions = [1])]
     [ProducesResponseType(typeof(EstadoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status406NotAcceptable)]
     public async Task<IActionResult> ObterPorUf(string uf, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(uf) || !UfRegex().IsMatch(uf))
+        if (FormatoDaUf.Validar(uf) is { } recusa)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Title = "UF inválida",
-                Detail = "A UF deve ter exatamente 2 letras (ex.: PA).",
-                Status = StatusCodes.Status400BadRequest,
-            });
+            return Result.Failure(recusa).ToActionResult(_mapper);
         }
 
         EstadoDto? estado = await _queryBus
@@ -97,12 +100,9 @@ public sealed partial class EstadosController : ControllerBase
 
         if (estado is null)
         {
-            return NotFound();
+            return Result.Failure(ErrosDasConsultas.ErroEstadoNaoEncontrado()).ToActionResult(_mapper);
         }
 
         return Ok(estado with { Links = _linksBuilder.Build(estado) });
     }
-
-    [GeneratedRegex(@"^[A-Za-z]{2}$")]
-    private static partial Regex UfRegex();
 }

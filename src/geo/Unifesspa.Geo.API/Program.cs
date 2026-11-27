@@ -61,6 +61,7 @@ builder.Services.AddOpenApi("geo", options =>
 });
 
 builder.Services.AddSingleton<IDomainErrorRegistration, GeoDomainErrorRegistration>();
+builder.Services.AddSingleton<IDomainErrorRegistration>(new ErrosDasConsultasDomainErrorRegistration());
 builder.Services.AddDomainErrorMapper(builder.Configuration);
 
 // Criptografia (entries de idempotency at-rest) + cursor pagination (ADR-0026/0031).

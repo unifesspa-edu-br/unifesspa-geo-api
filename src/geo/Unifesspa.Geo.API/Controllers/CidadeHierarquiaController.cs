@@ -1,17 +1,20 @@
 namespace Unifesspa.Geo.API.Controllers;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using Unifesspa.Geo.API.Errors;
+using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.CidadeHierarquia;
+using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Infrastructure.Core.Pagination;
+using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Endpoints autenticados de navegação descendente da Cidade: distritos, bairros e
@@ -25,24 +28,26 @@ using Unifesspa.Geo.Infrastructure.Core.Pagination;
     "Performance",
     "CA1515:Consider making public types internal",
     Justification = "ASP.NET Core ControllerFeatureProvider só descobre controllers public.")]
-public sealed partial class CidadeHierarquiaController : ControllerBase
+public sealed class CidadeHierarquiaController : ControllerBase
 {
     private const string DistritosResourceTag = "distritos";
     private const string BairrosResourceTag = "bairros";
     private const string LogradourosResourceTag = "logradouros";
-    private const int BuscaMaxLength = 256;
 
     private readonly IQueryBus _queryBus;
     private readonly IResourceLinksBuilder<DistritoDto> _distritoLinks;
     private readonly IResourceLinksBuilder<BairroDto> _bairroLinks;
     private readonly IResourceLinksBuilder<LogradouroResumoDto> _logradouroLinks;
+    private readonly IDomainErrorMapper _mapper;
 
     public CidadeHierarquiaController(
         IQueryBus queryBus,
         IResourceLinksBuilder<DistritoDto> distritoLinks,
         IResourceLinksBuilder<BairroDto> bairroLinks,
-        IResourceLinksBuilder<LogradouroResumoDto> logradouroLinks)
+        IResourceLinksBuilder<LogradouroResumoDto> logradouroLinks,
+        IDomainErrorMapper mapper)
     {
+        _mapper = mapper;
         _queryBus = queryBus;
         _distritoLinks = distritoLinks;
         _bairroLinks = bairroLinks;
@@ -57,7 +62,7 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     [VendorMediaType(Resource = "distrito", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<DistritoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status406NotAcceptable)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status410Gone)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -68,24 +73,8 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(page);
 
-        if (!CodigoIbgeTemFormatoValido(codigoIbge))
-        {
-            return CodigoIbgeInvalido();
-        }
-
-        ListarDistritosResult resultado = await _queryBus
-            .Send(new ListarDistritosQuery(codigoIbge, page.AfterId, page.Limit, page.Direction), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!resultado.CidadeExiste)
-        {
-            return NotFound();
-        }
-
-        DistritoDto[] comLinks = [.. resultado.Items.Select(d => d with { Links = _distritoLinks.Build(d) })];
-        return await this.OkPaginatedAsync(
-            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, DistritosResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return RecusaDoFiltro(codigoIbge, null)
+            ?? await ConsultarDistritosAsync(codigoIbge, page, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -96,7 +85,7 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     [VendorMediaType(Resource = "bairro", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<BairroDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status406NotAcceptable)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status410Gone)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -108,29 +97,8 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(page);
 
-        if (!CodigoIbgeTemFormatoValido(codigoIbge))
-        {
-            return CodigoIbgeInvalido();
-        }
-
-        if (q is { Length: > BuscaMaxLength })
-        {
-            return TermoBuscaMuitoLongo();
-        }
-
-        ListarBairrosResult resultado = await _queryBus
-            .Send(new ListarBairrosQuery(codigoIbge, page.AfterId, page.Limit, page.Direction, q), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!resultado.CidadeExiste)
-        {
-            return NotFound();
-        }
-
-        BairroDto[] comLinks = [.. resultado.Items.Select(b => b with { Links = _bairroLinks.Build(b) })];
-        return await this.OkPaginatedAsync(
-            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, BairrosResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return RecusaDoFiltro(codigoIbge, q)
+            ?? await ConsultarBairrosAsync(codigoIbge, page, q, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -145,7 +113,7 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     [VendorMediaType(Resource = "logradouro", Versions = [1])]
     [ProducesResponseType(typeof(IEnumerable<LogradouroResumoDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status406NotAcceptable)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status410Gone)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -157,23 +125,64 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(page);
 
-        if (!CodigoIbgeTemFormatoValido(codigoIbge))
+        return RecusaDoFiltro(codigoIbge, q)
+            ?? await ConsultarLogradourosAsync(codigoIbge, page, q, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ConsultarDistritosAsync(
+        string codigoIbge,
+        PageRequest page,
+        CancellationToken cancellationToken)
+    {
+        ListarDistritosResult resultado = await _queryBus
+            .Send(new ListarDistritosQuery(codigoIbge, page.AfterId, page.Limit, page.Direction), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!resultado.CidadeExiste)
         {
-            return CodigoIbgeInvalido();
+            return Recusar(ErrosDasConsultas.ErroCidadeNaoEncontrada());
         }
 
-        if (q is { Length: > BuscaMaxLength })
+        DistritoDto[] comLinks = [.. resultado.Items.Select(d => d with { Links = _distritoLinks.Build(d) })];
+        return await this.OkPaginatedAsync(
+            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, DistritosResourceTag,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ConsultarBairrosAsync(
+        string codigoIbge,
+        PageRequest page,
+        string? q,
+        CancellationToken cancellationToken)
+    {
+        ListarBairrosResult resultado = await _queryBus
+            .Send(new ListarBairrosQuery(codigoIbge, page.AfterId, page.Limit, page.Direction, q), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!resultado.CidadeExiste)
         {
-            return TermoBuscaMuitoLongo();
+            return Recusar(ErrosDasConsultas.ErroCidadeNaoEncontrada());
         }
 
+        BairroDto[] comLinks = [.. resultado.Items.Select(b => b with { Links = _bairroLinks.Build(b) })];
+        return await this.OkPaginatedAsync(
+            comLinks, resultado.AnteriorAfterId, resultado.ProximoAfterId, page, BairrosResourceTag,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ConsultarLogradourosAsync(
+        string codigoIbge,
+        PageRequest page,
+        string? q,
+        CancellationToken cancellationToken)
+    {
         ListarLogradourosResult resultado = await _queryBus
             .Send(new ListarLogradourosQuery(codigoIbge, page.AfterId, page.Limit, page.Direction, q), cancellationToken)
             .ConfigureAwait(false);
 
         if (!resultado.CidadeExiste)
         {
-            return NotFound();
+            return Recusar(ErrosDasConsultas.ErroCidadeNaoEncontrada());
         }
 
         LogradouroResumoDto[] comLinks = [.. resultado.Items.Select(l => l with { Links = _logradouroLinks.Build(l) })];
@@ -182,26 +191,11 @@ public sealed partial class CidadeHierarquiaController : ControllerBase
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    private BadRequestObjectResult CodigoIbgeInvalido() =>
-        BadRequest(new ProblemDetails
-        {
-            Title = "Código IBGE inválido",
-            Detail = "O código IBGE deve ter exatamente 7 dígitos.",
-            Status = StatusCodes.Status400BadRequest,
-        });
+    private IActionResult? RecusaDoFiltro(string codigoIbge, string? q)
+    {
+        DomainError? erro = FormatoDoCodigoIbge.Validar(codigoIbge) ?? TermoDeBusca.Validar(q);
+        return erro is null ? null : Recusar(erro);
+    }
 
-    private BadRequestObjectResult TermoBuscaMuitoLongo() =>
-        BadRequest(new ProblemDetails
-        {
-            Title = "Termo de busca muito longo",
-            Detail = $"O parâmetro 'q' não pode exceder {BuscaMaxLength} caracteres.",
-            Status = StatusCodes.Status400BadRequest,
-        });
-
-    private static bool CodigoIbgeTemFormatoValido(string codigoIbge) =>
-        !string.IsNullOrWhiteSpace(codigoIbge) && CodigoIbgeRegex().IsMatch(codigoIbge);
-
-    // [0-9] e não \d: em .NET \d casa dígitos Unicode; o código IBGE é ASCII.
-    [GeneratedRegex(@"^[0-9]{7}$")]
-    private static partial Regex CodigoIbgeRegex();
+    private IActionResult Recusar(DomainError erro) => Result.Failure(erro).ToActionResult(_mapper);
 }
