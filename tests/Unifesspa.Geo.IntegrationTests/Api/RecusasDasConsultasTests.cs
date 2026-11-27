@@ -57,6 +57,19 @@ public sealed class RecusasDasConsultasTests : IClassFixture<GeoOpenApiFactory>
         ConferirProblema(corpo, codigo, valorEnviado);
     }
 
+    [Theory(DisplayName = "Consulta por proximidade recusada devolve o código do parâmetro, sem repetir o valor enviado")]
+    [InlineData("/api/cidades/proximas?long=-49.13&raioKm=10", "uniplus.geo.proximidade.parametros_ausentes", "-49.13")]
+    [InlineData("/api/cidades/proximas?lat=91.5&long=-49.13&raioKm=10", "uniplus.geo.proximidade.latitude_invalida", "91.5")]
+    [InlineData("/api/cidades/proximas?lat=-5.35&long=-181.5&raioKm=10", "uniplus.geo.proximidade.longitude_invalida", "181.5")]
+    [InlineData("/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=777", "uniplus.geo.proximidade.raio_invalido", "777")]
+    [InlineData("/api/logradouros/proximos?lat=-5.35&long=-49.13&raioKm=10&limit=-7", "uniplus.geo.proximidade.limite_invalido", "-7")]
+    public async Task Proximidade_RecusaTemCodigoETipo(string rota, string codigo, string valorEnviado)
+    {
+        using JsonDocument corpo = await ConsultarAsync(rota, 400);
+
+        ConferirProblema(corpo, codigo, valorEnviado);
+    }
+
     [Theory(DisplayName = "Termo de busca acima do máximo devolve 400 com código próprio, sem repetir o termo")]
     [InlineData("/api/cidades?q=")]
     [InlineData("/api/cidades/1500602/bairros?q=")]

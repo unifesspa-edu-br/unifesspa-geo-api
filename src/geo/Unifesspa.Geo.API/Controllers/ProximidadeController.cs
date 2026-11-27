@@ -10,8 +10,10 @@ using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.Proximidade;
+using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
+using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Consultas geoespaciais de proximidade (ADR-0091) — reference data
@@ -35,18 +37,21 @@ public sealed class ProximidadeController : ControllerBase
     private readonly IResourceLinksBuilder<CidadeProximaDto> _cidadeLinks;
     private readonly IResourceLinksBuilder<LogradouroProximoDto> _logradouroLinks;
     private readonly GeoProximidadeOptions _opcoes;
+    private readonly IDomainErrorMapper _mapper;
 
     public ProximidadeController(
         IQueryBus queryBus,
         IResourceLinksBuilder<CidadeProximaDto> cidadeLinks,
         IResourceLinksBuilder<LogradouroProximoDto> logradouroLinks,
-        IOptions<GeoProximidadeOptions> opcoes)
+        IOptions<GeoProximidadeOptions> opcoes,
+        IDomainErrorMapper mapper)
     {
         ArgumentNullException.ThrowIfNull(opcoes);
         _queryBus = queryBus;
         _cidadeLinks = cidadeLinks;
         _logradouroLinks = logradouroLinks;
         _opcoes = opcoes.Value;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -66,10 +71,10 @@ public sealed class ProximidadeController : ControllerBase
         [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        if (!ConsultaProximidade.TentarCriar(
-                lat, longitude, raioKm, limit, _opcoes, out ConsultaProximidade? consulta, out ProblemDetails? erro))
+        Result<ConsultaProximidade> criada = ConsultaProximidade.Criar(lat, longitude, raioKm, limit, _opcoes);
+        if (criada.Value is not { } consulta)
         {
-            return BadRequest(erro);
+            return criada.ToActionResult(_mapper);
         }
 
         IReadOnlyList<CidadeProximaDto> itens = await _queryBus
@@ -98,10 +103,10 @@ public sealed class ProximidadeController : ControllerBase
         [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        if (!ConsultaProximidade.TentarCriar(
-                lat, longitude, raioKm, limit, _opcoes, out ConsultaProximidade? consulta, out ProblemDetails? erro))
+        Result<ConsultaProximidade> criada = ConsultaProximidade.Criar(lat, longitude, raioKm, limit, _opcoes);
+        if (criada.Value is not { } consulta)
         {
-            return BadRequest(erro);
+            return criada.ToActionResult(_mapper);
         }
 
         IReadOnlyList<LogradouroProximoDto> itens = await _queryBus

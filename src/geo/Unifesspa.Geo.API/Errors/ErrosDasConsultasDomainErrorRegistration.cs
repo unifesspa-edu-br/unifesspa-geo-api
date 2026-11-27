@@ -14,5 +14,10 @@ internal sealed class ErrosDasConsultasDomainErrorRegistration : IDomainErrorReg
             ErrosDasConsultas.UfInvalida,
             ErrosDasConsultas.EstadoNaoEncontrado,
             ErrosDasConsultas.TermoDeBuscaMuitoLongo,
+            ErrosDasConsultas.ParametrosDeProximidadeAusentes,
+            ErrosDasConsultas.LatitudeInvalida,
+            ErrosDasConsultas.LongitudeInvalida,
+            ErrosDasConsultas.RaioInvalido,
+            ErrosDasConsultas.LimiteInvalido,
         }.Select(static definicao => new KeyValuePair<string, DomainErrorMapping>(definicao.Code, definicao));
 }

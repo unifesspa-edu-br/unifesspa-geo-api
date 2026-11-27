@@ -2,10 +2,8 @@ namespace Unifesspa.Geo.IntegrationTests.Proximidade;
 
 using AwesomeAssertions;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-
 using Unifesspa.Geo.API.Formatting;
+using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Validação no boundary HTTP (ADR-0031, #678) dos parâmetros de proximidade:
@@ -14,103 +12,105 @@ using Unifesspa.Geo.API.Formatting;
 /// </summary>
 public sealed class ConsultaProximidadeTests
 {
+    private const string Ausentes = "uniplus.geo.proximidade.parametros_ausentes";
+    private const string LatitudeInvalida = "uniplus.geo.proximidade.latitude_invalida";
+    private const string LongitudeInvalida = "uniplus.geo.proximidade.longitude_invalida";
+    private const string RaioInvalido = "uniplus.geo.proximidade.raio_invalido";
+    private const string LimiteInvalido = "uniplus.geo.proximidade.limite_invalido";
+
     private static readonly GeoProximidadeOptions Opcoes = new();
 
     [Fact(DisplayName = "CA-04: parâmetros válidos criam a consulta com limit default")]
-    public void TentarCriar_Valido_UsaLimitDefault()
+    public void Criar_Valido_UsaLimitDefault()
     {
-        bool ok = ConsultaProximidade.TentarCriar(
-            -5.35, -49.13, 100, null, Opcoes, out ConsultaProximidade? consulta, out ProblemDetails? erro);
+        Result<ConsultaProximidade> resultado = ConsultaProximidade.Criar(-5.35, -49.13, 100, null, Opcoes);
 
-        ok.Should().BeTrue();
-        erro.Should().BeNull();
-        consulta!.Latitude.Should().Be(-5.35);
+        resultado.IsSuccess.Should().BeTrue();
+        ConsultaProximidade consulta = resultado.Value!;
+        consulta.Latitude.Should().Be(-5.35);
         consulta.Longitude.Should().Be(-49.13);
         consulta.RaioKm.Should().Be(100);
         consulta.Limit.Should().Be(Opcoes.LimitPadrao);
     }
 
     [Fact(DisplayName = "CA-06: limit acima do teto é truncado para o máximo")]
-    public void TentarCriar_LimitAcimaDoTeto_Trunca()
+    public void Criar_LimitAcimaDoTeto_Trunca()
     {
-        bool ok = ConsultaProximidade.TentarCriar(0, 0, 10, 100_000, Opcoes, out ConsultaProximidade? consulta, out _);
-
-        ok.Should().BeTrue();
-        consulta!.Limit.Should().Be(Opcoes.LimitMax);
+        ConsultaProximidade.Criar(0, 0, 10, 100_000, Opcoes).Value!.Limit.Should().Be(Opcoes.LimitMax);
     }
 
     [Fact(DisplayName = "limit informado dentro do teto é preservado")]
-    public void TentarCriar_LimitValido_Preserva()
+    public void Criar_LimitValido_Preserva()
     {
-        bool ok = ConsultaProximidade.TentarCriar(0, 0, 10, 7, Opcoes, out ConsultaProximidade? consulta, out _);
-
-        ok.Should().BeTrue();
-        consulta!.Limit.Should().Be(7);
+        ConsultaProximidade.Criar(0, 0, 10, 7, Opcoes).Value!.Limit.Should().Be(7);
     }
 
-    [Theory(DisplayName = "CA-04: parâmetro obrigatório ausente retorna 400")]
+    [Theory(DisplayName = "CA-04: parâmetro obrigatório ausente é recusado com o código de parâmetros ausentes")]
     [InlineData(null, -49.13, 100.0)]
     [InlineData(-5.35, null, 100.0)]
     [InlineData(-5.35, -49.13, null)]
-    public void TentarCriar_ObrigatorioAusente_Falha(double? lat, double? lon, double? raio)
+    public void Criar_ObrigatorioAusente_Recusa(double? lat, double? lon, double? raio)
     {
-        bool ok = ConsultaProximidade.TentarCriar(
-            lat, lon, raio, null, Opcoes, out ConsultaProximidade? consulta, out ProblemDetails? erro);
-
-        ok.Should().BeFalse();
-        consulta.Should().BeNull();
-        erro!.Status.Should().Be(StatusCodes.Status400BadRequest);
+        ConferirRecusa(ConsultaProximidade.Criar(lat, lon, raio, null, Opcoes), Ausentes);
     }
 
-    [Theory(DisplayName = "CA-04: lat/long/raio fora de faixa retornam 400")]
-    [InlineData(91.0, 0.0, 10.0)]     // lat > 90
-    [InlineData(-91.0, 0.0, 10.0)]    // lat < -90
-    [InlineData(0.0, 181.0, 10.0)]    // long > 180
-    [InlineData(0.0, -181.0, 10.0)]   // long < -180
-    [InlineData(0.0, 0.0, 0.0)]       // raio = 0
-    [InlineData(0.0, 0.0, -5.0)]      // raio < 0
-    [InlineData(0.0, 0.0, 600.0)]     // raio > teto (500)
-    public void TentarCriar_ForaDeFaixa_Falha(double lat, double lon, double raio)
+    [Theory(DisplayName = "CA-04: lat/long/raio fora de faixa são recusados com o código do parâmetro")]
+    [InlineData(91.0, 0.0, 10.0, LatitudeInvalida)]
+    [InlineData(-91.0, 0.0, 10.0, LatitudeInvalida)]
+    [InlineData(0.0, 181.0, 10.0, LongitudeInvalida)]
+    [InlineData(0.0, -181.0, 10.0, LongitudeInvalida)]
+    [InlineData(0.0, 0.0, 0.0, RaioInvalido)]
+    [InlineData(0.0, 0.0, -5.0, RaioInvalido)]
+    [InlineData(0.0, 0.0, 600.0, RaioInvalido)]
+    public void Criar_ForaDeFaixa_Recusa(double lat, double lon, double raio, string codigo)
     {
-        bool ok = ConsultaProximidade.TentarCriar(
-            lat, lon, raio, null, Opcoes, out ConsultaProximidade? consulta, out ProblemDetails? erro);
-
-        ok.Should().BeFalse();
-        consulta.Should().BeNull();
-        erro!.Status.Should().Be(StatusCodes.Status400BadRequest);
+        ConferirRecusa(ConsultaProximidade.Criar(lat, lon, raio, null, Opcoes), codigo);
     }
 
-    [Fact(DisplayName = "CA-04: lat/long/raio NaN ou infinito retornam 400")]
-    public void TentarCriar_NaoFinito_Falha()
+    [Fact(DisplayName = "CA-04: lat/long/raio NaN ou infinito são recusados com o código do parâmetro")]
+    public void Criar_NaoFinito_Recusa()
     {
-        ConsultaProximidade.TentarCriar(double.NaN, 0, 10, null, Opcoes, out _, out ProblemDetails? eLat)
-            .Should().BeFalse();
-        eLat!.Status.Should().Be(StatusCodes.Status400BadRequest);
-
-        ConsultaProximidade.TentarCriar(0, double.PositiveInfinity, 10, null, Opcoes, out _, out _)
-            .Should().BeFalse();
-        ConsultaProximidade.TentarCriar(0, 0, double.PositiveInfinity, null, Opcoes, out _, out _)
-            .Should().BeFalse();
+        ConferirRecusa(ConsultaProximidade.Criar(double.NaN, 0, 10, null, Opcoes), LatitudeInvalida);
+        ConferirRecusa(ConsultaProximidade.Criar(0, double.PositiveInfinity, 10, null, Opcoes), LongitudeInvalida);
+        ConferirRecusa(ConsultaProximidade.Criar(0, 0, double.PositiveInfinity, null, Opcoes), RaioInvalido);
     }
 
-    [Theory(DisplayName = "CA-04/CA-06: limit <= 0 é inválido (400), não é silenciado por clamp")]
+    [Theory(DisplayName = "CA-04/CA-06: limit <= 0 é recusado com o código do limite, não é silenciado por clamp")]
     [InlineData(0)]
     [InlineData(-1)]
-    public void TentarCriar_LimitInvalido_Falha(int limit)
+    public void Criar_LimitInvalido_Recusa(int limit)
     {
-        bool ok = ConsultaProximidade.TentarCriar(
-            0, 0, 10, limit, Opcoes, out ConsultaProximidade? consulta, out ProblemDetails? erro);
+        ConferirRecusa(ConsultaProximidade.Criar(0, 0, 10, limit, Opcoes), LimiteInvalido);
+    }
 
-        ok.Should().BeFalse();
-        consulta.Should().BeNull();
-        erro!.Status.Should().Be(StatusCodes.Status400BadRequest);
+    [Fact(DisplayName = "A primeira recusa decide: parâmetros ausentes antes de latitude, latitude antes de raio e raio antes de limite")]
+    public void Criar_VariasRecusas_PrimeiraDecide()
+    {
+        ConferirRecusa(ConsultaProximidade.Criar(null, 999, 0, 0, Opcoes), Ausentes);
+        ConferirRecusa(ConsultaProximidade.Criar(91, 999, 0, 0, Opcoes), LatitudeInvalida);
+        ConferirRecusa(ConsultaProximidade.Criar(0, 999, 0, 0, Opcoes), LongitudeInvalida);
+        ConferirRecusa(ConsultaProximidade.Criar(0, 0, 0, 0, Opcoes), RaioInvalido);
+    }
+
+    [Fact(DisplayName = "O detalhe do raio cita o máximo da configuração")]
+    public void Criar_RaioAcimaDoMaximo_CitaOMaximoConfigurado()
+    {
+        GeoProximidadeOptions opcoes = new() { RaioMaxKm = 250 };
+
+        ConsultaProximidade.Criar(0, 0, 300, null, opcoes).Error!.Message.Should().Contain("250 km");
     }
 
     [Fact(DisplayName = "Boundaries de faixa (±90 lat, ±180 long, teto de raio) são aceitos")]
-    public void TentarCriar_Boundaries_Ok()
+    public void Criar_Boundaries_Ok()
     {
-        ConsultaProximidade.TentarCriar(90, 180, Opcoes.RaioMaxKm, null, Opcoes, out _, out _).Should().BeTrue();
-        ConsultaProximidade.TentarCriar(-90, -180, Opcoes.RaioMaxKm, null, Opcoes, out _, out _).Should().BeTrue();
+        ConsultaProximidade.Criar(90, 180, Opcoes.RaioMaxKm, null, Opcoes).IsSuccess.Should().BeTrue();
+        ConsultaProximidade.Criar(-90, -180, Opcoes.RaioMaxKm, null, Opcoes).IsSuccess.Should().BeTrue();
+    }
+
+    private static void ConferirRecusa(Result<ConsultaProximidade> resultado, string codigo)
+    {
+        resultado.IsFailure.Should().BeTrue();
+        resultado.Error!.Code.Should().Be(codigo);
     }
 
     [Fact(DisplayName = "Options: defaults são válidos (validação fail-fast no boot)")]
