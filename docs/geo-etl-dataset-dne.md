@@ -40,11 +40,11 @@ Pré-requisito: o banco `uniplus_geo_staging` (role `uniplus_geo_staging_app`) p
 > ```
 
 ```bash
-# 1. Descompactar os dumps (ex.: tbl_cep_202601_postgresql.zip) num diretório.
+# 1. Descompactar os dumps (ex.: tbl_cep_202609_postgresql.zip, que traz as tabelas tbl_cep_202610_*) num diretório.
 # 2. Restaurar cada dump direto no banco de staging — SEM sed, SEM search_path: os
 #    dumps já qualificam "public", e esse banco só existe para recebê-los.
 GEO_STAGING_CONN="postgresql://uniplus_geo_staging_app:uniplus_dev@localhost:5432/uniplus_geo_staging"
-for f in tbl_cep_202601_n_*.sql; do
+for f in tbl_cep_202610_n_*.sql; do
   psql "$GEO_STAGING_CONN" -f "$f"
 done
 ```
@@ -59,7 +59,7 @@ Com o staging restaurado (seção anterior) e a API local no ar (`dotnet run --p
 # 1. Disparar a importação da versão restaurada (retorna 202 + Location do status).
 curl -s -X POST http://localhost:5400/api/admin/geo/importacoes \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"Versao":"202601"}'
+  -d '{"Versao":"202610"}'
 
 # 2. Acompanhar até a execução sair de "EmAndamento" (o worker processa em background —
 #    poucos minutos para o dataset completo, dominado pelo COPY de ~1,4M logradouros).
