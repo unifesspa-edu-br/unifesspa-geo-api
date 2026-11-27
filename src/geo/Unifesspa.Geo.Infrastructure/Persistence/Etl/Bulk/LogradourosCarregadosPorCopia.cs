@@ -9,6 +9,7 @@ using Npgsql;
 using NpgsqlTypes;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
@@ -51,6 +52,7 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
 
     private readonly IGeoFonteDados _fonte;
     private readonly ResolucaoLocalidades _resolucao;
+    private readonly ProvenienciaDaCarga _proveniencia;
 
     public LogradourosCarregadosPorCopia(IGeoFonteDados fonte, ResolucaoLocalidades resolucao)
     {
@@ -59,6 +61,7 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
 
         _fonte = fonte;
         _resolucao = resolucao;
+        _proveniencia = new ProvenienciaDaCarga(fonte.Versao);
     }
 
     public ComandosDaTabelaPorCopia Comandos { get; } = new(
@@ -165,27 +168,27 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
         // o domínio delega à carga a coerência hierárquica.
         Guid? distrito = GeoEtlUpsert.ResolverCoerente(_resolucao.DistritosPorIdDne, cru.DistritoIdDne, cidade, contador);
         Guid? bairro = GeoEtlUpsert.ResolverCoerente(_resolucao.BairrosPorIdDne, cru.BairroIdDne, cidade, contador);
-        Point? coordenada = PontoFactory.Criar(cru.Latitude, cru.Longitude);
-        return contador.AceitarOuContarIgnorado(Criar(cru, cidade, distrito, bairro, coordenada));
+        return contador.AceitarOuContarIgnorado(Criar(cru, cidade, distrito, bairro));
     }
 
     private Guid? ResolverCidade(LogradouroCru cru) =>
         cru.CidadeIdDne is int idCidade && _resolucao.CidadesPorIdDne.TryGetValue(idCidade, out Guid cidade) ? cidade : null;
 
-    // Latitude e longitude decimais saem do ponto já validado (o PontoFactory limita a ±90 e
-    // ±180): o texto é lido uma só vez e os valores cabem no numeric(9,6) por construção.
+    // Latitude e longitude saem do ponto já validado (o PontoFactory limita a ±90 e ±180): o texto
+    // é lido uma só vez e os valores cabem no numeric(9,6) por construção.
     // O nome normalizado é o texto completo sem acento (tipo e nome), que alimenta a busca por
     // texto e compõe a chave de atualização; sem ele na fonte, cai para o texto completo e
     // depois para o nome, que o domínio só põe em minúsculas.
-    private Result<Logradouro> Criar(LogradouroCru cru, Guid cidade, Guid? distrito, Guid? bairro, Point? coordenada)
-    {
-        decimal? latitude = coordenada is null ? null : (decimal)coordenada.Y;
-        decimal? longitude = coordenada is null ? null : (decimal)coordenada.X;
-        return Logradouro.Importar(
-            cru.Cep ?? string.Empty, cru.Tipo, cru.Nome ?? string.Empty, cru.NomeCompleto,
-            cru.LogradouroSemAcento ?? cru.NomeCompleto ?? cru.Nome ?? string.Empty,
-            cidade, distrito, bairro, cru.Uf ?? string.Empty,
-            latitude, longitude, coordenada,
-            ParseTolerante.ParaBoolSn(cru.CepAtivo), _fonte.Versao);
-    }
+    private Result<Logradouro> Criar(LogradouroCru cru, Guid cidade, Guid? distrito, Guid? bairro) =>
+        Logradouro.Importar(
+            cru.Cep ?? string.Empty,
+            new NomeDoLogradouro(
+                cru.Tipo,
+                cru.Nome ?? string.Empty,
+                cru.NomeCompleto,
+                cru.LogradouroSemAcento ?? cru.NomeCompleto ?? cru.Nome ?? string.Empty),
+            new LocalidadeDoLogradouro(cidade, distrito, bairro, cru.Uf ?? string.Empty),
+            CoordenadaDne.DoPontoValidado(cru.Latitude, cru.Longitude),
+            ParseTolerante.ParaBoolSn(cru.CepAtivo),
+            _proveniencia);
 }

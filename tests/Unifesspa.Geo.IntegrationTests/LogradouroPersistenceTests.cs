@@ -135,6 +135,10 @@ public sealed class LogradouroPersistenceTests
 
     private static Logradouro NovoLogradouro(string cep, string nome, string nomeNormalizado, Guid cidadeId, bool ativo = true) =>
         GeoTestKeys.Ok(Logradouro.Importar(
-            cep, null, nome, nome, nomeNormalizado, cidadeId, null, null, "SP",
-            null, null, null, ativo, VersaoDataset));
+            cep,
+            new NomeDoLogradouro(null, nome, nome, nomeNormalizado),
+            new LocalidadeDoLogradouro(cidadeId, null, null, "SP"),
+            default,
+            ativo,
+            new ProvenienciaDaCarga(VersaoDataset)));
 }

@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.Domain.Entities;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -10,14 +11,14 @@ using Unifesspa.Geo.Kernel.Results;
 /// Logradouro — folha da hierarquia (a entrada por CEP, maior volume do módulo,
 /// ~1,4M linhas). Reference data sem soft-delete (ADR-0092). O <see cref="Cep"/> é
 /// <strong>indexado mas não único</strong> (o CEP geral de cidade cobre vários
-/// logradouros); a idempotência do upsert vem da chave composta
+/// logradouros); a idempotência da gravação pela chave natural vem da chave composta
 /// <c>(cep, nome_normalizado, cidade_id)</c>.
 /// </summary>
 /// <remarks>
-/// <see cref="NomeNormalizado"/> é <c>NOT NULL</c> por compor a chave de upsert
+/// <see cref="NomeNormalizado"/> é <c>NOT NULL</c> por compor a chave natural
 /// (UNIQUE com nulo admitiria duplicatas). <see cref="DistritoId"/>/<see cref="BairroId"/>
 /// são opcionais (a fonte traz distrito nulo com frequência). A coerência de que
-/// distrito/bairro pertencem à mesma cidade é responsabilidade do ETL (F3, dado
+/// distrito/bairro pertencem à mesma cidade é responsabilidade da carga (dado
 /// autoritativo externo, ADR-0092) — não há FK composta cruzando cidade.
 /// </remarks>
 public sealed class Logradouro : EntityBase
@@ -37,10 +38,10 @@ public sealed class Logradouro : EntityBase
     /// <summary>
     /// <strong>Texto completo</strong> sem acentos, em caixa-baixa (origem
     /// <c>logradouro_sem_acento</c>, ex.: "rua a") — é a coluna de busca (autocomplete por
-    /// tipo + nome, índice trigram) e compõe a chave de upsert; não nulo. Diverge de
+    /// tipo + nome, índice trigram) e compõe a chave natural; não nulo. Diverge de
     /// Distrito/Bairro (que guardam o nome sem o tipo) porque o logradouro tem o tipo numa
     /// coluna à parte: incluí-lo aqui torna a busca útil e endurece a chave contra a
-    /// colisão de CEP-geral (#707).
+    /// colisão com o CEP geral.
     /// </summary>
     public string NomeNormalizado { get; private set; } = string.Empty;
 
@@ -66,12 +67,12 @@ public sealed class Logradouro : EntityBase
     /// <summary>Atributo do dado nos Correios (origem <c>cep_ativo</c> 'S'/'N'). Distinto de <see cref="Vigente"/>.</summary>
     public bool Ativo { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
     /// <summary>
     /// Proveniência da recarga: <see langword="false"/> quando a chave natural some
-    /// entre releases. <strong>Distinto</strong> de <see cref="Ativo"/> (atributo do
+    /// entre versões. <strong>Distinto</strong> de <see cref="Ativo"/> (atributo do
     /// dado nos Correios).
     /// </summary>
     public bool Vigente { get; private set; } = true;
@@ -82,88 +83,65 @@ public sealed class Logradouro : EntityBase
     }
 
     /// <summary>
-    /// Importa um Logradouro a partir de valores já tipados (parse tolerante e a
-    /// conversão <c>'S'/'N' → bool</c> moram no ETL). Valida o mínimo: chave de
-    /// upsert (<paramref name="cep"/>, <paramref name="nomeNormalizado"/>,
-    /// <paramref name="cidadeId"/>), <paramref name="nome"/> e proveniência.
+    /// Importa um Logradouro a partir de valores já tipados (a leitura tolerante e a conversão
+    /// <c>'S'/'N' → bool</c> moram na carga). Valida o mínimo: chave natural
+    /// (<paramref name="cep"/>, a forma de busca em <paramref name="nome"/> e a cidade em
+    /// <paramref name="localidade"/>), o nome e a versão da base em <paramref name="proveniencia"/>.
     /// </summary>
     public static Result<Logradouro> Importar(
         string cep,
-        string? tipo,
-        string nome,
-        string? nomeCompleto,
-        string nomeNormalizado,
-        Guid cidadeId,
-        Guid? distritoId,
-        Guid? bairroId,
-        string uf,
-        decimal? latitude,
-        decimal? longitude,
-        Point? coordenada,
+        NomeDoLogradouro nome,
+        LocalidadeDoLogradouro localidade,
+        PosicaoGeografica posicao,
         bool ativo,
-        string versaoDataset,
-        bool vigente = true)
+        ProvenienciaDaCarga proveniencia)
     {
         ArgumentNullException.ThrowIfNull(cep);
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(nomeNormalizado);
-        ArgumentNullException.ThrowIfNull(uf);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(cep))
+        DomainError? erro = Validar(cep, nome, localidade.CidadeId, proveniencia);
+        if (erro is not null)
         {
-            return Result<Logradouro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.LogradouroCepObrigatorio,
-                "CEP do Logradouro é obrigatório."));
+            return Result<Logradouro>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result<Logradouro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.LogradouroNomeObrigatorio,
-                "Nome do Logradouro é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(nomeNormalizado))
-        {
-            return Result<Logradouro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.LogradouroNomeNormalizadoObrigatorio,
-                "Nome normalizado do Logradouro é obrigatório (compõe a chave de upsert)."));
-        }
-
-        if (cidadeId == Guid.Empty)
-        {
-            return Result<Logradouro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.LogradouroCidadeObrigatoria,
-                "Cidade do Logradouro é obrigatória."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<Logradouro>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.LogradouroVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do Logradouro é obrigatória."));
-        }
-
-        var logradouro = new Logradouro
-        {
-            Cep = cep.Trim(),
-            Tipo = GeoTexto.NormalizarOpcional(tipo),
-            Nome = nome.Trim(),
-            NomeCompleto = GeoTexto.NormalizarOpcional(nomeCompleto),
-            NomeNormalizado = GeoTexto.NormalizarTexto(nomeNormalizado),
-            CidadeId = cidadeId,
-            DistritoId = distritoId,
-            BairroId = bairroId,
-            Uf = GeoTexto.NormalizarChaveMaiuscula(uf),
-            Latitude = latitude,
-            Longitude = longitude,
-            Coordenada = coordenada,
-            Ativo = ativo,
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var logradouro = new Logradouro { Cep = cep.Trim() };
+        logradouro.Aplicar(nome, localidade, posicao, ativo, proveniencia);
 
         return Result<Logradouro>.Success(logradouro);
+    }
+
+    private static DomainError? Validar(string cep, NomeDoLogradouro nome, Guid cidadeId, ProvenienciaDaCarga proveniencia) =>
+        string.IsNullOrWhiteSpace(cep)
+            ? new DomainError(GeoReferenceDataErrorCodes.LogradouroCepObrigatorio, "CEP do Logradouro é obrigatório.")
+            : string.IsNullOrWhiteSpace(nome.Nome)
+                ? new DomainError(GeoReferenceDataErrorCodes.LogradouroNomeObrigatorio, "Nome do Logradouro é obrigatório.")
+                : string.IsNullOrWhiteSpace(nome.NomeNormalizado)
+                    ? new DomainError(
+                        GeoReferenceDataErrorCodes.LogradouroNomeNormalizadoObrigatorio,
+                        "Nome normalizado do Logradouro é obrigatório (compõe a chave de upsert).")
+                    : cidadeId == Guid.Empty
+                        ? new DomainError(GeoReferenceDataErrorCodes.LogradouroCidadeObrigatoria, "Cidade do Logradouro é obrigatória.")
+                        : proveniencia.TemVersao
+                            ? null
+                            : new DomainError(
+                                GeoReferenceDataErrorCodes.LogradouroVersaoDatasetObrigatoria,
+                                "Versão do dataset (proveniência) do Logradouro é obrigatória.");
+
+    private void Aplicar(
+        NomeDoLogradouro nome,
+        LocalidadeDoLogradouro localidade,
+        PosicaoGeografica posicao,
+        bool ativo,
+        ProvenienciaDaCarga proveniencia)
+    {
+        Tipo = nome.Tipo;
+        Nome = nome.Nome;
+        NomeCompleto = nome.NomeCompleto;
+        NomeNormalizado = nome.NomeNormalizado!;
+        (CidadeId, DistritoId, BairroId, Uf) = localidade;
+        (Latitude, Longitude, Coordenada) = posicao;
+        Ativo = ativo;
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }
