@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Http;
 
 /// <summary>
 /// As respostas de erro que a fronteira HTTP emite sem passar por um erro de domínio:
-/// autenticação, negociação de versão de mídia, leitura da requisição, validação e falha
-/// inesperada. Cada emissor lê status, código e título daqui.
+/// autenticação, negociação de versão de mídia, leitura da requisição, caminho sem operação,
+/// validação e falha inesperada. Cada emissor lê status, código e título daqui.
 /// </summary>
 public static class ErrosDaFronteiraHttp
 {
@@ -22,6 +22,11 @@ public static class ErrosDaFronteiraHttp
         StatusCodes.Status400BadRequest,
         "uniplus.requisicao.valor_invalido",
         "A requisição traz valor que não corresponde ao tipo declarado");
+
+    public static readonly DomainErrorMapping CaminhoInexistente = new(
+        StatusCodes.Status404NotFound,
+        "uniplus.requisicao.caminho_inexistente",
+        "A requisição pede um caminho que a API não oferece");
 
     public static readonly DomainErrorMapping ErroDeValidacao = new(
         StatusCodes.Status422UnprocessableEntity, "uniplus.validacao", "Erro de validação");

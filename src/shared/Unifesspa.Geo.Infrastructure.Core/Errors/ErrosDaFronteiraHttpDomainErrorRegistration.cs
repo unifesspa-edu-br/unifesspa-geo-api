@@ -9,6 +9,7 @@ internal sealed class ErrosDaFronteiraHttpDomainErrorRegistration : IDomainError
             ErrosDaFronteiraHttp.AcessoNegado,
             ErrosDaFronteiraHttp.VersaoDeMidiaNaoSuportada,
             ErrosDaFronteiraHttp.ValorDaRequisicaoInvalido,
+            ErrosDaFronteiraHttp.CaminhoInexistente,
             ErrosDaFronteiraHttp.ErroDeValidacao,
             ErrosDaFronteiraHttp.ErroInesperado,
         }.Select(static definicao => new KeyValuePair<string, DomainErrorMapping>(definicao.Code, definicao));

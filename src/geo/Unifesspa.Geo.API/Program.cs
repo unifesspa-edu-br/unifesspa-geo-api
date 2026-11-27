@@ -153,6 +153,7 @@ WebApplication app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseRespostaDaRequisicaoSemOperacao();
 app.UseCorsConfiguration();
 app.UseAuthentication();
 app.UseAuthorization();
