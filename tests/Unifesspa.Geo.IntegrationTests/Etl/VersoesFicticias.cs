@@ -18,7 +18,7 @@ internal static class VersoesFicticias
     {
         FonteEmMemoria fonte = Base(VersaoNova, comSaoPaulo: false, falhaAoLerLogradouros);
         fonte.LogradouroComplementos.Add(DadosDne.Complemento(CepRuaA, "lado novo"));
-        fonte.Logradouros.Add(DadosDne.Logradouro(CepRuaNova, "Rua Nova", 1, tipo: "Rua", latitude: "-5.37", longitude: "-49.12"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder(CepRuaNova, "Rua Nova", 1).DoTipo("Rua").NaPosicao("-5.37", "-49.12").Construir());
         return fonte;
     }
 
@@ -38,7 +38,7 @@ internal static class VersoesFicticias
 
     private static void AdicionarMaraba(FonteEmMemoria fonte)
     {
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        fonte.Estados.Add(new EstadoCruBuilder("PA", "Pará").ComCapital("Belém").NaFaixaDeCep("66000000", "68899999").Construir());
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94"));
         fonte.CidadeIds.Add(DadosDne.CidadeId(1, CodigoMaraba));
@@ -48,18 +48,17 @@ internal static class VersoesFicticias
     private static void AdicionarLogradourosDeMaraba(FonteEmMemoria fonte)
     {
         fonte.LogradouroComplementos.Add(DadosDne.Complemento(CepRuaA, "lado par"));
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            CepRuaA, "Rua A", 1, tipo: "Rua", distritoIdDne: 10,
-            latitude: "-5.36867", longitude: "-49.11731"));
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", 1, tipo: "Rua"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder(CepRuaA, "Rua A", 1)
+            .DoTipo("Rua").NoDistrito(10).NaPosicao("-5.36867", "-49.11731").Construir());
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500001", "Rua B", 1).DoTipo("Rua").Construir());
     }
 
     private static void AdicionarSaoPaulo(FonteEmMemoria fonte)
     {
-        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.Estados.Add(new EstadoCruBuilder("SP", "São Paulo").NaRegiao("Sudeste").ComCapital("São Paulo").NaFaixaDeCep("01000000", "19999999").Construir());
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
         fonte.Cidades.Add(DadosDne.Cidade(CodigoSaoPaulo, "São Paulo", "SP", ddd: "11"));
         fonte.CidadeIds.Add(DadosDne.CidadeId(2, CodigoSaoPaulo));
-        fonte.Logradouros.Add(DadosDne.Logradouro("01000000", "Av Paulista", 2, uf: "SP", tipo: "Avenida"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("01000000", "Av Paulista", 2).NaUf("SP").DoTipo("Avenida").Construir());
     }
 }

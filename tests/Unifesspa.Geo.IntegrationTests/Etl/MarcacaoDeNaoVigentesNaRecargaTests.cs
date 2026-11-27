@@ -159,7 +159,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         FonteEmMemoria recargaCorrompida = new() { Versao = "202602" };
         recargaCorrompida.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
-        recargaCorrompida.Logradouros.Add(DadosDne.Logradouro("68500999", "Rua Nova", 1));
+        recargaCorrompida.Logradouros.Add(new LogradouroCruBuilder("68500999", "Rua Nova", 1).Construir());
         return recargaCorrompida;
     }
 
@@ -168,7 +168,7 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         FonteEmMemoria folhasVazias = new() { Versao = "202602" };
         folhasVazias.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        folhasVazias.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        folhasVazias.Estados.Add(new EstadoCruBuilder("PA", "Pará").ComCapital("Belém").NaFaixaDeCep("66000000", "68899999").Construir());
         folhasVazias.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         folhasVazias.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
         folhasVazias.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));

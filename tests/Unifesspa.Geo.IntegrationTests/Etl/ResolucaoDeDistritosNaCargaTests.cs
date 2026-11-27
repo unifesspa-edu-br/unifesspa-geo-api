@@ -63,7 +63,7 @@ public sealed class ResolucaoDeDistritosNaCargaTests
         await _cenario.PrepararTopoAsync(FonteCompleta());
         FonteEmMemoria fonte = FonteCompleta();
         // Logradouro em Marabá apontando para o distrito 20 ("Centro"), que é de São Paulo.
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500200", "Rua Cruzada", IdCidadeMaraba, distritoIdDne: 20));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500200", "Rua Cruzada", IdCidadeMaraba).NoDistrito(20).Construir());
 
         RelatorioImportacao relatorio = await _cenario.ExecutarLocalidadesAsync(fonte);
 
@@ -79,8 +79,8 @@ public sealed class ResolucaoDeDistritosNaCargaTests
         // "Centro" existe em Marabá (id 30) e em São Paulo (id 20 já no FonteCompleta).
         fonte.Distritos.Add(DadosDne.Distrito(30, "Centro", IdCidadeMaraba));
         // Dois logradouros, um por "Centro", referenciando o id_distrito respectivo.
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500100", "Av Marabá", IdCidadeMaraba, distritoIdDne: 30));
-        fonte.Logradouros.Add(DadosDne.Logradouro("01000000", "Av Paulista", IdCidadeSaoPaulo, distritoIdDne: 20));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500100", "Av Marabá", IdCidadeMaraba).NoDistrito(30).Construir());
+        fonte.Logradouros.Add(new LogradouroCruBuilder("01000000", "Av Paulista", IdCidadeSaoPaulo).NoDistrito(20).Construir());
         return fonte;
     }
 

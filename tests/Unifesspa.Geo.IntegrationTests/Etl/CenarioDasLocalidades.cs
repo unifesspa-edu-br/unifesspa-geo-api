@@ -84,8 +84,8 @@ internal sealed class CenarioDasLocalidades
     private static void AdicionarTopo(FonteEmMemoria fonte)
     {
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
-        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.Estados.Add(new EstadoCruBuilder("PA", "Pará").ComCapital("Belém").NaFaixaDeCep("66000000", "68899999").Construir());
+        fonte.Estados.Add(new EstadoCruBuilder("SP", "São Paulo").NaRegiao("Sudeste").ComCapital("São Paulo").NaFaixaDeCep("01000000", "19999999").Construir());
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
         fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94"));
@@ -112,7 +112,8 @@ internal sealed class CenarioDasLocalidades
         fonte.LogradouroComplementos.Add(DadosDne.Complemento("68500000", "lado par"));
         fonte.LogradouroComplementos.Add(DadosDne.Complemento("68500000", "lado ímpar"));
 
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500000", "Rua A", IdCidadeMaraba, tipo: "Rua", bairroIdDne: 100, distritoIdDne: 10, latitude: "-5.36867", longitude: "-49.11731", cepAtivo: "S"));
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", IdCidadeMaraba, distritoIdDne: null, cepAtivo: "N"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500000", "Rua A", IdCidadeMaraba)
+            .DoTipo("Rua").NoBairro(100).NoDistrito(10).NaPosicao("-5.36867", "-49.11731").Construir());
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500001", "Rua B", IdCidadeMaraba).ComCepInativo().Construir());
     }
 }

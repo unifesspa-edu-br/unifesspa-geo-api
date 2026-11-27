@@ -112,9 +112,8 @@ public sealed class ChaveDosLogradourosNoBackfillTests
         fonte.Logradouros.Clear();
         // Tipo e nome em colunas distintas: o name-only ("se") difere do texto completo
         // ("praca da se"), reproduzindo o que distingue a chave antiga da nova.
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            "68500000", "Sé", IdCidadeMaraba, tipo: "Praça",
-            nomeCompleto: "Praça da Sé", logradouroSemAcento: "praca da se"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500000", "Sé", IdCidadeMaraba)
+            .DoTipo("Praça").ComNomeCompleto("Praça da Sé").ComNomeCompletoSemAcento("praca da se").Construir());
         return fonte;
     }
 
@@ -125,12 +124,10 @@ public sealed class ChaveDosLogradourosNoBackfillTests
         // Rotação: o texto completo de A ("rua a") coincide com o name-only de B ("Rua A"
         // sem o tipo). Sob a chave antiga (name-only) e a nova (texto completo) ambos são
         // válidos, mas um UPDATE de uma passada colidiria no instante intermediário.
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            "68500000", "A", IdCidadeMaraba, tipo: "Rua",
-            nomeCompleto: "Rua A", logradouroSemAcento: "rua a"));
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            "68500000", "Rua A", IdCidadeMaraba, tipo: "Avenida",
-            nomeCompleto: "Avenida Rua A", logradouroSemAcento: "avenida rua a"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500000", "A", IdCidadeMaraba)
+            .DoTipo("Rua").ComNomeCompleto("Rua A").ComNomeCompletoSemAcento("rua a").Construir());
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500000", "Rua A", IdCidadeMaraba)
+            .DoTipo("Avenida").ComNomeCompleto("Avenida Rua A").ComNomeCompletoSemAcento("avenida rua a").Construir());
         return fonte;
     }
 
@@ -142,12 +139,10 @@ public sealed class ChaveDosLogradourosNoBackfillTests
         // Mesmo CEP-geral, mesmo nome sem o tipo ("das Flores"); só o tipo — logo, o texto
         // completo — difere. Com a antiga chave name-only um seria descartado pelo DISTINCT ON;
         // com o texto completo (nome_normalizado) ambos coexistem.
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            "68500500", "das Flores", IdCidadeMaraba, tipo: "Rua",
-            nomeCompleto: "Rua das Flores", logradouroSemAcento: "rua das flores"));
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            "68500500", "das Flores", IdCidadeMaraba, tipo: "Travessa",
-            nomeCompleto: "Travessa das Flores", logradouroSemAcento: "travessa das flores"));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500500", "das Flores", IdCidadeMaraba)
+            .DoTipo("Rua").ComNomeCompleto("Rua das Flores").ComNomeCompletoSemAcento("rua das flores").Construir());
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500500", "das Flores", IdCidadeMaraba)
+            .DoTipo("Travessa").ComNomeCompleto("Travessa das Flores").ComNomeCompletoSemAcento("travessa das flores").Construir());
         return fonte;
     }
 

@@ -113,7 +113,7 @@ public sealed class CargaDasLocalidadesTests
     {
         await _cenario.PrepararTopoAsync(FonteCompleta());
         FonteEmMemoria fonte = FonteCompleta();
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500000", "Rua C", IdCidadeMaraba)); // mesmo CEP de "Rua A"
+        fonte.Logradouros.Add(new LogradouroCruBuilder("68500000", "Rua C", IdCidadeMaraba).Construir()); // mesmo CEP de "Rua A"
 
         await _cenario.ExecutarLocalidadesAsync(fonte);
 
@@ -126,7 +126,7 @@ public sealed class CargaDasLocalidadesTests
     {
         await _cenario.PrepararTopoAsync(FonteCompleta());
         FonteEmMemoria fonte = FonteCompleta();
-        fonte.Logradouros.Add(DadosDne.Logradouro("99999999", "Rua Fantasma", IdCidadeInexistente));
+        fonte.Logradouros.Add(new LogradouroCruBuilder("99999999", "Rua Fantasma", IdCidadeInexistente).Construir());
 
         RelatorioImportacao relatorio = await _cenario.ExecutarLocalidadesAsync(fonte);
 
@@ -180,10 +180,10 @@ public sealed class CargaDasLocalidadesTests
         fonte.Logradouros.Clear();
         for (int i = 0; i < quantidade; i++)
         {
-            fonte.Logradouros.Add(DadosDne.Logradouro(
-                cep: 68500000.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                nome: $"Rua {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
-                cidadeIdDne: IdCidadeMaraba));
+            fonte.Logradouros.Add(new LogradouroCruBuilder(
+                68500000.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                $"Rua {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                IdCidadeMaraba).Construir());
         }
 
         return fonte;
