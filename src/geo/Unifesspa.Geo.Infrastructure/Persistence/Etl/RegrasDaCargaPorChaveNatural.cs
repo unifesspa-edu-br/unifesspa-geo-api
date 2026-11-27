@@ -5,72 +5,15 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
 using Unifesspa.Geo.Kernel.Domain.Entities;
-using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
-/// Helpers de upsert por chave natural compartilhados pelos importadores do ETL DNE
-/// (ADR-0092): dedup intra-fonte (last-wins), agregação contando o que a fonte trouxe
-/// e normalização das chaves naturais, sem duplicar a lógica idempotente.
+/// Regras da carga por chave natural compartilhadas pelos importadores da carga DNE
+/// (ADR-0092): a última ocorrência da chave na fonte prevalece, a agregação conta o que a
+/// fonte trouxe e as chaves naturais são normalizadas, sem repetir a regra em cada importador.
 /// </summary>
-internal static class GeoEtlUpsert
+internal static class RegrasDaCargaPorChaveNatural
 {
-    /// <summary>
-    /// Upsert por chave natural com dedup intra-fonte: chaves repetidas na própria
-    /// carga não disparam unique violation — a 2ª ocorrência atualiza a entidade já
-    /// vista (last-wins) e conta como duplicada. Retorna a entidade (para resolver FK)
-    /// ou <see langword="null"/> em falha de validação do domínio.
-    /// </summary>
-    public static T? Upsert<T>(
-        string chave,
-        Dictionary<string, T> jaVistas,
-        Dictionary<string, T> existentes,
-        Func<Result<T>> criar,
-        Func<T, Result> atualizar,
-        DbSet<T> dbSet,
-        ContadorTabela contador)
-        where T : class
-    {
-        if (jaVistas.TryGetValue(chave, out T? jaVista))
-        {
-            contador.ContarDuplicado(chave);
-            Result reatualizacao = atualizar(jaVista);
-            if (reatualizacao.IsSuccess)
-            {
-                Tocar(dbSet, jaVista);
-            }
-
-            return reatualizacao.IsSuccess ? jaVista : null;
-        }
-
-        if (existentes.TryGetValue(chave, out T? existente))
-        {
-            Result atualizacao = atualizar(existente);
-            if (atualizacao.IsFailure)
-            {
-                contador.ContarIgnoradoSemChave();
-                return null;
-            }
-
-            Tocar(dbSet, existente);
-            jaVistas[chave] = existente;
-            contador.ContarAtualizado();
-            return existente;
-        }
-
-        Result<T> criado = criar();
-        if (criado.IsFailure)
-        {
-            contador.ContarIgnoradoSemChave();
-            return null;
-        }
-
-        dbSet.Add(criado.Value!);
-        jaVistas[chave] = criado.Value!;
-        contador.ContarInserido();
-        return criado.Value;
-    }
-
-    /// <summary>Agrega a fonte por chave (last-wins) sem contar — para níveis cujos contadores são resolvidos depois.</summary>
+    /// <summary>Agrega a fonte por chave (a última ocorrência prevalece) sem contar — para níveis cujos contadores são resolvidos depois.</summary>
     public static async Task<Dictionary<string, T>> AgregarPorChaveAsync<T>(
         IAsyncEnumerable<T> fonte,
         Func<T, string?> chave)
@@ -81,7 +24,7 @@ internal static class GeoEtlUpsert
             string? k = chave(item);
             if (k is not null)
             {
-                mapa[k] = item; // last-wins
+                mapa[k] = item; // a última ocorrência prevalece
             }
         }
 
@@ -91,8 +34,8 @@ internal static class GeoEtlUpsert
     /// <summary>
     /// Como <see cref="AgregarPorChaveAsync{T}"/>, mas registra no contador da tabela
     /// tudo o que a fonte trouxe (lidos), o que foi descartado por chave ausente e as
-    /// chaves repetidas (last-wins) — para o relatório não subestimar os "lidos" dos
-    /// níveis agregados.
+    /// chaves repetidas (a última ocorrência prevalece) — para o relatório não subestimar
+    /// os "lidos" dos níveis agregados.
     /// </summary>
     public static async Task<Dictionary<string, T>> AgregarContandoAsync<T>(
         IAsyncEnumerable<T> fonte,
@@ -103,28 +46,32 @@ internal static class GeoEtlUpsert
         await foreach (T item in fonte.ConfigureAwait(false))
         {
             contador.ContarLido();
-            string? k = chave(item);
-            if (k is null)
-            {
-                contador.ContarIgnoradoSemChave();
-                continue;
-            }
-
-            if (!mapa.TryAdd(k, item))
-            {
-                contador.ContarDuplicado(k); // last-wins
-                mapa[k] = item;
-            }
+            GuardarUltimaOcorrencia(mapa, chave(item), item, contador);
         }
 
         return mapa;
     }
 
+    private static void GuardarUltimaOcorrencia<T>(Dictionary<string, T> mapa, string? chave, T item, ContadorTabela contador)
+    {
+        if (chave is null)
+        {
+            contador.ContarIgnoradoSemChave();
+            return;
+        }
+
+        if (!mapa.TryAdd(chave, item))
+        {
+            contador.ContarDuplicado(chave); // a última ocorrência prevalece
+            mapa[chave] = item;
+        }
+    }
+
     /// <summary>
-    /// Resolve {id4 da fonte → Guid intra-banco} casando pelo código natural já resolvido
-    /// (ex.: <c>id_cidade → cidade_ibge → Cidade.Id</c>) contra um mapa código→Guid
-    /// carregado pelo chamador. A fonte DNE não expõe o código natural nas tabelas de faixa,
-    /// só o id4 interno (PK da fonte).
+    /// Resolve {identificador numérico da fonte → Guid do banco} casando pelo código natural
+    /// já resolvido (ex.: <c>id_cidade → cidade_ibge → Cidade.Id</c>) contra um mapa
+    /// código→Guid carregado pelo chamador. A fonte DNE não expõe o código natural nas
+    /// tabelas de faixa, só o identificador numérico interno (chave primária da fonte).
     /// </summary>
     public static async Task<Dictionary<int, Guid>> ResolverIdsDneParaGuidAsync<T>(
         IAsyncEnumerable<T> fonte,
@@ -139,7 +86,7 @@ internal static class GeoEtlUpsert
             if (id(item) is int idFonte && chave is not null
                 && codigoParaGuid.TryGetValue(chave, out Guid guid))
             {
-                mapa[idFonte] = guid; // last-wins (id da fonte é PK)
+                mapa[idFonte] = guid; // a última ocorrência prevalece (o identificador da fonte é a chave primária)
             }
         }
 
@@ -154,24 +101,24 @@ internal static class GeoEtlUpsert
     public static string? ChaveCodigo(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 
-    /// <summary>Guid da cidade para o id da fonte; id ausente ou de cidade não carregada vira <see langword="null"/>.</summary>
+    /// <summary>Guid da cidade para o identificador da fonte; identificador ausente ou de cidade não carregada vira <see langword="null"/>.</summary>
     public static Guid? ResolverCidade(Dictionary<int, Guid> cidadesPorIdDne, int? cidadeIdDne)
     {
         ArgumentNullException.ThrowIfNull(cidadesPorIdDne);
         return cidadeIdDne is int id && cidadesPorIdDne.TryGetValue(id, out Guid cidadeId) ? cidadeId : null;
     }
 
-    /// <summary>Id da fonte como texto para o relatório; ausente vira "(sem id)".</summary>
+    /// <summary>Identificador da fonte como texto para o relatório; ausente vira "(sem id)".</summary>
     public static string IdDaFonteParaRelatorio(int? idDne) =>
         idDne?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(sem id)";
 
-    /// <summary>Chave natural composta de uma faixa de CEP: pai (Guid) + limites — casa com a UNIQUE.</summary>
+    /// <summary>Chave natural composta de uma faixa de CEP: pai (Guid) + limites — casa com a restrição de unicidade.</summary>
     public static string ChaveFaixa(Guid pai, string cepInicial, string cepFinal) =>
         $"{pai:N}|{cepInicial}|{cepFinal}";
 
     /// <summary>
-    /// Resolve o id da fonte de uma localidade opcional (distrito/bairro) para o Guid
-    /// intra-banco, só se ela pertencer à cidade já resolvida; id ausente ou não resolvido
+    /// Resolve o identificador da fonte de uma localidade opcional (distrito/bairro) para o
+    /// Guid do banco, só se ela pertencer à cidade já resolvida; id ausente ou não resolvido
     /// vira <see langword="null"/>. Divergência de cidade degrada para <see langword="null"/>
     /// e é registrada no contador — não vincula registro da cidade A a localidade da cidade B.
     /// </summary>
@@ -189,31 +136,31 @@ internal static class GeoEtlUpsert
             return null;
         }
 
-        if (resolvida.CidadeId != cidadeGuid)
-        {
-            contador.ContarParseDegradado($"fk_localidade_cidade_divergente:{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
-            return null;
-        }
+        return resolvida.CidadeId == cidadeGuid ? resolvida.Id : DegradarVinculoDeOutraCidade(id, contador);
+    }
 
-        return resolvida.Id;
+    private static Guid? DegradarVinculoDeOutraCidade(int id, ContadorTabela contador)
+    {
+        contador.ContarParseDegradado($"fk_localidade_cidade_divergente:{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        return null;
     }
 
     /// <summary>
     /// Registra que a linha foi revista nesta carga, mesmo sem mudança de valor: força o
-    /// <c>updated_at</c> a ser gravado. É o que permite à política de stale distinguir, numa
-    /// recarga da mesma versão, a linha revista da que deixou de ser emitida.
+    /// <c>updated_at</c> a ser gravado. É o que permite à política de vigência distinguir,
+    /// numa recarga da mesma versão, a linha revista da que deixou de ser emitida.
     /// </summary>
-    public static void Tocar<T>(DbSet<T> dbSet, T entidade)
+    public static void MarcarComoRevista<T>(DbSet<T> dbSet, T entidade)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(dbSet);
         DbContext contexto = ((IInfrastructure<IServiceProvider>)dbSet).Instance
             .GetRequiredService<Microsoft.EntityFrameworkCore.Infrastructure.ICurrentDbContext>().Context;
-        Tocar(contexto, entidade);
+        MarcarComoRevista(contexto, entidade);
     }
 
-    /// <inheritdoc cref="Tocar{T}(DbSet{T}, T)"/>
-    public static void Tocar(DbContext contexto, object entidade)
+    /// <inheritdoc cref="MarcarComoRevista{T}(DbSet{T}, T)"/>
+    public static void MarcarComoRevista(DbContext contexto, object entidade)
     {
         ArgumentNullException.ThrowIfNull(contexto);
         contexto.Entry(entidade).Property(nameof(EntityBase.UpdatedAt)).IsModified = true;

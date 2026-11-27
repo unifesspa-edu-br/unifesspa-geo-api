@@ -166,8 +166,8 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
         // Distrito e bairro são opcionais: id ausente ou não resolvido vira nulo, sem descartar a
         // linha. Se a localidade resolvida pertence a outra cidade, também vira nulo e é contada:
         // o domínio delega à carga a coerência hierárquica.
-        Guid? distrito = GeoEtlUpsert.ResolverCoerente(_resolucao.DistritosPorIdDne, cru.DistritoIdDne, cidade, contador);
-        Guid? bairro = GeoEtlUpsert.ResolverCoerente(_resolucao.BairrosPorIdDne, cru.BairroIdDne, cidade, contador);
+        Guid? distrito = RegrasDaCargaPorChaveNatural.ResolverCoerente(_resolucao.DistritosPorIdDne, cru.DistritoIdDne, cidade, contador);
+        Guid? bairro = RegrasDaCargaPorChaveNatural.ResolverCoerente(_resolucao.BairrosPorIdDne, cru.BairroIdDne, cidade, contador);
         return contador.AceitarOuContarIgnorado(Criar(cru, cidade, distrito, bairro));
     }
 

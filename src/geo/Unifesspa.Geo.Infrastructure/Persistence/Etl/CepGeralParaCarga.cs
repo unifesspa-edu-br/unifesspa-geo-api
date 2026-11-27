@@ -6,7 +6,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>
 /// CEP geral de cidade ou distrito já validado. A cidade é obrigatória; o distrito só

@@ -5,7 +5,7 @@ using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>
 /// Distrito ou bairro já validado e com a cidade resolvida, pronto para ser criado ou
