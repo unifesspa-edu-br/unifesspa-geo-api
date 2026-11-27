@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Application.Abstractions.Interfaces;
 using Unifesspa.Geo.Domain.Entities;
-using Unifesspa.Geo.Infrastructure.Core.Persistence;
 
 /// <summary>
 /// <see cref="DbContext"/> do módulo Geo — banco isolado <c>uniplus_geo</c>,
@@ -88,11 +87,6 @@ public sealed class GeoDbContext : DbContext, IUnitOfWork
         modelBuilder.HasPostgresExtension("pg_trgm");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GeoDbContext).Assembly);
-        // Convenção global de soft-delete: aplica `!IsDeleted` a todo tipo
-        // ISoftDeletable. Nenhuma entidade do Geo é ISoftDeletable (ADR-0092),
-        // então a convenção é no-op aqui — mantida por simetria com os demais
-        // módulos.
-        modelBuilder.AplicarFiltroGlobalSoftDelete();
         base.OnModelCreating(modelBuilder);
     }
 
