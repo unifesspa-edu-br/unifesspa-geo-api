@@ -1,9 +1,10 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
 
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 /// <summary>
-/// Prazo dos comandos longos da carga em lote, lido e conferido da configuração.
+/// Prazo dos comandos longos da carga em lote, lido da configuração e conferido pelo mesmo validador da partida.
 /// </summary>
 internal sealed class ConfiguracaoDaCargaEmLote
 {
@@ -23,14 +24,10 @@ internal sealed class ConfiguracaoDaCargaEmLote
     private static int LerPrazoDosComandosEmSegundos(IConfiguration configuration)
     {
         EtlOpcoes opcoes = configuration.GetSection(EtlOpcoes.SectionName).Get<EtlOpcoes>() ?? new EtlOpcoes();
-        TimeSpan prazo = opcoes.TempoLimiteDosComandosDaCarga;
+        ValidateOptionsResult resultado = new ValidadorDosPrazosDaCarga().Validate(null, opcoes);
 
-        if (prazo <= TimeSpan.Zero || prazo.TotalSeconds > int.MaxValue)
-        {
-            throw new InvalidOperationException(
-                $"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TempoLimiteDosComandosDaCarga)} deve ser maior que zero e caber em segundos inteiros.");
-        }
-
-        return (int)Math.Ceiling(prazo.TotalSeconds);
+        return resultado.Failed
+            ? throw new InvalidOperationException(string.Join(" ", resultado.Failures))
+            : (int)Math.Ceiling(opcoes.TempoLimiteDosComandosDaCarga.TotalSeconds);
     }
 }
