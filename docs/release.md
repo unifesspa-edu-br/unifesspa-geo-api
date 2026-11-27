@@ -46,12 +46,18 @@ The runtime endpoint remains:
 
 - `GET /openapi/geo.json`
 
-Contract drift is intentional only when this command changes the committed
-baseline and the diff is reviewed:
+Contract drift is intentional only when the generated result is reviewed and
+explicitly approved. Run the test:
 
 ```bash
-UPDATE_OPENAPI_BASELINE=1 dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj --filter SpecRuntime
+dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj --filter SpecRuntime
 ```
+
+If the generated contract differs, the test fails without changing the
+committed file. The failure message gives the path of the generated file (in a
+temporary folder), a `git diff --no-index` command to review it and the exact
+`cp` command to approve it. See "Aprovação de contratos" in
+`docs/development.md`.
 
 Consumers must use the dedicated repository baseline, a release artifact, or the
 runtime OpenAPI endpoint. They must not depend on a copy of

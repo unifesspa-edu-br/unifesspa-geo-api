@@ -28,7 +28,7 @@ O contrato V1 deve preservar a semântica atual do Geo:
 - health checks
 - vendor media types
 
-O baseline inicial está em `contracts/openapi.geo.json`.
+O contrato versionado está em `contracts/openapi.geo.json`.
 
 ## Atualização da base dos Correios
 

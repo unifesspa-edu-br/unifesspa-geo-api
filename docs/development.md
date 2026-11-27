@@ -152,6 +152,16 @@ docker build -f docker/Dockerfile.geo -t unifesspa-geo-api:local .
 
 ## OpenAPI
 
-The canonical baseline is expected to live at `contracts/openapi.geo.json`.
-Runtime drift must fail CI unless the baseline is intentionally regenerated and
-reviewed.
+O contrato versionado está em `contracts/openapi.geo.json`. O teste `SpecRuntime` compara o
+contrato gerado pela API com esse arquivo; divergência reprova o teste e o CI.
+
+### Aprovação de contratos
+
+1. Rode `dotnet test tests/Unifesspa.Geo.IntegrationTests/Unifesspa.Geo.IntegrationTests.csproj --filter SpecRuntime`.
+2. Se o contrato gerado diferir, o teste falha sem alterar o arquivo versionado. A mensagem informa o
+   resultado obtido (uma pasta própria de cada execução, em `unifesspa-geo-resultados/` sob o diretório temporário da máquina), o comando
+   `git diff --no-index` para revisar e o comando `cp` para aprovar.
+3. Revise a diferença. Depois de aprovar, execute na raiz do repositório o `cp` mostrado na falha e rode o
+   teste de novo, com compilação, para atualizar a cópia na saída.
+
+Nunca edite os arquivos de `contracts/` à mão.
