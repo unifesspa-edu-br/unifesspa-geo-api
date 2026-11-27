@@ -26,22 +26,32 @@ internal static class VersoesFicticias
     {
         FonteEmMemoria fonte = new() { Versao = versao, FalhaAoLerLogradouros = falhaAoLerLogradouros };
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
-        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
-        fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94"));
-        fonte.CidadeIds.Add(DadosDne.CidadeId(1, CodigoMaraba));
-        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
-        fonte.LogradouroComplementos.Add(DadosDne.Complemento(CepRuaA, "lado par"));
-        fonte.Logradouros.Add(DadosDne.Logradouro(
-            CepRuaA, "Rua A", 1, tipo: "Rua", distritoIdDne: 10,
-            latitude: "-5.36867", longitude: "-49.11731"));
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", 1, tipo: "Rua"));
+        AdicionarMaraba(fonte);
+        AdicionarLogradourosDeMaraba(fonte);
         if (comSaoPaulo)
         {
             AdicionarSaoPaulo(fonte);
         }
 
         return fonte;
+    }
+
+    private static void AdicionarMaraba(FonteEmMemoria fonte)
+    {
+        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
+        fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94"));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(1, CodigoMaraba));
+        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
+    }
+
+    private static void AdicionarLogradourosDeMaraba(FonteEmMemoria fonte)
+    {
+        fonte.LogradouroComplementos.Add(DadosDne.Complemento(CepRuaA, "lado par"));
+        fonte.Logradouros.Add(DadosDne.Logradouro(
+            CepRuaA, "Rua A", 1, tipo: "Rua", distritoIdDne: 10,
+            latitude: "-5.36867", longitude: "-49.11731"));
+        fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", 1, tipo: "Rua"));
     }
 
     private static void AdicionarSaoPaulo(FonteEmMemoria fonte)

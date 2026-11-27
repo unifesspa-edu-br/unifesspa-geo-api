@@ -65,37 +65,9 @@ internal sealed class CenarioDasLocalidades
     public static FonteEmMemoria FonteCompleta()
     {
         FonteEmMemoria fonte = new() { Versao = "202601" };
-
-        // Topo (carregado pelo importador da #672 antes das folhas).
-        fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
-        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
-        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
-        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
-        fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94"));
-        fonte.Cidades.Add(DadosDne.Cidade(CodigoSaoPaulo, "São Paulo", "SP", ddd: "11"));
-
-        // Mapa id_cidade (int4 da fonte) → código IBGE, para resolver a FK das folhas.
-        fonte.CidadeIds.Add(DadosDne.CidadeId(IdCidadeMaraba, CodigoMaraba));
-        fonte.CidadeIds.Add(DadosDne.CidadeId(IdCidadeSaoPaulo, CodigoSaoPaulo));
-
-        // Folhas.
-        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", IdCidadeMaraba, latitude: "-5.36", longitude: "-49.11"));
-        fonte.Distritos.Add(DadosDne.Distrito(20, "Centro", IdCidadeSaoPaulo));
-        fonte.DistritoFaixas.Add(DadosDne.Faixa(10, "68500000", "68519999"));
-
-        fonte.Bairros.Add(DadosDne.Bairro(100, "Cidade Nova", IdCidadeMaraba));
-        fonte.Bairros.Add(DadosDne.Bairro(200, "Sé", IdCidadeSaoPaulo));
-        fonte.BairroFaixas.Add(DadosDne.Faixa(100, "68500000", "68509999"));
-
-        fonte.CepGrandesUsuarios.Add(DadosDne.GrandeUsuario("68500900", "Prefeitura de Marabá"));
-
-        fonte.LogradouroComplementos.Add(DadosDne.Complemento("68500000", "lado par"));
-        fonte.LogradouroComplementos.Add(DadosDne.Complemento("68500000", "lado ímpar"));
-
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500000", "Rua A", IdCidadeMaraba, tipo: "Rua", bairroIdDne: 100, distritoIdDne: 10, latitude: "-5.36867", longitude: "-49.11731", cepAtivo: "S"));
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", IdCidadeMaraba, distritoIdDne: null, cepAtivo: "N"));
-
+        AdicionarTopo(fonte);
+        AdicionarDistritosEBairros(fonte);
+        AdicionarCepsEComplementos(fonte);
         return fonte;
     }
 
@@ -106,5 +78,41 @@ internal sealed class CenarioDasLocalidades
         fonte.CepGerais.Add(DadosDne.CepGeral("68525000", IdCidadeMaraba, latitude: "-5.046", longitude: "-48.59947"));
         fonte.CepGerais.Add(DadosDne.CepGeral("68525100", IdCidadeMaraba, distritoIdDne: 10));
         return fonte;
+    }
+
+    // Topo: país, estados, cidades e o mapa id_cidade (int4 da fonte) → código IBGE, que resolve a FK das folhas.
+    private static void AdicionarTopo(FonteEmMemoria fonte)
+    {
+        fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
+        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
+        fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94"));
+        fonte.Cidades.Add(DadosDne.Cidade(CodigoSaoPaulo, "São Paulo", "SP", ddd: "11"));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(IdCidadeMaraba, CodigoMaraba));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(IdCidadeSaoPaulo, CodigoSaoPaulo));
+    }
+
+    private static void AdicionarDistritosEBairros(FonteEmMemoria fonte)
+    {
+        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", IdCidadeMaraba, latitude: "-5.36", longitude: "-49.11"));
+        fonte.Distritos.Add(DadosDne.Distrito(20, "Centro", IdCidadeSaoPaulo));
+        fonte.DistritoFaixas.Add(DadosDne.Faixa(10, "68500000", "68519999"));
+
+        fonte.Bairros.Add(DadosDne.Bairro(100, "Cidade Nova", IdCidadeMaraba));
+        fonte.Bairros.Add(DadosDne.Bairro(200, "Sé", IdCidadeSaoPaulo));
+        fonte.BairroFaixas.Add(DadosDne.Faixa(100, "68500000", "68509999"));
+    }
+
+    private static void AdicionarCepsEComplementos(FonteEmMemoria fonte)
+    {
+        fonte.CepGrandesUsuarios.Add(DadosDne.GrandeUsuario("68500900", "Prefeitura de Marabá"));
+
+        fonte.LogradouroComplementos.Add(DadosDne.Complemento("68500000", "lado par"));
+        fonte.LogradouroComplementos.Add(DadosDne.Complemento("68500000", "lado ímpar"));
+
+        fonte.Logradouros.Add(DadosDne.Logradouro("68500000", "Rua A", IdCidadeMaraba, tipo: "Rua", bairroIdDne: 100, distritoIdDne: 10, latitude: "-5.36867", longitude: "-49.11731", cepAtivo: "S"));
+        fonte.Logradouros.Add(DadosDne.Logradouro("68500001", "Rua B", IdCidadeMaraba, distritoIdDne: null, cepAtivo: "N"));
     }
 }
