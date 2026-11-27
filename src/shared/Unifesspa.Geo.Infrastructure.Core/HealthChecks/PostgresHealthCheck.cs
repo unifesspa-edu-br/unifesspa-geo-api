@@ -23,23 +23,28 @@ public sealed class PostgresHealthCheck : IHealthCheck
     {
         try
         {
-            NpgsqlConnection connection = new(_connectionString);
-            await using (connection.ConfigureAwait(false))
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                NpgsqlCommand command = connection.CreateCommand();
-                await using (command.ConfigureAwait(false))
-                {
-                    command.CommandText = "SELECT 1";
-                    await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-                }
-            }
+            await ExecutarSelectUmAsync(cancellationToken).ConfigureAwait(false);
 
             return HealthCheckResult.Healthy("PostgreSQL está acessível.");
         }
         catch (Exception ex)
         {
             return HealthCheckResult.Unhealthy("PostgreSQL inacessível.", ex);
+        }
+    }
+
+    private async Task ExecutarSelectUmAsync(CancellationToken cancellationToken)
+    {
+        NpgsqlConnection connection = new(_connectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            NpgsqlCommand command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = "SELECT 1";
+                await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 }
