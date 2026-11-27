@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests.Etl;
 using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,7 +44,10 @@ internal sealed class CenarioDaCargaPeriodica
 
     public RelogioFixo Relogio { get; } = new();
 
-    public GeoDbContext CriarContexto() => _fixture.CreateDbContext(Relogio);
+    /// <summary>Interceptadores do EF Core aplicados a todo contexto criado pelo cenário, inclusive o da finalização da carga.</summary>
+    public IReadOnlyList<IInterceptor> Interceptadores { get; set; } = [];
+
+    public GeoDbContext CriarContexto() => _fixture.CreateDbContext(Relogio, Interceptadores);
 
     public async Task<Guid> CriarExecucaoAsync(string versao)
     {

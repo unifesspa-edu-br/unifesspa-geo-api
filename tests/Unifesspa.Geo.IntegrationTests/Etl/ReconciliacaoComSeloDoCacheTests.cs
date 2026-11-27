@@ -12,6 +12,7 @@ using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
@@ -81,6 +82,25 @@ public sealed class ReconciliacaoComSeloDoCacheTests
         travaRetidaAoSelar.Should().BeTrue("a sincronização do selo roda dentro da seção com a trava");
     }
 
+    [Fact(DisplayName = "Falha ao descartar os esquemas na partida não a interrompe: o diretório é limpo, o selo é gravado e a órfã segue em andamento até a próxima partida")]
+    public async Task FalhaNoDescarte_NaoInterrompeAPartida_EAOrfaSegueEmAndamento()
+    {
+        (Guid orfa, _, Guid recente) = await PrepararHistoricoAsync();
+        using DiretorioDePacotesTemporario pacotes = new();
+        await pacotes.DeixarArquivoResidualAsync();
+        FonteQueFalhaAoDescartarSobras descarteComFalha = new(new InvalidOperationException("Falha simulada no descarte."));
+
+        await CriarServico(descarteComFalha, pacotes.Arquivos).StartAsync(CancellationToken.None);
+
+        pacotes.EstaVazio.Should().BeTrue();
+        await _cache.Received(1).InvalidarAsync($"202603.{recente:N}", Arg.Any<CancellationToken>());
+        (await _banco.ExecucaoAsync(orfa)).Status.Should().Be(StatusImportacao.EmAndamento);
+
+        await CriarServico(new FabricaDeFonteFixa(), pacotes.Arquivos).StartAsync(CancellationToken.None);
+
+        (await _banco.ExecucaoAsync(orfa)).Mensagem.Should().Be(EncerramentoDasCargasAbandonadas.MensagemDaCargaAbandonada);
+    }
+
     private async Task ConferirSeloAsync(Guid recente, Guid antiga)
     {
         await _cache.Received(1).InvalidarAsync($"202603.{recente:N}", Arg.Any<CancellationToken>());
@@ -106,14 +126,15 @@ public sealed class ReconciliacaoComSeloDoCacheTests
         return execucao;
     }
 
-    private GeoReconciliacaoStartupHostedService CriarServico()
-    {
-        return new GeoReconciliacaoStartupHostedService(
-            ServicosDaPartidaParaTeste.Criar(_fixture, new FabricaDeFonteFixa(), servicos => servicos.AddSingleton(_cache)),
+    private GeoReconciliacaoStartupHostedService CriarServico() =>
+        CriarServico(new FabricaDeFonteFixa(), new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")));
+
+    private GeoReconciliacaoStartupHostedService CriarServico(IFonteDaExecucaoDne fonte, ArquivoDoPacoteDne arquivos) =>
+        new(
+            ServicosDaPartidaParaTeste.Criar(_fixture, fonte, servicos => servicos.AddSingleton(_cache)),
             CriarTrava(),
-            new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")),
+            arquivos,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
-    }
 
     private TravaConsultivaDaCargaDne CriarTrava()
     {

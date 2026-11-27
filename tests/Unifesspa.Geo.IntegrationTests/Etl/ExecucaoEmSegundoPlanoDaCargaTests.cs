@@ -200,22 +200,8 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDispos
         await trava!.DisposeAsync();
     }
 
-    private GeoImportacaoBackgroundService CriarProcessoEmSegundoPlano(IGeoImportacaoFila fila, IGeoImportacaoExecutor executor)
-    {
-        // Scope factory mínimo: o dreno do StopAsync resolve IGeoImportacaoExecutor do escopo.
-        IServiceProvider sp = Substitute.For<IServiceProvider>();
-        sp.GetService(typeof(IGeoImportacaoExecutor)).Returns(executor);
-        IServiceScope escopo = Substitute.For<IServiceScope>();
-        escopo.ServiceProvider.Returns(sp);
-        IServiceScopeFactory scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(escopo);
-
-        return new GeoImportacaoBackgroundService(
-            scopeFactory,
-            fila,
-            _envio.Arquivos,
-            NullLogger<GeoImportacaoBackgroundService>.Instance);
-    }
+    private GeoImportacaoBackgroundService CriarProcessoEmSegundoPlano(IGeoImportacaoFila fila, IGeoImportacaoExecutor executor) =>
+        ProcessoEmSegundoPlanoParaTeste.Criar(fila, executor, _envio.Arquivos);
 
     // Decora o executor sinalizando o fim de ExecutarAsync — permite ao teste do wiring
     // (#692) aguardar a execução em segundo plano de forma determinística, sem Sleep.
