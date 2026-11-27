@@ -84,7 +84,6 @@ public static class WolverineOutboxConfiguration
         PersistirNoPostgres(opts, connectionString);
         AplicarTransacoes(opts);
         AplicarMiddlewaresDoPipeline(opts);
-        IncluirHandlersDoCore(opts);
         CriarArmazenamentoNaPartida(opts);
         configureRouting?.Invoke(opts);
     }
@@ -136,16 +135,6 @@ public static class WolverineOutboxConfiguration
         opts.AddCorrelationIdMiddleware();
         opts.AddCommandQueryMiddleware();
         opts.Policies.PropagateIncomingHeaderToOutgoing(CorrelationIdEnvelopeMiddleware.HeaderName);
-    }
-
-    // Discovery do assembly Infrastructure.Core — handlers compartilhados (ex.:
-    // SmokePingHandler, que processa a SmokePingMessage publicada pelo endpoint
-    // /api/_smoke/messaging/publish) ficam descobertos sem que cada Program.cs precise
-    // repetir o IncludeAssembly. Idempotente — o assembly do entry já é varrido por
-    // padrão; este registro é defensivo para handlers do Core.
-    private static void IncluirHandlersDoCore(WolverineOptions opts)
-    {
-        opts.Discovery.IncludeAssembly(typeof(WolverineOutboxConfiguration).Assembly);
     }
 
     // Schema do Wolverine (tabelas wolverine_outgoing_envelopes, wolverine_incoming_envelopes,

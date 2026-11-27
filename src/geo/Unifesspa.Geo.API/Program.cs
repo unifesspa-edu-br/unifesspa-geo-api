@@ -23,7 +23,6 @@ using Unifesspa.Geo.Infrastructure.Core.Middleware;
 using Unifesspa.Geo.Infrastructure.Core.Observability;
 using Unifesspa.Geo.Infrastructure.Core.OpenApi;
 using Unifesspa.Geo.Infrastructure.Core.Profile;
-using Unifesspa.Geo.Infrastructure.Core.Smoke;
 using Unifesspa.Geo.Infrastructure.Persistence;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -164,7 +163,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapSharedAuthEndpoints();
 app.MapSharedProfileEndpoints();
-app.MapGeoSmokeEndpoints();
 app.MapControllers();
 app.MapOpenApi(DocumentoDoContratoPublicado.Rota);
 
