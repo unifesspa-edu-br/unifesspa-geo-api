@@ -1,14 +1,8 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Middleware;
 
-using System.Diagnostics;
-using System.Text.RegularExpressions;
-
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Primitives;
 
-using Serilog.Context;
-
-public sealed partial class CorrelationIdMiddleware
+public sealed class CorrelationIdMiddleware
 {
     public const string HeaderName = "X-Correlation-Id";
     public const string LogContextProperty = "CorrelationId";
@@ -37,55 +31,28 @@ public sealed partial class CorrelationIdMiddleware
         string correlationId = ObterOuGerarCorrelationId(context);
 
         writer.SetCorrelationId(correlationId);
+        IdDeCorrelacao.MarcarNoRastreamento(correlationId);
+        EscreverNaRespostaAoComecar(context.Response, correlationId);
 
-        // Propagar correlation_id como Activity span attribute habilita o
-        // drill-down Loki → Tempo via derivedFields no Grafana (ADR-0018) e
-        // fecha o ciclo log ↔ trace. Activity.Current pode ser null fora do
-        // request pipeline com OTel wired (ex.: testes unitários sem listener);
-        // o ?. mantém o middleware safe nesse cenário.
-        Activity.Current?.SetTag(ActivityTagName, correlationId);
-
-        // Postergar a escrita do header até o início do flush da resposta
-        // garante que o valor sobreviva a qualquer mutação feita por
-        // middlewares/filtros downstream e seja comprometido logo antes do
-        // status line ser enviado ao cliente.
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers[HeaderName] = correlationId;
-            return Task.CompletedTask;
-        });
-
-        using (LogContext.PushProperty(LogContextProperty, correlationId))
+        using (IdDeCorrelacao.AbrirEscopoDeLog(correlationId))
         {
             await _next(context).ConfigureAwait(false);
         }
     }
 
-    private static string ObterOuGerarCorrelationId(HttpContext context)
+    // Postergar a escrita do header até o início do flush da resposta
+    // garante que o valor sobreviva a qualquer mutação feita por
+    // middlewares/filtros downstream e seja comprometido logo antes do
+    // status line ser enviado ao cliente.
+    private static void EscreverNaRespostaAoComecar(HttpResponse resposta, string correlationId)
     {
-        if (context.Request.Headers.TryGetValue(HeaderName, out StringValues valor))
+        resposta.OnStarting(() =>
         {
-            string existente = valor.ToString();
-            if (FormatoValido().IsMatch(existente))
-            {
-                return existente;
-            }
-        }
-
-        return Guid.NewGuid().ToString("D");
+            resposta.Headers[HeaderName] = correlationId;
+            return Task.CompletedTask;
+        });
     }
 
-    // Restringe valores aceitos do cliente a ASCII imprimível [A-Za-z0-9\-_.],
-    // 1..128 chars. Rejeita controle (\r\n, NULL), whitespace e não-ASCII —
-    // previne log injection e poluição de dashboards estruturados downstream.
-    // O upper bound do quantificador deve espelhar MaxCorrelationIdLength.
-    //
-    // Pattern exposto como `internal const` para ser consumido também pelo
-    // CorrelationIdEnvelopeMiddleware (Wolverine, ADR-0052): ambos os boundaries
-    // (HTTP e mensageria) precisam validar com a MESMA regra ou a invariante de wire
-    // format uniforme quebra silenciosamente em refactors.
-    internal const string FormatoValidoPattern = @"^[A-Za-z0-9\-_.]{1,128}$";
-
-    [GeneratedRegex(FormatoValidoPattern, RegexOptions.None, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex FormatoValido();
+    private static string ObterOuGerarCorrelationId(HttpContext context) =>
+        IdDeCorrelacao.SeValido(context.Request.Headers[HeaderName].ToString()) ?? Guid.NewGuid().ToString("D");
 }
