@@ -6,7 +6,6 @@ using System.Threading.Channels;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 using Npgsql;
 
@@ -18,8 +17,8 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
-/// Porta da API para a carga de atualização da base dos Correios: recusa o envio quando já há carga
-/// em andamento, grava e confere o pacote recebido, obtém a trava consultiva da carga, aplica a
+/// Porta da API para a carga de atualização da base dos Correios: recusa o envio quando alguma
+/// instância executa uma carga (e encerra como falha a execução abandonada), grava e confere o pacote recebido, obtém a trava consultiva da carga, aplica a
 /// guarda de versão progressiva e a repetição por resumo SHA-256, registra e enfileira a execução
 /// (a trava segue com ela até o fim da carga) e expõe a consulta de estado. O arquivo do pacote passa
 /// a ter o identificador da execução e é apagado em toda recusa.
@@ -32,37 +31,37 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
         new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private readonly GeoDbContext _contexto;
+    private readonly EncerramentoDasCargasAbandonadas _encerramento;
     private readonly IGeoImportacaoFila _fila;
     private readonly TravaConsultivaDaCargaDne _trava;
     private readonly ArquivoDoPacoteDne _arquivos;
     private readonly TimeProvider _relogio;
     private readonly ILogger<RegistroDasImportacoes> _logger;
-    private readonly long _limiteDoPacote;
 
     public RegistroDasImportacoes(
         GeoDbContext contexto,
+        EncerramentoDasCargasAbandonadas encerramento,
         IGeoImportacaoFila fila,
         TravaConsultivaDaCargaDne trava,
         ArquivoDoPacoteDne arquivos,
         TimeProvider relogio,
-        ILogger<RegistroDasImportacoes> logger,
-        IOptions<EtlOpcoes> opcoes)
+        ILogger<RegistroDasImportacoes> logger)
     {
         ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(encerramento);
         ArgumentNullException.ThrowIfNull(fila);
         ArgumentNullException.ThrowIfNull(trava);
         ArgumentNullException.ThrowIfNull(arquivos);
         ArgumentNullException.ThrowIfNull(relogio);
         ArgumentNullException.ThrowIfNull(logger);
-        ArgumentNullException.ThrowIfNull(opcoes);
 
         _contexto = contexto;
+        _encerramento = encerramento;
         _fila = fila;
         _trava = trava;
         _arquivos = arquivos;
         _relogio = relogio;
         _logger = logger;
-        _limiteDoPacote = opcoes.Value.TamanhoMaximoDoPacote;
     }
 
     public async Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(
@@ -72,14 +71,14 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
     {
         ArgumentNullException.ThrowIfNull(corpo);
 
-        if (await HaCargaEmAndamentoAsync(cancellationToken).ConfigureAwait(false))
+        if (await _encerramento.HaCargaEmExecucaoAsync(cancellationToken).ConfigureAwait(false))
         {
             LogRecusadoSemLerOCorpo(_logger);
             return Result<EnvioDoPacoteRegistrado>.Failure(ErrosDoPacoteDne.EmAndamento());
         }
 
         Result<PacoteDneRecebido> recebido = await _arquivos
-            .ReceberAsync(corpo, Guid.NewGuid(), _limiteDoPacote, cancellationToken)
+            .ReceberAsync(corpo, Guid.NewGuid(), cancellationToken)
             .ConfigureAwait(false);
 
         return recebido.IsFailure
@@ -165,11 +164,6 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
 
         return execucao is null ? null : MapearDto(execucao);
     }
-
-    private Task<bool> HaCargaEmAndamentoAsync(CancellationToken cancellationToken) =>
-        _contexto.ImportacaoExecucoes
-            .AsNoTracking()
-            .AnyAsync(e => e.Status == StatusImportacao.EmAndamento, cancellationToken);
 
     private Result<GeoImportacaoExecucao> IniciarExecucao(PacoteDneRecebido pacote, string disparadoPor) =>
         GeoImportacaoExecucao.Iniciar(
@@ -351,7 +345,7 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
             relatorio);
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: envio recusado sem ler o corpo — já há uma carga em andamento.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: envio recusado sem ler o corpo — há uma carga sendo executada por outra instância.")]
     private static partial void LogRecusadoSemLerOCorpo(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Geo: carga {ExecucaoId} disparada (versão {Versao}).")]
@@ -369,6 +363,6 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: disparo recusado — versão {Versao} anterior à última aplicada {UltimaVersao}.")]
     private static partial void LogVersaoNaoProgressiva(ILogger logger, string versao, string ultimaVersao);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao persistir o estado de falha da execução {ExecucaoId}. Diagnóstico: {Diagnostico}")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao persistir o estado de falha da execução {ExecucaoId}; ela será encerrada no próximo envio ou na próxima partida. Diagnóstico: {Diagnostico}")]
     private static partial void LogFalhaPersistir(ILogger logger, Guid execucaoId, string diagnostico);
 }

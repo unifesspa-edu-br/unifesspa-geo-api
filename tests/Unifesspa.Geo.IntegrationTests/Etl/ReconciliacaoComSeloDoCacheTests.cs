@@ -108,17 +108,10 @@ public sealed class ReconciliacaoComSeloDoCacheTests
 
     private GeoReconciliacaoStartupHostedService CriarServico()
     {
-        ServiceCollection servicos = new();
-        servicos.AddScoped(_ => _fixture.CreateDbContext());
-        servicos.AddSingleton(_cache);
-        ServiceProvider provedor = servicos.BuildServiceProvider();
-
         return new GeoReconciliacaoStartupHostedService(
-            provedor.GetRequiredService<IServiceScopeFactory>(),
+            ServicosDaPartidaParaTeste.Criar(_fixture, new FabricaDeFonteFixa(), servicos => servicos.AddSingleton(_cache)),
             CriarTrava(),
-            new FabricaDeFonteFixa(),
             new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")),
-            TimeProvider.System,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }
 

@@ -158,15 +158,10 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime, IDisposable
 
     private GeoReconciliacaoStartupHostedService CriarPartida(IGeoCepCacheInvalidador cache)
     {
-        ServiceCollection servicos = new();
-        servicos.AddScoped(_ => _fixture.CreateDbContext());
-        servicos.AddSingleton(cache);
         return new GeoReconciliacaoStartupHostedService(
-            servicos.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            ServicosDaPartidaParaTeste.Criar(_fixture, new FabricaDeFonteFixa(), servicos => servicos.AddSingleton(cache)),
             TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
-            new FabricaDeFonteFixa(),
             new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")),
-            TimeProvider.System,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }
 

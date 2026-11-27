@@ -140,8 +140,8 @@ public sealed class FimDoDiretorioDoZipTests : IDisposable
         using MemoryStream corpo = new(ZipComEntradasVazias(Limite + 1));
         Guid execucao = Guid.NewGuid();
 
-        Result<PacoteDneRecebido> resultado = await new ArquivoDoPacoteDne(_diretorio)
-            .ReceberAsync(corpo, execucao, 1_000_000, CancellationToken.None);
+        Result<PacoteDneRecebido> resultado = await new ArquivoDoPacoteDne(_diretorio, tamanhoMaximoEmBytes: 1_000_000)
+            .ReceberAsync(corpo, execucao, CancellationToken.None);
 
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.PacoteInvalido);
         resultado.Error.Message.Should().NotContain("e0");

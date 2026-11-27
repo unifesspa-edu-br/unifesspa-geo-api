@@ -88,16 +88,11 @@ public sealed class LimpezaDaPartidaDaCargaTests : IDisposable
 
     private GeoReconciliacaoStartupHostedService CriarServico()
     {
-        ServiceCollection servicos = new();
-        servicos.AddScoped(_ => _fixture.CreateDbContext());
-        ServiceProvider provedor = servicos.BuildServiceProvider();
-
+        EsquemaDeCargaDne esquemas = new(_conexao.Configuracao, _arquivos, NullLogger<EsquemaDeCargaDne>.Instance);
         return new GeoReconciliacaoStartupHostedService(
-            provedor.GetRequiredService<IServiceScopeFactory>(),
+            ServicosDaPartidaParaTeste.Criar(_fixture, esquemas),
             new TravaConsultivaDaCargaDne(_conexao.Configuracao),
-            new EsquemaDeCargaDne(_conexao.Configuracao, _arquivos, NullLogger<EsquemaDeCargaDne>.Instance),
             _arquivos,
-            TimeProvider.System,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }
 }

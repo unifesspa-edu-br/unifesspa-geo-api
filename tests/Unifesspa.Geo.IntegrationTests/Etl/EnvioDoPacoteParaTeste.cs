@@ -4,12 +4,12 @@ using System.Security.Cryptography;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.IntegrationTests.Admin;
 using Unifesspa.Geo.IntegrationTests.Etl.Pacote;
@@ -32,6 +32,9 @@ internal sealed class EnvioDoPacoteParaTeste : IDisposable
     }
 
     public ArquivoDoPacoteDne Arquivos { get; }
+
+    /// <summary>Fonte usada no encerramento das cargas abandonadas; por padrão, uma sem esquemas a descartar.</summary>
+    public IFonteDaExecucaoDne Fonte { get; set; } = new FabricaDeFonteFixa();
 
     /// <summary>Nomes dos arquivos que restaram no diretório de pacotes.</summary>
     public IReadOnlyList<string> NomesDosArquivos() =>
@@ -91,7 +94,14 @@ internal sealed class EnvioDoPacoteParaTeste : IDisposable
         TravaConsultivaDaCargaDne trava,
         TimeProvider relogio,
         ILogger<RegistroDasImportacoes> logger) =>
-        new(contexto, fila, trava, Arquivos, relogio, logger, Options.Create(new EtlOpcoes()));
+        new(
+            contexto,
+            new EncerramentoDasCargasAbandonadas(contexto, Fonte, trava, relogio, NullLogger<EncerramentoDasCargasAbandonadas>.Instance),
+            fila,
+            trava,
+            Arquivos,
+            relogio,
+            logger);
 
     public void Dispose()
     {

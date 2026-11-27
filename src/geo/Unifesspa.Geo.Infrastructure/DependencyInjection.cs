@@ -96,13 +96,17 @@ public static class GeoInfrastructureRegistration
         services.AddSingleton<TravaConsultivaDaCargaDne>();
         services.AddScoped<ImportadorDaVersaoDne>();
         services.AddScoped<FinalizacaoDaCargaDne>();
+        services.AddScoped<EncerramentoDasCargasAbandonadas>();
         services.AddScoped<IGeoImportacaoService, RegistroDasImportacoes>();
         services.AddScoped<IGeoImportacaoExecutor, CargaDaImportacao>();
         services.AddSingleton<IGeoImportacaoFila, GeoImportacaoFila>();
         services.AddSingleton(sp =>
         {
             EtlOpcoes opcoes = sp.GetRequiredService<IOptions<EtlOpcoes>>().Value;
-            return new ArquivoDoPacoteDne(opcoes.DiretorioDoPacote, opcoes.QuantidadeMaximaDeEntradasDoPacote);
+            return new ArquivoDoPacoteDne(
+                opcoes.DiretorioDoPacote,
+                opcoes.QuantidadeMaximaDeEntradasDoPacote,
+                opcoes.TamanhoMaximoDoPacote);
         });
         services.AddSingleton<IFonteDaExecucaoDne, EsquemaDeCargaDne>();
         services.AddScoped<IGeoCepCacheInvalidador, RedisGeoCepCacheInvalidador>();

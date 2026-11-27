@@ -43,13 +43,14 @@ public sealed class EnvioDoPacoteRecusadoNoRegistroTests
         host.Logs.TextoCompleto.Should().NotContain(ZipsParaOEnvio.MarcadorSigiloso);
     }
 
-    [Fact(DisplayName = "Com uma carga em andamento, o envio retorna 409 antes de gravar o corpo")]
+    [Fact(DisplayName = "Com uma carga em andamento e a trava ocupada, o envio retorna 409 antes de gravar o corpo")]
     public async Task ComCargaEmAndamento_Retorna409SemGravarOCorpo()
     {
         await _banco.LimparAsync();
         await using HostDoEnvioDoPacote host = new(_fixture.Factory);
         await new ExecucoesSemeadasParaOEnvio(_fixture).EmAndamentoAsync("202610", ZipsParaOEnvio.Valido("202610"));
         using ByteArrayContent corpo = HostDoEnvioDoPacote.Zip(ZipsParaOEnvio.Valido("202611"));
+        await using IAsyncDisposable outraInstancia = await TravaDaCargaParaTeste.AdquirirAsync(_fixture.ConnectionString);
 
         using HttpResponseMessage resposta = await host.EnviarAsync(corpo);
 

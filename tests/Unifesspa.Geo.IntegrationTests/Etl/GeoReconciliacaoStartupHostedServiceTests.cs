@@ -66,16 +66,10 @@ public sealed class GeoReconciliacaoStartupHostedServiceTests
 
     private GeoReconciliacaoStartupHostedService CriarHostedService()
     {
-        ServiceCollection services = new();
-        services.AddScoped(_ => _fixture.CreateDbContext());
-        ServiceProvider provider = services.BuildServiceProvider();
-
         return new GeoReconciliacaoStartupHostedService(
-            provider.GetRequiredService<IServiceScopeFactory>(),
+            ServicosDaPartidaParaTeste.Criar(_fixture, new FabricaDeFonteFixa()),
             TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
-            new FabricaDeFonteFixa(),
             new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")),
-            TimeProvider.System,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }
 

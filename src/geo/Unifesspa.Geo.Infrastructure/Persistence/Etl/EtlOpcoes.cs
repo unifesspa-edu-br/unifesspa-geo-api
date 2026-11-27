@@ -9,6 +9,9 @@ public sealed class EtlOpcoes
     /// <summary>Caminho da seção de configuração.</summary>
     public const string SectionName = "Geo:Etl";
 
+    /// <summary>Padrão de <see cref="TamanhoMaximoDoPacote"/>: 128 MiB.</summary>
+    public const long TamanhoPadraoDoPacote = 128L * 1024 * 1024;
+
     /// <summary>Padrão de <see cref="QuantidadeMaximaDeEntradasDoPacote"/>.</summary>
     public const int QuantidadePadraoDeEntradasDoPacote = 32;
 
@@ -36,7 +39,7 @@ public sealed class EtlOpcoes
     /// <summary>
     /// Tamanho máximo, em bytes, do pacote enviado. Padrão de 128 MiB; deve ser maior que zero.
     /// </summary>
-    public long TamanhoMaximoDoPacote { get; set; } = 128L * 1024 * 1024;
+    public long TamanhoMaximoDoPacote { get; set; } = TamanhoPadraoDoPacote;
 
     /// <summary>
     /// Quantidade máxima de entradas do zip (arquivos e pasta, todas contadas). Padrão de 32; deve
