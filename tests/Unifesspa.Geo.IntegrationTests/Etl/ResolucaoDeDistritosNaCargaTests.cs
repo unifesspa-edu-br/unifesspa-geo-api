@@ -48,29 +48,13 @@ public sealed class ResolucaoDeDistritosNaCargaTests
     public async Task DistritoHomonimo_EmCidadesDistintas_ResolveFkCorreta()
     {
         await _cenario.PrepararTopoAsync(FonteCompleta());
-        FonteEmMemoria fonte = FonteCompleta();
-        // "Centro" existe em Marabá (id 30) e em São Paulo (id 20 já no FonteCompleta).
-        fonte.Distritos.Add(DadosDne.Distrito(30, "Centro", IdCidadeMaraba));
-        // Dois logradouros, um por "Centro", referenciando o id_distrito respectivo.
-        fonte.Logradouros.Add(DadosDne.Logradouro("68500100", "Av Marabá", IdCidadeMaraba, distritoIdDne: 30));
-        fonte.Logradouros.Add(DadosDne.Logradouro("01000000", "Av Paulista", IdCidadeSaoPaulo, distritoIdDne: 20));
+        FonteEmMemoria fonte = FonteComCentroHomonimoEmMaraba();
 
         await _cenario.ExecutarLocalidadesAsync(fonte);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
-        Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
-        Guid spId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoSaoPaulo)).Id;
-
-        (await leitura.Distritos.CountAsync(d => d.Nome == "Centro")).Should().Be(2);
-
-        Distrito centroMaraba = await leitura.Distritos.SingleAsync(d => d.Nome == "Centro" && d.CidadeId == marabaId);
-        Distrito centroSp = await leitura.Distritos.SingleAsync(d => d.Nome == "Centro" && d.CidadeId == spId);
-        centroMaraba.Id.Should().NotBe(centroSp.Id);
-
-        Logradouro avMaraba = await leitura.Logradouros.SingleAsync(l => l.Nome == "Av Marabá");
-        Logradouro avPaulista = await leitura.Logradouros.SingleAsync(l => l.Nome == "Av Paulista");
-        avMaraba.DistritoId.Should().Be(centroMaraba.Id);
-        avPaulista.DistritoId.Should().Be(centroSp.Id);
+        (Distrito centroMaraba, Distrito centroSp) = await ConferirCentrosHomonimosAsync(leitura);
+        await ConferirLogradourosDosCentrosAsync(leitura, centroMaraba, centroSp);
     }
 
     [Fact(DisplayName = "Coerência: distrito_id que resolve para distrito de outra cidade degrada para null (não cruza cidade)")]
@@ -87,5 +71,37 @@ public sealed class ResolucaoDeDistritosNaCargaTests
         Logradouro cruzada = await leitura.Logradouros.SingleAsync(l => l.Nome == "Rua Cruzada");
         cruzada.DistritoId.Should().BeNull("o distrito resolvido é de outra cidade — não pode cruzar");
         relatorio.Tabelas["logradouro"].ParsesDegradados.Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    private static FonteEmMemoria FonteComCentroHomonimoEmMaraba()
+    {
+        FonteEmMemoria fonte = FonteCompleta();
+        // "Centro" existe em Marabá (id 30) e em São Paulo (id 20 já no FonteCompleta).
+        fonte.Distritos.Add(DadosDne.Distrito(30, "Centro", IdCidadeMaraba));
+        // Dois logradouros, um por "Centro", referenciando o id_distrito respectivo.
+        fonte.Logradouros.Add(DadosDne.Logradouro("68500100", "Av Marabá", IdCidadeMaraba, distritoIdDne: 30));
+        fonte.Logradouros.Add(DadosDne.Logradouro("01000000", "Av Paulista", IdCidadeSaoPaulo, distritoIdDne: 20));
+        return fonte;
+    }
+
+    private static async Task<(Distrito Maraba, Distrito SaoPaulo)> ConferirCentrosHomonimosAsync(GeoDbContext leitura)
+    {
+        Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
+        Guid spId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoSaoPaulo)).Id;
+
+        (await leitura.Distritos.CountAsync(d => d.Nome == "Centro")).Should().Be(2);
+
+        Distrito centroMaraba = await leitura.Distritos.SingleAsync(d => d.Nome == "Centro" && d.CidadeId == marabaId);
+        Distrito centroSp = await leitura.Distritos.SingleAsync(d => d.Nome == "Centro" && d.CidadeId == spId);
+        centroMaraba.Id.Should().NotBe(centroSp.Id);
+        return (centroMaraba, centroSp);
+    }
+
+    private static async Task ConferirLogradourosDosCentrosAsync(GeoDbContext leitura, Distrito centroMaraba, Distrito centroSp)
+    {
+        Logradouro avMaraba = await leitura.Logradouros.SingleAsync(l => l.Nome == "Av Marabá");
+        Logradouro avPaulista = await leitura.Logradouros.SingleAsync(l => l.Nome == "Av Paulista");
+        avMaraba.DistritoId.Should().Be(centroMaraba.Id);
+        avPaulista.DistritoId.Should().Be(centroSp.Id);
     }
 }

@@ -40,21 +40,8 @@ public sealed class CargaDasLocalidadesTests
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
         Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
-
-        (await leitura.Distritos.CountAsync()).Should().Be(2);
-        (await leitura.Bairros.CountAsync()).Should().Be(2);
-        (await leitura.DistritoFaixasCep.CountAsync()).Should().Be(1);
-        (await leitura.BairroFaixasCep.CountAsync()).Should().Be(1);
-        (await leitura.CepGrandesUsuarios.CountAsync()).Should().Be(1);
-        (await leitura.LogradouroComplementos.CountAsync()).Should().Be(2);
-
-        Logradouro ruaA = await leitura.Logradouros.SingleAsync(l => l.Cep == "68500000" && l.Nome == "Rua A");
-        ruaA.CidadeId.Should().Be(marabaId);
-        ruaA.DistritoId.Should().NotBeNull(); // distrito_id 10 resolvido para Guid
-        ruaA.BairroId.Should().NotBeNull();
-        ruaA.Ativo.Should().BeTrue();          // cep_ativo 'S'
-        ruaA.Coordenada.Should().NotBeNull();
-        ruaA.Coordenada!.SRID.Should().Be(4326);
+        await ConferirContagensDasFolhasAsync(leitura);
+        await ConferirRuaADeMarabaAsync(leitura, marabaId);
 
         Logradouro ruaB = await leitura.Logradouros.SingleAsync(l => l.Nome == "Rua B");
         ruaB.DistritoId.Should().BeNull();     // distrito_id nulo aceito (FK opcional)
@@ -70,17 +57,8 @@ public sealed class CargaDasLocalidadesTests
         RelatorioImportacao relatorio = await _cenario.ExecutarLocalidadesAsync(fonte);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
-        Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
-        Guid distritoId = (await leitura.Distritos.OrderBy(d => d.Nome).FirstAsync(d => d.IdOrigemDne == "10")).Id;
-
-        CepGeral cidade = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000");
-        cidade.CidadeId.Should().Be(marabaId);
-        cidade.DistritoId.Should().BeNull();
-        cidade.Coordenada.Should().NotBeNull();
-        cidade.Coordenada!.SRID.Should().Be(4326);
-
-        CepGeral distrito = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525100");
-        distrito.DistritoId.Should().Be(distritoId);
+        await ConferirCepGeralDaCidadeAsync(leitura);
+        await ConferirCepGeralDoDistritoAsync(leitura);
 
         (await leitura.CepGerais.CountAsync()).Should().Be(2);
         relatorio.Tabela("cep_geral").Inseridos.Should().Be(2);
@@ -163,42 +141,19 @@ public sealed class CargaDasLocalidadesTests
         await _cenario.PrepararTopoAsync(FonteCompleta());
         await _cenario.ExecutarLocalidadesAsync(FonteCompleta());
 
-        Guid logradouroId;
-        DateTimeOffset createdAt;
-        int totalLogradouros;
-        await using (GeoDbContext antes = _fixture.CreateDbContext())
-        {
-            Logradouro ruaA = await antes.Logradouros.SingleAsync(l => l.Nome == "Rua A");
-            logradouroId = ruaA.Id;
-            createdAt = ruaA.CreatedAt;
-            totalLogradouros = await antes.Logradouros.CountAsync();
-        }
+        Logradouro ruaAntes = await LerRuaAAsync();
+        int totalAntes = await ContarLogradourosAsync();
 
         await _cenario.ExecutarLocalidadesAsync(FonteCompleta());
 
-        await using GeoDbContext depois = _fixture.CreateDbContext();
-        (await depois.Logradouros.CountAsync()).Should().Be(totalLogradouros, "a recarga idempotente não pode duplicar");
-        (await depois.LogradouroComplementos.CountAsync()).Should().Be(2);
-
-        Logradouro ruaARecarga = await depois.Logradouros.SingleAsync(l => l.Nome == "Rua A");
-        ruaARecarga.Id.Should().Be(logradouroId, "ON CONFLICT preserva a PK");
-        ruaARecarga.CreatedAt.Should().Be(createdAt, "created_at é preservado no conflito");
-        ruaARecarga.UpdatedAt.Should().NotBeNull("updated_at é carimbado no DO UPDATE");
+        await ConferirRecargaIdempotenteAsync(ruaAntes, totalAntes);
     }
 
     [Fact(DisplayName = "CA-02: COPY em lote suporta volume — várias linhas streamadas entram sem duplicar")]
     public async Task CopyEmLote_SuportaVolume()
     {
         await _cenario.PrepararTopoAsync(FonteCompleta());
-        FonteEmMemoria fonte = FonteCompleta();
-        fonte.Logradouros.Clear();
-        for (int i = 0; i < 250; i++)
-        {
-            fonte.Logradouros.Add(DadosDne.Logradouro(
-                cep: 68500000.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                nome: $"Rua {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
-                cidadeIdDne: IdCidadeMaraba));
-        }
+        FonteEmMemoria fonte = FonteComLogradourosEmVolume(250);
 
         await _cenario.ExecutarLocalidadesAsync(fonte);
 
@@ -217,6 +172,83 @@ public sealed class CargaDasLocalidadesTests
         relatorio.Tabelas["logradouro"].Lidos.Should().Be(2);
         relatorio.Tabelas["logradouro"].Inseridos.Should().Be(2);
         relatorio.Tabelas["logradouro_complemento"].Inseridos.Should().Be(2);
+    }
+
+    private static FonteEmMemoria FonteComLogradourosEmVolume(int quantidade)
+    {
+        FonteEmMemoria fonte = FonteCompleta();
+        fonte.Logradouros.Clear();
+        for (int i = 0; i < quantidade; i++)
+        {
+            fonte.Logradouros.Add(DadosDne.Logradouro(
+                cep: 68500000.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                nome: $"Rua {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                cidadeIdDne: IdCidadeMaraba));
+        }
+
+        return fonte;
+    }
+
+    private static async Task ConferirContagensDasFolhasAsync(GeoDbContext leitura)
+    {
+        (await leitura.Distritos.CountAsync()).Should().Be(2);
+        (await leitura.Bairros.CountAsync()).Should().Be(2);
+        (await leitura.DistritoFaixasCep.CountAsync()).Should().Be(1);
+        (await leitura.BairroFaixasCep.CountAsync()).Should().Be(1);
+        (await leitura.CepGrandesUsuarios.CountAsync()).Should().Be(1);
+        (await leitura.LogradouroComplementos.CountAsync()).Should().Be(2);
+    }
+
+    private static async Task ConferirRuaADeMarabaAsync(GeoDbContext leitura, Guid marabaId)
+    {
+        Logradouro ruaA = await leitura.Logradouros.SingleAsync(l => l.Cep == "68500000" && l.Nome == "Rua A");
+        ruaA.CidadeId.Should().Be(marabaId);
+        ruaA.DistritoId.Should().NotBeNull(); // distrito_id 10 resolvido para Guid
+        ruaA.BairroId.Should().NotBeNull();
+        ruaA.Ativo.Should().BeTrue();          // cep_ativo 'S'
+        ruaA.Coordenada.Should().NotBeNull();
+        ruaA.Coordenada!.SRID.Should().Be(4326);
+    }
+
+    private static async Task ConferirCepGeralDaCidadeAsync(GeoDbContext leitura)
+    {
+        Guid marabaId = (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba)).Id;
+        CepGeral cidade = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000");
+        cidade.CidadeId.Should().Be(marabaId);
+        cidade.DistritoId.Should().BeNull();
+        cidade.Coordenada.Should().NotBeNull();
+        cidade.Coordenada!.SRID.Should().Be(4326);
+    }
+
+    private static async Task ConferirCepGeralDoDistritoAsync(GeoDbContext leitura)
+    {
+        Guid distritoId = (await leitura.Distritos.OrderBy(d => d.Nome).FirstAsync(d => d.IdOrigemDne == "10")).Id;
+        CepGeral distrito = await leitura.CepGerais.SingleAsync(g => g.Cep == "68525100");
+        distrito.DistritoId.Should().Be(distritoId);
+    }
+
+    private async Task<Logradouro> LerRuaAAsync()
+    {
+        await using GeoDbContext contexto = _fixture.CreateDbContext();
+        return await contexto.Logradouros.SingleAsync(l => l.Nome == "Rua A");
+    }
+
+    private async Task<int> ContarLogradourosAsync()
+    {
+        await using GeoDbContext contexto = _fixture.CreateDbContext();
+        return await contexto.Logradouros.CountAsync();
+    }
+
+    private async Task ConferirRecargaIdempotenteAsync(Logradouro ruaAntes, int totalAntes)
+    {
+        await using GeoDbContext depois = _fixture.CreateDbContext();
+        (await depois.Logradouros.CountAsync()).Should().Be(totalAntes, "a recarga idempotente não pode duplicar");
+        (await depois.LogradouroComplementos.CountAsync()).Should().Be(2);
+
+        Logradouro ruaARecarga = await depois.Logradouros.SingleAsync(l => l.Nome == "Rua A");
+        ruaARecarga.Id.Should().Be(ruaAntes.Id, "ON CONFLICT preserva a PK");
+        ruaARecarga.CreatedAt.Should().Be(ruaAntes.CreatedAt, "created_at é preservado no conflito");
+        ruaARecarga.UpdatedAt.Should().NotBeNull("updated_at é carimbado no DO UPDATE");
     }
 
     // indisvalid = false sinaliza um CREATE INDEX CONCURRENTLY que não concluiu; true
