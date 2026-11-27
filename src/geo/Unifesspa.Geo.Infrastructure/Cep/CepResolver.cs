@@ -13,8 +13,8 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 
 /// <summary>
 /// Resolve CEP com cache-aside (Redis) sobre o <see cref="ICepReader"/>. A chave
-/// compõe-se com o selo de versão vigente (<see cref="RedisGeoCepCacheInvalidador.ChaveSeloVersaoVigente"/>,
-/// #674) e com a versão do formato da resolução: <c>geo:cep:{formato}:v{versao}:{cep}</c>. Quando a carga sela uma nova versão, o selo
+/// compõe-se com o selo de versão vigente (<see cref="RedisGeoCepCacheInvalidador.ChaveSeloVersaoVigente"/>)
+/// e com a versão do formato da resolução: <c>geo:cep:{formato}:v{versao}:{cep}</c>. Quando a carga sela uma nova versão, o selo
 /// muda e as entradas antigas viram inalcançáveis (invalidação O(1), sem SCAN). Só
 /// resolução positiva (200) é cacheada; 404 nunca — a ausência não pode congelar
 /// caso a base seja recarregada/enriquecida.
@@ -36,7 +36,7 @@ internal sealed partial class CepResolver : ICepResolver
     // cascata ou o vocabulário de origem torna inalcançáveis as entradas do formato anterior.
     private const string FormatoResolucao = "f2";
 
-    // Chave da memoização em processo do selo de versão vigente (#703). Única (um selo
+    // Chave da memoização em processo do selo de versão vigente. Única (um selo
     // global por instância de cache em memória), distinta das chaves de CEP do Redis.
     private const string ChaveMemoSelo = "geo:cep:selo-vigente-memo";
 
@@ -75,31 +75,36 @@ internal sealed partial class CepResolver : ICepResolver
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cep);
 
-        // Resolve o cache de forma resiliente (Lazy + try/catch): Redis fora → null → banco.
+        EntradaDoCepNoCache? entrada = await LocalizarNoCacheAsync(cep, cancellationToken).ConfigureAwait(false);
+        CepResolvidoDto? cacheado = entrada is null
+            ? null
+            : await TentarLerCacheAsync(entrada, cancellationToken).ConfigureAwait(false);
+
+        return cacheado ?? await ResolverNoBancoAsync(cep, entrada, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Resolve o cache de forma resiliente (Lazy + try/catch): Redis fora ou sem selo → null → banco.
+    private async Task<EntradaDoCepNoCache?> LocalizarNoCacheAsync(string cep, CancellationToken cancellationToken)
+    {
         ICacheService? cache = ResolverCacheOuNulo();
         string? chave = cache is null
             ? null
             : await ResolverChaveAsync(cache, cep, cancellationToken).ConfigureAwait(false);
 
-        if (cache is not null && chave is not null)
-        {
-            CepResolvidoDto? cacheado = await TentarLerCacheAsync(cache, chave, cancellationToken).ConfigureAwait(false);
-            if (cacheado is not null)
-            {
-                return cacheado;
-            }
-        }
+        return cache is not null && chave is not null ? new EntradaDoCepNoCache(cache, chave) : null;
+    }
 
+    private async Task<CepResolvidoDto?> ResolverNoBancoAsync(
+        string cep,
+        EntradaDoCepNoCache? entrada,
+        CancellationToken cancellationToken)
+    {
         CepResolvidoDto? resolvido = await _reader.ResolverAsync(cep, cancellationToken).ConfigureAwait(false);
-        if (resolvido is null)
-        {
-            // 404 não é cacheado — só resolução positiva entra no Redis.
-            return null;
-        }
 
-        if (cache is not null && chave is not null)
+        // A ausência não é guardada no cache — só resolução positiva entra no Redis.
+        if (resolvido is not null && entrada is not null)
         {
-            await TentarGravarCacheAsync(cache, chave, resolvido, cancellationToken).ConfigureAwait(false);
+            await TentarGravarCacheAsync(entrada, resolvido, cancellationToken).ConfigureAwait(false);
         }
 
         return resolvido;
@@ -127,7 +132,7 @@ internal sealed partial class CepResolver : ICepResolver
         return string.IsNullOrWhiteSpace(selo) ? null : $"geo:cep:{FormatoResolucao}:v{selo}:{cep}";
     }
 
-    // Memoiza o selo em processo (IMemoryCache) por uma janela curta (SeloTtl, #703): o
+    // Memoiza o selo em processo (IMemoryCache) por um prazo curto (SeloTtl): o
     // selo só muda em re-selagem da carga, então no hot path o lookup faz 1
     // round-trip ao Redis (a entrada) em vez de 2 (selo + entrada). A expiração é
     // governada pelo TimeProvider injetado (testável); a expiração do IMemoryCache é a
@@ -136,15 +141,23 @@ internal sealed partial class CepResolver : ICepResolver
     private async Task<string?> ObterSeloVigenteAsync(ICacheService cache, CancellationToken cancellationToken)
     {
         DateTimeOffset agora = _relogio.GetUtcNow();
-        if (_memoria.TryGetValue(ChaveMemoSelo, out SeloMemoizado? memo)
-            && memo is not null
-            && agora < memo.ExpiraEm)
+        if (LerSeloMemoizado(agora) is { } memoizado)
         {
-            return memo.Valor;
+            return memoizado;
         }
 
         string? selo = await LerSeloDoCacheAsync(cache, cancellationToken).ConfigureAwait(false);
+        MemoizarSelo(selo, agora);
+        return selo;
+    }
 
+    private string? LerSeloMemoizado(DateTimeOffset agora) =>
+        _memoria.TryGetValue(ChaveMemoSelo, out SeloMemoizado? memo) && memo is not null && memo.ValeEm(agora)
+            ? memo.Valor
+            : null;
+
+    private void MemoizarSelo(string? selo, DateTimeOffset agora)
+    {
         if (_seloTtl > TimeSpan.Zero && !string.IsNullOrWhiteSpace(selo))
         {
             _memoria.Set(
@@ -152,8 +165,6 @@ internal sealed partial class CepResolver : ICepResolver
                 new SeloMemoizado(selo, agora + _seloTtl),
                 new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = _seloTtl });
         }
-
-        return selo;
     }
 
     private async Task<string?> LerSeloDoCacheAsync(ICacheService cache, CancellationToken cancellationToken)
@@ -172,13 +183,19 @@ internal sealed partial class CepResolver : ICepResolver
     }
 
     // Selo memoizado + instante de expiração (governado pelo TimeProvider).
-    private sealed record SeloMemoizado(string Valor, DateTimeOffset ExpiraEm);
+    private sealed record SeloMemoizado(string Valor, DateTimeOffset ExpiraEm)
+    {
+        public bool ValeEm(DateTimeOffset agora) => agora < ExpiraEm;
+    }
 
-    private async Task<CepResolvidoDto?> TentarLerCacheAsync(ICacheService cache, string chave, CancellationToken cancellationToken)
+    // Cache já resolvido e chave versionada do CEP: só existem juntos.
+    private sealed record EntradaDoCepNoCache(ICacheService Cache, string Chave);
+
+    private async Task<CepResolvidoDto?> TentarLerCacheAsync(EntradaDoCepNoCache entrada, CancellationToken cancellationToken)
     {
         try
         {
-            return await cache.ObterAsync<CepResolvidoDto>(chave, cancellationToken).ConfigureAwait(false);
+            return await entrada.Cache.ObterAsync<CepResolvidoDto>(entrada.Chave, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception excecao) when (excecao is not OperationCanceledException)
         {
@@ -187,11 +204,11 @@ internal sealed partial class CepResolver : ICepResolver
         }
     }
 
-    private async Task TentarGravarCacheAsync(ICacheService cache, string chave, CepResolvidoDto dto, CancellationToken cancellationToken)
+    private async Task TentarGravarCacheAsync(EntradaDoCepNoCache entrada, CepResolvidoDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            await cache.DefinirAsync(chave, dto, _ttl, cancellationToken).ConfigureAwait(false);
+            await entrada.Cache.DefinirAsync(entrada.Chave, dto, _ttl, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception excecao) when (excecao is not OperationCanceledException)
         {
