@@ -27,19 +27,22 @@ internal sealed class ProximidadeRequiredParametrosTransformer : IOpenApiOperati
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(context);
 
-        // Só as operações do ProximidadeController — não toca os demais endpoints do Geo.
-        if (context.Description.ActionDescriptor is not ControllerActionDescriptor descriptor
-            || descriptor.ControllerTypeInfo.AsType() != typeof(ProximidadeController))
+        if (EhDaConsultaPorProximidade(context) && operation.Parameters is not null)
         {
-            return Task.CompletedTask;
+            MarcarComoObrigatorios(operation.Parameters);
         }
 
-        if (operation.Parameters is null)
-        {
-            return Task.CompletedTask;
-        }
+        return Task.CompletedTask;
+    }
 
-        IEnumerable<OpenApiParameter> obrigatorios = operation.Parameters
+    // Só as operações do ProximidadeController — não toca os demais endpoints do Geo.
+    private static bool EhDaConsultaPorProximidade(OpenApiOperationTransformerContext context) =>
+        context.Description.ActionDescriptor is ControllerActionDescriptor descriptor
+        && descriptor.ControllerTypeInfo.AsType() == typeof(ProximidadeController);
+
+    private static void MarcarComoObrigatorios(IEnumerable<IOpenApiParameter> parametros)
+    {
+        IEnumerable<OpenApiParameter> obrigatorios = parametros
             .OfType<OpenApiParameter>()
             .Where(p => p.In == ParameterLocation.Query
                      && ParametrosObrigatorios.Contains(p.Name, StringComparer.Ordinal));
@@ -48,7 +51,5 @@ internal sealed class ProximidadeRequiredParametrosTransformer : IOpenApiOperati
         {
             parametro.Required = true;
         }
-
-        return Task.CompletedTask;
     }
 }
