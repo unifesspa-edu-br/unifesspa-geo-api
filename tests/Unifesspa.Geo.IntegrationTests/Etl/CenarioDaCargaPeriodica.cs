@@ -131,24 +131,24 @@ internal sealed class CenarioDaCargaPeriodica
         FonteEmMemoria fonte = new() { Versao = versao };
 
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
+        fonte.Estados.Add(new EstadoCruBuilder("PA", "Pará").ComCapital("Belém").NaFaixaDeCep("66000000", "68899999").Construir());
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         fonte.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
         fonte.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
         fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
-        fonte.Logradouros.Add(DadosDne.Logradouro(CepMaraba, "Rua A", 1, distritoIdDne: 10));
+        fonte.Logradouros.Add(new LogradouroCruBuilder(CepMaraba, "Rua A", 1).NoDistrito(10).Construir());
 
         return fonte;
     }
 
     private static void AdicionarSaoPaulo(FonteEmMemoria fonte)
     {
-        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.Estados.Add(new EstadoCruBuilder("SP", "São Paulo").NaRegiao("Sudeste").ComCapital("São Paulo").NaFaixaDeCep("01000000", "19999999").Construir());
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
         fonte.Cidades.Add(DadosDne.Cidade(SaoPaulo, "São Paulo", "SP", ddd: "11"));
         fonte.CidadeIds.Add(DadosDne.CidadeId(2, SaoPaulo));
         fonte.Distritos.Add(DadosDne.Distrito(20, "Centro", 2));
-        fonte.Logradouros.Add(DadosDne.Logradouro(CepSaoPaulo, "Av Paulista", 2, distritoIdDne: 20));
+        fonte.Logradouros.Add(new LogradouroCruBuilder(CepSaoPaulo, "Av Paulista", 2).NoDistrito(20).Construir());
     }
 
     private ImportadorDaVersaoDne CriarImportadorVersao(

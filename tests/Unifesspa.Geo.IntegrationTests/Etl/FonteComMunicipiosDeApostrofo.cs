@@ -40,7 +40,7 @@ internal static class FonteComMunicipiosDeApostrofo
     {
         FonteEmMemoria fonte = new() { Versao = "202601" };
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.AddRange(Estados.Select(e => DadosDne.Estado(e.Uf, e.Nome)));
+        fonte.Estados.AddRange(Estados.Select(e => new EstadoCruBuilder(e.Uf, e.Nome).Construir()));
         fonte.Cidades.AddRange(Cidades.Select(c => DadosDne.Cidade(c.Codigo, c.Nome, c.Uf)));
         return fonte;
     }

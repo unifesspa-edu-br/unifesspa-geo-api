@@ -120,17 +120,6 @@ internal static class DadosDne
     public static PaisCru Pais(string siglaIso, string nome, string sigla = "XX") =>
         new(siglaIso, sigla, nome, CodigoBcb: null, CodigoRfb: null, CodigoSped: null, CodigoSiscomex: null);
 
-    public static EstadoCru Estado(
-        string uf,
-        string nome,
-        string? regiao = "Norte",
-        string? capital = null,
-        string? latitude = null,
-        string? longitude = null,
-        string? faixaIni = null,
-        string? faixaFim = null) =>
-        new(uf, nome, NomeSemAcento: nome, regiao, capital, faixaIni, faixaFim, latitude, longitude);
-
     public static EstadoIndicadorCru EstadoIndicador(
         string? uf,
         string? codigoIbge,
@@ -212,23 +201,6 @@ internal static class DadosDne
 
     public static LogradouroComplementoCru Complemento(string cep, string complemento, string? complementoSemAcento = null) =>
         new(cep, complemento, complementoSemAcento ?? complemento);
-
-    public static LogradouroCru Logradouro(
-        string cep,
-        string nome,
-        int cidadeIdDne,
-        string uf = "PA",
-        string? tipo = null,
-        string? nomeCompleto = null,
-        string? logradouroSemAcento = null,
-        int? bairroIdDne = null,
-        int? distritoIdDne = null,
-        string? latitude = null,
-        string? longitude = null,
-        string cepAtivo = "S") =>
-        // logradouro_sem_acento = texto completo sem acento (#707); na ausência, cai para o
-        // texto completo cru e depois o nome (a entidade canonicaliza a caixa).
-        new(cep, tipo, nome, nomeCompleto, logradouroSemAcento ?? nomeCompleto ?? nome, bairroIdDne, distritoIdDne, cidadeIdDne, uf, latitude, longitude, cepAtivo);
 }
 
 /// <summary>

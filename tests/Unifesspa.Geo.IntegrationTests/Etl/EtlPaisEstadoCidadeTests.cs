@@ -125,7 +125,7 @@ public sealed class EtlPaisEstadoCidadeTests
     {
         await LimparAsync();
         FonteEmMemoria fonte = FonteCompleta();
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará (duplicado)", latitude: "-3.0", longitude: "-52.0"));
+        fonte.Estados.Add(new EstadoCruBuilder("PA", "Pará (duplicado)").NaPosicao("-3.0", "-52.0").Construir());
 
         RelatorioImportacao relatorio = await ExecutarAsync(fonte);
 
@@ -265,8 +265,10 @@ public sealed class EtlPaisEstadoCidadeTests
         fonte.Paises.Add(DadosDne.Pais("ARG", "Argentina", "AR"));
         fonte.Paises.Add(DadosDne.Pais("USA", "Estados Unidos", "US"));
 
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", latitude: "-1.9981271", longitude: "-54.9306152", faixaIni: "66000000", faixaFim: "68899999"));
-        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", latitude: "-23.5", longitude: "-46.6", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.Estados.Add(new EstadoCruBuilder("PA", "Pará").ComCapital("Belém").NaPosicao("-1.9981271", "-54.9306152")
+            .NaFaixaDeCep("66000000", "68899999").Construir());
+        fonte.Estados.Add(new EstadoCruBuilder("SP", "São Paulo").NaRegiao("Sudeste").ComCapital("São Paulo").NaPosicao("-23.5", "-46.6")
+            .NaFaixaDeCep("01000000", "19999999").Construir());
     }
 
     private static void AdicionarIndicadoresEFaixasDosEstados(FonteEmMemoria fonte)

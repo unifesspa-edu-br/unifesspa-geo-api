@@ -75,7 +75,7 @@ public sealed class GuardaDeVersaoDoRegistroTests : IDisposable
         await using GeoDbContext contexto = _fixture.CreateDbContext();
         await using FonteEmMemoria fonte = new() { Versao = versao };
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará"));
+        fonte.Estados.Add(new EstadoCruBuilder("PA", "Pará").Construir());
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         fonte.Cidades.Add(DadosDne.Cidade("1500402", "Marabá", "PA"));
 
