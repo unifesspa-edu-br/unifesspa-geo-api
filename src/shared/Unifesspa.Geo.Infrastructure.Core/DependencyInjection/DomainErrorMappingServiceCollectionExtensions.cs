@@ -2,6 +2,7 @@ namespace Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 
 using Errors;
 
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -22,6 +23,7 @@ public static class DomainErrorMappingServiceCollectionExtensions
         services.AddSingleton<IDomainErrorMapper>(provider => new DomainErrorMappingRegistry(
             provider.GetServices<IDomainErrorRegistration>(),
             provider.GetRequiredService<ProblemTypeUriFactory>()));
+        InstalarRecusaDaLeituraDaRequisicao(services);
         return services;
     }
 
@@ -34,4 +36,10 @@ public static class DomainErrorMappingServiceCollectionExtensions
         services.TryAddSingleton<IValidateOptions<ProblemTypeOptions>, ProblemTypeOptionsValidator>();
         services.TryAddSingleton<ProblemTypeUriFactory>();
     }
+
+    // Fica na base da cadeia: cada PostConfigure seguinte (o do cursor) guarda esta fábrica e só a chama
+    // quando a falha não é dele. Por isso AddDomainErrorMapper precisa ser registrado antes de AddCursorPagination.
+    private static void InstalarRecusaDaLeituraDaRequisicao(IServiceCollection services) =>
+        services.PostConfigure<ApiBehaviorOptions>(static opcoes =>
+            opcoes.InvalidModelStateResponseFactory = RecusaDaLeituraDaRequisicao.Responder);
 }

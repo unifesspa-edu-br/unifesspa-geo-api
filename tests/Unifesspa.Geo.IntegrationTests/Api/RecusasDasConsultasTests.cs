@@ -70,6 +70,28 @@ public sealed class RecusasDasConsultasTests : IClassFixture<GeoOpenApiFactory>
         ConferirProblema(corpo, codigo, valorEnviado);
     }
 
+    [Theory(DisplayName = "Valor que não converte ao tipo do parâmetro devolve 400 comum, citando só o nome do parâmetro")]
+    [InlineData("/api/cidades/proximas?lat=abc&long=-49.13&raioKm=10", "abc", "o parâmetro 'lat'")]
+    [InlineData("/api/cidades/proximas?lat=-5.35&long=-49.13&raioKm=10&limit=xyz", "xyz", "o parâmetro 'limit'")]
+    [InlineData("/api/logradouros/proximos?lat=abc&long=def&raioKm=10", "abc", "os parâmetros 'lat', 'long'")]
+    public async Task ValorQueNaoConverte_Devolve400Comum(string rota, string valorEnviado, string trechoDoDetalhe)
+    {
+        using JsonDocument corpo = await ConsultarAsync(rota, 400);
+
+        ConferirProblema(corpo, "uniplus.requisicao.valor_invalido", valorEnviado);
+        corpo.RootElement.GetProperty("detail").GetString().Should().Contain(trechoDoDetalhe);
+    }
+
+    [Theory(DisplayName = "Erro de cursor continua respondendo com o código do cursor, antes do 400 comum")]
+    [InlineData("/api/estados?limit=0", 422, "uniplus.cursor.limit_invalido", "limit=0")]
+    [InlineData("/api/estados?cursor=lixo", 400, "uniplus.cursor.invalido", "lixo")]
+    public async Task ErroDeCursor_MantemOCodigoDoCursor(string rota, int status, string codigo, string valorEnviado)
+    {
+        using JsonDocument corpo = await ConsultarAsync(rota, status);
+
+        ConferirProblema(corpo, codigo, valorEnviado);
+    }
+
     [Theory(DisplayName = "Termo de busca acima do máximo devolve 400 com código próprio, sem repetir o termo")]
     [InlineData("/api/cidades?q=")]
     [InlineData("/api/cidades/1500602/bairros?q=")]
