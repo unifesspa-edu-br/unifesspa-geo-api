@@ -86,5 +86,6 @@ public sealed class BuscaDeBairroELogradouroComApostrofoTests
     }
 
     private static Logradouro NovaRua(Cidade cidade, string cep, string nome, Bairro bairro) =>
-        GeoReferenceSeed.NovoLogradouro(cidade.Id, "SP", cep, nome, tipo: "Rua", nomeCompleto: $"Rua {nome}", bairroId: bairro.Id);
+        new LogradouroBuilder(cidade.Id, "SP", cep, nome)
+            .DoTipo("Rua").ComNomeCompleto($"Rua {nome}").NoBairro(bairro.Id).Construir();
 }
