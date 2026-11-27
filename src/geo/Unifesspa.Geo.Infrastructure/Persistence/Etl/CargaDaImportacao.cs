@@ -94,7 +94,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
 
         try
         {
-            await ExecutarProtegidoAsync(execucao, inicio, inicioCarga, prazo).ConfigureAwait(false);
+            await ExecutarTratandoInterrupcaoAsync(execucao, inicio, inicioCarga, prazo).ConfigureAwait(false);
         }
         finally
         {
@@ -102,7 +102,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
         }
     }
 
-    private async Task ExecutarProtegidoAsync(
+    private async Task ExecutarTratandoInterrupcaoAsync(
         GeoImportacaoExecucao execucao,
         long inicio,
         DateTimeOffset inicioCarga,
@@ -110,7 +110,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
     {
         try
         {
-            await ExecutarEmTransacaoUnicaAsync(execucao, inicio, inicioCarga, prazo.Token).ConfigureAwait(false);
+            await ExecutarTratandoFalhaAsync(execucao, inicio, inicioCarga, prazo.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -119,6 +119,18 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
             {
                 throw;
             }
+        }
+    }
+
+    private async Task ExecutarTratandoFalhaAsync(
+        GeoImportacaoExecucao execucao,
+        long inicio,
+        DateTimeOffset inicioCarga,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ExecutarEmTransacaoUnicaAsync(execucao, inicio, inicioCarga, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception excecao) when (excecao is not OperationCanceledException)
         {

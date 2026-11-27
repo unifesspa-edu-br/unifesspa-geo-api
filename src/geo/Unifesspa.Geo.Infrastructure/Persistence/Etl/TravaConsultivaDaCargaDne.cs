@@ -105,13 +105,10 @@ internal sealed class TravaConsultivaDaCargaDne
             {
                 await DestravarAsync().ConfigureAwait(false);
             }
-            catch (NpgsqlException)
+            catch (Exception excecao) when (excecao is NpgsqlException or InvalidOperationException)
             {
-                // Fechar a conexão na sequência já libera a trava de sessão no PostgreSQL.
-            }
-            catch (InvalidOperationException)
-            {
-                // Conexão já encerrada; o PostgreSQL libera a trava de sessão automaticamente.
+                // Falha ao destravar ou conexão já encerrada: o PostgreSQL libera a trava de sessão
+                // quando a conexão é fechada.
             }
             finally
             {

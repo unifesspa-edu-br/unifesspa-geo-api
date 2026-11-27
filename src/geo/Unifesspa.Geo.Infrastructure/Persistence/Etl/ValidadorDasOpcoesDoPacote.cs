@@ -12,22 +12,25 @@ internal sealed class ValidadorDasOpcoesDoPacote : IValidateOptions<EtlOpcoes>
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        List<string> faltas = [];
+        string[] faltas = [.. FaltasDe(options)];
+        return faltas.Length == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(faltas);
+    }
+
+    private static IEnumerable<string> FaltasDe(EtlOpcoes options)
+    {
         if (options.TamanhoMaximoDoPacote <= 0)
         {
-            faltas.Add($"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TamanhoMaximoDoPacote)} deve ser maior que zero.");
+            yield return $"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TamanhoMaximoDoPacote)} deve ser maior que zero.";
         }
 
         if (options.QuantidadeMaximaDeEntradasDoPacote is < MinimoDeEntradas or > MaximoDeEntradas)
         {
-            faltas.Add($"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.QuantidadeMaximaDeEntradasDoPacote)} deve estar entre {MinimoDeEntradas} e {MaximoDeEntradas}.");
+            yield return $"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.QuantidadeMaximaDeEntradasDoPacote)} deve estar entre {MinimoDeEntradas} e {MaximoDeEntradas}.";
         }
 
         if (string.IsNullOrWhiteSpace(options.DiretorioDoPacote))
         {
-            faltas.Add($"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.DiretorioDoPacote)} deve ser informado.");
+            yield return $"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.DiretorioDoPacote)} deve ser informado.";
         }
-
-        return faltas.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(faltas);
     }
 }
