@@ -49,18 +49,6 @@ public sealed class TempoLimiteDosComandosDaCargaTests
         }
     }
 
-    [Theory(DisplayName = "Prazo do comando da carga igual a zero, negativo ou grande demais para segundos inteiros é recusado na configuração")]
-    [InlineData("00:00:00")]
-    [InlineData("-00:00:05")]
-    [InlineData("30000.00:00:00")]
-    public void PrazoNaoPositivo_ERecusado(string prazo)
-    {
-        Func<ImportadorDeLogradourosPorCopia> criar = () => CriarImportador(_fixture.CreateDbContext(), prazo);
-
-        criar.Should().Throw<InvalidOperationException>()
-            .WithMessage("*TempoLimiteDosComandosDaCarga*maior que zero*");
-    }
-
     private async Task ExecutarCargaVaziaAsync(string prazo)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext();

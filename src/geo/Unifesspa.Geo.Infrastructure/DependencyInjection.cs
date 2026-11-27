@@ -132,6 +132,7 @@ public static class GeoInfrastructureRegistration
 
         services.AddSingleton<IValidateOptions<EtlOpcoes>, ValidadorDasOpcoesDoPacote>();
         services.AddSingleton<IValidateOptions<EtlOpcoes>, ValidadorDaTravaDaCarga>();
+        services.AddSingleton<IValidateOptions<EtlOpcoes>, ValidadorDosPrazosDaCarga>();
         services.AddOptions<EtlOpcoes>().Bind(configuration.GetSection(EtlOpcoes.SectionName)).ValidateOnStart();
 
         EtlOpcoes opcoes = configuration.GetSection(EtlOpcoes.SectionName).Get<EtlOpcoes>() ?? new EtlOpcoes();

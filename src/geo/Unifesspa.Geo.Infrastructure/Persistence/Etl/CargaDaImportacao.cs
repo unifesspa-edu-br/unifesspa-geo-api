@@ -50,7 +50,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
         _importadorVersao = importadorVersao;
         _finalizacao = finalizacao;
         _relogio = relogio;
-        _duracaoMaximaDaCarga = ValidarDuracaoMaxima(opcoes.Value.DuracaoMaximaDaCarga);
+        _duracaoMaximaDaCarga = opcoes.Value.DuracaoMaximaDaCarga;
         _logger = logger;
     }
 
@@ -295,12 +295,6 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
         excecao is ErroDeLeituraDoPacoteDneException recusa
             ? $"Pacote recusado: {recusa.Message}"
             : "Falha na carga da DNE.";
-
-    private static TimeSpan ValidarDuracaoMaxima(TimeSpan duracao) =>
-        duracao > TimeSpan.Zero
-            ? duracao
-            : throw new InvalidOperationException(
-                $"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.DuracaoMaximaDaCarga)} deve ser maior que zero.");
 
     private static string ResumoConclusao(RelatorioImportacaoDto relatorio) =>
         $"{relatorio.Inseridos} inseridos, {relatorio.Atualizados} atualizados, " +
