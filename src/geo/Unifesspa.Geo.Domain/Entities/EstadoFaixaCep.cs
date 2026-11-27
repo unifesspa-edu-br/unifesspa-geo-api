@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Domain.Entities;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -21,10 +22,10 @@ public sealed class EstadoFaixaCep : EntityBase
 
     public string? Descricao { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
-    /// <summary><see langword="false"/> quando a faixa some da release vigente (stale do ETL).</summary>
+    /// <summary><see langword="false"/> quando a faixa some da versão vigente (registro não vigente).</summary>
     public bool Vigente { get; private set; } = true;
 
     // Construtor privado para materialização do EF Core.
@@ -33,84 +34,67 @@ public sealed class EstadoFaixaCep : EntityBase
     }
 
     /// <summary>
-    /// Importa uma faixa de CEP de Estado. Valores já tipados (parse tolerante no
-    /// ETL). Valida vínculo, limites da faixa e proveniência. A consistência
-    /// <c>cep_inicial ≤ cep_final</c> e a não-sobreposição são responsabilidade do
-    /// ETL/lookup (F3/F4) — a carga em lote é tolerante por construção (ADR-0092).
+    /// Importa uma faixa de CEP de Estado. Valores já tipados (leitura tolerante na carga).
+    /// Valida vínculo, limites da faixa e a versão da base em <paramref name="proveniencia"/>.
+    /// A consistência <c>cep_inicial ≤ cep_final</c> e a não-sobreposição são responsabilidade
+    /// da carga e da consulta — a carga em lote é tolerante por construção (ADR-0092).
     /// </summary>
     public static Result<EstadoFaixaCep> Importar(
         Guid estadoId,
-        string cepInicial,
-        string cepFinal,
+        FaixaDeCep faixa,
         string? descricao,
-        string versaoDataset,
-        bool vigente = true)
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(cepInicial);
-        ArgumentNullException.ThrowIfNull(cepFinal);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (estadoId == Guid.Empty)
+        DomainError? erro = Validar(estadoId, faixa, proveniencia);
+        if (erro is not null)
         {
-            return Result<EstadoFaixaCep>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoFaixaCepEstadoObrigatorio,
-                "Estado da faixa de CEP é obrigatório."));
+            return Result<EstadoFaixaCep>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(cepInicial))
-        {
-            return Result<EstadoFaixaCep>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoFaixaCepInicialObrigatorio,
-                "CEP inicial da faixa é obrigatório."));
-        }
+        var entidade = new EstadoFaixaCep { EstadoId = estadoId, CepInicial = faixa.CepInicial!, CepFinal = faixa.CepFinal! };
+        entidade.Aplicar(descricao, proveniencia);
 
-        if (string.IsNullOrWhiteSpace(cepFinal))
-        {
-            return Result<EstadoFaixaCep>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoFaixaCepFinalObrigatorio,
-                "CEP final da faixa é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<EstadoFaixaCep>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoFaixaCepVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) da faixa de CEP é obrigatória."));
-        }
-
-        var faixa = new EstadoFaixaCep
-        {
-            EstadoId = estadoId,
-            CepInicial = cepInicial.Trim(),
-            CepFinal = cepFinal.Trim(),
-            Descricao = GeoTexto.NormalizarOpcional(descricao),
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
-
-        return Result<EstadoFaixaCep>.Success(faixa);
+        return Result<EstadoFaixaCep>.Success(entidade);
     }
 
     /// <summary>
-    /// Reaplica os dados de uma release sobre a faixa já existente (upsert in place do
-    /// ETL por chave natural <c>(estado_id, cep_inicial, cep_final)</c>), preservando
-    /// <see cref="EntityBase.Id"/>. A chave natural não muda — só metadados/proveniência.
+    /// Reaplica os dados de uma versão da base sobre a faixa já existente (atualização pela
+    /// chave natural da carga <c>(estado_id, cep_inicial, cep_final)</c>), preservando
+    /// <see cref="EntityBase.Id"/>. A chave natural não muda — só metadados e proveniência.
     /// </summary>
-    public Result Atualizar(string? descricao, string versaoDataset, bool vigente = true)
+    public Result Atualizar(string? descricao, ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
+        DomainError? erro = Validar(EstadoId, new FaixaDeCep(CepInicial, CepFinal), proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoFaixaCepVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) da faixa de CEP é obrigatória."));
+            return Result.Failure(erro);
         }
 
-        Descricao = GeoTexto.NormalizarOpcional(descricao);
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(descricao, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(Guid estadoId, FaixaDeCep faixa, ProvenienciaDaCarga proveniencia) =>
+        estadoId == Guid.Empty
+            ? new DomainError(GeoReferenceDataErrorCodes.EstadoFaixaCepEstadoObrigatorio, "Estado da faixa de CEP é obrigatório.")
+            : !faixa.TemCepInicial
+                ? new DomainError(GeoReferenceDataErrorCodes.EstadoFaixaCepInicialObrigatorio, "CEP inicial da faixa é obrigatório.")
+                : !faixa.TemCepFinal
+                    ? new DomainError(GeoReferenceDataErrorCodes.EstadoFaixaCepFinalObrigatorio, "CEP final da faixa é obrigatório.")
+                    : proveniencia.TemVersao
+                        ? null
+                        : new DomainError(
+                            GeoReferenceDataErrorCodes.EstadoFaixaCepVersaoDatasetObrigatoria,
+                            "Versão do dataset (proveniência) da faixa de CEP é obrigatória.");
+
+    private void Aplicar(string? descricao, ProvenienciaDaCarga proveniencia)
+    {
+        Descricao = GeoTexto.NormalizarOpcional(descricao);
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }

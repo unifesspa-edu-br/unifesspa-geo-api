@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>Distrito, bairro e as faixas de CEP de cada um, para provar a gravação e a releitura.</summary>
@@ -21,8 +22,8 @@ internal sealed record CenarioDoDistritoEDoBairro(
         return new CenarioDoDistritoEDoBairro(
             distrito,
             bairro,
-            GeoTestKeys.Ok(DistritoFaixaCep.Importar(distrito.Id, "02000000", "02099999", VersaoDataset)),
-            GeoTestKeys.Ok(BairroFaixaCep.Importar(bairro.Id, "01000000", "01099999", VersaoDataset)));
+            GeoTestKeys.Ok(DistritoFaixaCep.Importar(distrito.Id, new FaixaDeCep("02000000", "02099999"), new ProvenienciaDaCarga(VersaoDataset))),
+            GeoTestKeys.Ok(BairroFaixaCep.Importar(bairro.Id, new FaixaDeCep("01000000", "01099999"), new ProvenienciaDaCarga(VersaoDataset))));
     }
 
     public object[] Entidades() => [Distrito, Bairro, DistritoFaixa, BairroFaixa];

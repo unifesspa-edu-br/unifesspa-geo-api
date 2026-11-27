@@ -83,13 +83,13 @@ internal static partial class GeoReferenceSeed
         GeoTestKeys.Ok(CepGeral.Importar(cep, cidadeId, distritoId, uf, null, null, null, Versao, vigente));
 
     public static CidadeFaixaCep NovaCidadeFaixa(Guid cidadeId, string cepInicial, string cepFinal, bool vigente = true) =>
-        GeoTestKeys.Ok(CidadeFaixaCep.Importar(cidadeId, cepInicial, cepFinal, Versao, vigente));
+        GeoTestKeys.Ok(CidadeFaixaCep.Importar(cidadeId, new FaixaDeCep(cepInicial, cepFinal), Proveniencia(vigente)));
 
     public static BairroFaixaCep NovaBairroFaixa(Guid bairroId, string cepInicial, string cepFinal, bool vigente = true) =>
-        GeoTestKeys.Ok(BairroFaixaCep.Importar(bairroId, cepInicial, cepFinal, Versao, vigente));
+        GeoTestKeys.Ok(BairroFaixaCep.Importar(bairroId, new FaixaDeCep(cepInicial, cepFinal), Proveniencia(vigente)));
 
     public static DistritoFaixaCep NovaDistritoFaixa(Guid distritoId, string cepInicial, string cepFinal, bool vigente = true) =>
-        GeoTestKeys.Ok(DistritoFaixaCep.Importar(distritoId, cepInicial, cepFinal, Versao, vigente));
+        GeoTestKeys.Ok(DistritoFaixaCep.Importar(distritoId, new FaixaDeCep(cepInicial, cepFinal), Proveniencia(vigente)));
 
     public static CidadeIndicador NovoIndicador(
         Guid cidadeId,

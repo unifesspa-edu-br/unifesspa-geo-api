@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Domain.Entities;
@@ -55,14 +56,15 @@ internal sealed class GeoImportadorDistritoBairro
         RelatorioImportacao relatorio,
         CancellationToken cancellationToken)
     {
+        ProvenienciaDaCarga proveniencia = new(fonte.Versao);
         Dictionary<int, Guid> cidadesPorIdDne =
             await ResolverCidadesPorIdDneAsync(fonte, cancellationToken).ConfigureAwait(false);
         Dictionary<int, LocalidadeResolvida> distritosPorIdDne =
             await ImportarDistritosAsync(fonte, cidadesPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
-        await ImportarFaixasDeDistritoAsync(fonte, distritosPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
+        await ImportarFaixasDeDistritoAsync(fonte, distritosPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         Dictionary<int, LocalidadeResolvida> bairrosPorIdDne =
             await ImportarBairrosAsync(fonte, cidadesPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
-        await ImportarFaixasDeBairroAsync(fonte, bairrosPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
+        await ImportarFaixasDeBairroAsync(fonte, bairrosPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarGrandesUsuariosAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarCepGeraisAsync(fonte, cidadesPorIdDne, distritosPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
         return new ResolucaoLocalidades(cidadesPorIdDne, distritosPorIdDne, bairrosPorIdDne);
@@ -87,7 +89,11 @@ internal sealed class GeoImportadorDistritoBairro
     }
 
     private async Task ImportarFaixasDeDistritoAsync(
-        IGeoFonteDados fonte, Dictionary<int, LocalidadeResolvida> distritosPorIdDne, RelatorioImportacao relatorio, CancellationToken cancellationToken)
+        IGeoFonteDados fonte,
+        Dictionary<int, LocalidadeResolvida> distritosPorIdDne,
+        ProvenienciaDaCarga proveniencia,
+        RelatorioImportacao relatorio,
+        CancellationToken cancellationToken)
     {
         GravacaoPorChaveNatural<DistritoFaixaCep> gravacao = await GravacaoPorChaveNatural<DistritoFaixaCep>.AbrirAsync(
             _contexto.DistritoFaixasCep,
@@ -97,7 +103,7 @@ internal sealed class GeoImportadorDistritoBairro
         await ImportarFaixasAsync(
             fonte.LerDistritoFaixasAsync(cancellationToken),
             distritosPorIdDne,
-            fonte.Versao,
+            proveniencia,
             gravacao,
             static f => f.CriarFaixaDeDistrito(),
             static (e, f) => f.Atualizar(e),
@@ -123,7 +129,11 @@ internal sealed class GeoImportadorDistritoBairro
     }
 
     private async Task ImportarFaixasDeBairroAsync(
-        IGeoFonteDados fonte, Dictionary<int, LocalidadeResolvida> bairrosPorIdDne, RelatorioImportacao relatorio, CancellationToken cancellationToken)
+        IGeoFonteDados fonte,
+        Dictionary<int, LocalidadeResolvida> bairrosPorIdDne,
+        ProvenienciaDaCarga proveniencia,
+        RelatorioImportacao relatorio,
+        CancellationToken cancellationToken)
     {
         GravacaoPorChaveNatural<BairroFaixaCep> gravacao = await GravacaoPorChaveNatural<BairroFaixaCep>.AbrirAsync(
             _contexto.BairroFaixasCep,
@@ -133,7 +143,7 @@ internal sealed class GeoImportadorDistritoBairro
         await ImportarFaixasAsync(
             fonte.LerBairroFaixasAsync(cancellationToken),
             bairrosPorIdDne,
-            fonte.Versao,
+            proveniencia,
             gravacao,
             static f => f.CriarFaixaDeBairro(),
             static (e, f) => f.Atualizar(e),
@@ -195,7 +205,7 @@ internal sealed class GeoImportadorDistritoBairro
     private async Task ImportarFaixasAsync<T>(
         IAsyncEnumerable<FaixaLocalidadeCru> linhas,
         Dictionary<int, LocalidadeResolvida> localidadesPorIdDne,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         GravacaoPorChaveNatural<T> gravacao,
         Func<FaixaParaCarga, Result<T>> criar,
         Func<T, FaixaParaCarga, Result> atualizar,
@@ -205,7 +215,7 @@ internal sealed class GeoImportadorDistritoBairro
         await foreach (FaixaLocalidadeCru linha in linhas.ConfigureAwait(false))
         {
             gravacao.Contador.ContarLido();
-            if (FaixaParaCarga.De(linha, localidadesPorIdDne, versao, gravacao.Contador) is { } dados)
+            if (FaixaParaCarga.De(linha, localidadesPorIdDne, proveniencia, gravacao.Contador) is { } dados)
             {
                 gravacao.Gravar(dados.Chave, () => criar(dados), e => atualizar(e, dados));
             }
