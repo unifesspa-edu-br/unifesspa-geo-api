@@ -119,9 +119,7 @@ public sealed class CidadePersistenceTests
 
     private static CidadeIndicador NovoIndicadorSemDados(Guid cidadeId) =>
         GeoTestKeys.Ok(CidadeIndicador.Importar(
-            cidadeId: cidadeId, gentilico: null, prefeito: null,
-            areaKm2: null, populacaoResidente: null, densidadeDemografica: null,
-            escolarizacao6a14: null, idh: null, mortalidadeInfantil: null,
-            receitas: null, despesas: null, pibPerCapita: null,
-            aniversario: null, versaoDataset: VersaoDataset));
+            cidadeId: cidadeId, gentilico: null, prefeito: null, aniversario: null,
+            metricas: new MetricasDaCidade(),
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 }
