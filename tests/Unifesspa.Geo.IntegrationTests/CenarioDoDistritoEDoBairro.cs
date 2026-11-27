@@ -30,15 +30,13 @@ internal sealed record CenarioDoDistritoEDoBairro(
 
     private static Distrito NovoDistrito(Guid cidadeId) =>
         GeoTestKeys.Ok(Distrito.Importar(
-            cidadeId: cidadeId, uf: "SP", nome: "Zona Norte", nomeNormalizado: "zona norte",
-            latitude: -23.45m, longitude: -46.62m,
-            coordenada: new Point(-46.62, -23.45) { SRID = 4326 },
-            idOrigemDne: "1001", versaoDataset: VersaoDataset));
+            cidadeId: cidadeId, uf: "SP", nome: new NomeComFormaDeBusca("Zona Norte", "zona norte"),
+            posicao: new PosicaoGeografica(-23.45m, -46.62m, new Point(-46.62, -23.45) { SRID = 4326 }),
+            idOrigemDne: "1001", proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 
     private static Bairro NovoBairro(Guid cidadeId) =>
         GeoTestKeys.Ok(Bairro.Importar(
-            cidadeId: cidadeId, uf: "SP", nome: "Sé", nomeNormalizado: "se",
-            latitude: -23.55m, longitude: -46.63m,
-            coordenada: new Point(-46.63, -23.55) { SRID = 4326 },
-            idOrigemDne: "2002", versaoDataset: VersaoDataset));
+            cidadeId: cidadeId, uf: "SP", nome: new NomeComFormaDeBusca("Sé", "se"),
+            posicao: new PosicaoGeografica(-23.55m, -46.63m, new Point(-46.63, -23.55) { SRID = 4326 }),
+            idOrigemDne: "2002", proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 }

@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>Bairro, logradouro, complemento e grande usuário completos, para provar a gravação e a releitura.</summary>
@@ -16,7 +17,8 @@ internal sealed record CenarioDoLogradouroDaSe(
 
     public static CenarioDoLogradouroDaSe Montar(Guid cidadeId)
     {
-        Bairro bairro = GeoTestKeys.Ok(Bairro.Importar(cidadeId, "SP", "Sé", "se", null, null, null, null, VersaoDataset));
+        Bairro bairro = GeoTestKeys.Ok(Bairro.Importar(
+            cidadeId, "SP", new NomeComFormaDeBusca("Sé", "se"), default, null, new ProvenienciaDaCarga(VersaoDataset)));
         string cep = GeoTestKeys.Cep();
         return new CenarioDoLogradouroDaSe(bairro, NovoLogradouro(cep, cidadeId, bairro.Id), NovoComplemento(cep), NovoGrandeUsuario());
     }

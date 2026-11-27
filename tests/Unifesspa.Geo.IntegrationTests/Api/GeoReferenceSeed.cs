@@ -56,7 +56,8 @@ internal static partial class GeoReferenceSeed
         decimal? longitude = null,
         bool vigente = true) =>
         GeoTestKeys.Ok(Distrito.Importar(
-            cidadeId, uf, nome, Normalizar(nome), latitude, longitude, null, null, Versao, vigente));
+            cidadeId, uf, new NomeComFormaDeBusca(nome, Normalizar(nome)),
+            new PosicaoGeografica(latitude, longitude, null), null, Proveniencia(vigente)));
 
     public static Bairro NovoBairro(
         Guid cidadeId,
@@ -66,7 +67,8 @@ internal static partial class GeoReferenceSeed
         decimal? longitude = null,
         bool vigente = true) =>
         GeoTestKeys.Ok(Bairro.Importar(
-            cidadeId, uf, nome, Normalizar(nome), latitude, longitude, null, null, Versao, vigente));
+            cidadeId, uf, new NomeComFormaDeBusca(nome, Normalizar(nome)),
+            new PosicaoGeografica(latitude, longitude, null), null, Proveniencia(vigente)));
 
     public static LogradouroComplemento NovoComplemento(string cep, string complemento, bool vigente = true) =>
         GeoTestKeys.Ok(LogradouroComplemento.Importar(cep, complemento, Normalizar(complemento), Versao, vigente));
