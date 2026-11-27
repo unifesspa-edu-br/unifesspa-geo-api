@@ -39,3 +39,6 @@ docker-compose.override.yml
 coverage/
 *.coverage
 *.coveragexml
+
+# Análise de código
+artifacts/

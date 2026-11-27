@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.100 AS build
 WORKDIR /src
 
-COPY Directory.Build.props Directory.Packages.props global.json Unifesspa.Geo.slnx .editorconfig ./
+COPY Directory.Build.props Directory.Packages.props global.json Unifesspa.Geo.slnx .editorconfig SonarLint.xml .globalconfig ./
 
 COPY src/shared/ src/shared/
 COPY src/geo/ src/geo/

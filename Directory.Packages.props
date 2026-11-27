@@ -42,7 +42,7 @@
 
     <!-- Paginação keyset (ADR-0094) — motor de seek SQL multi-coluna sob o cursor opaco
          do projeto (ADR-0026). MIT, nativo .NET 10 / EF Core 10. O analyzer transitivo
-         (.Analyzers) é removido no Infrastructure.Core.csproj — exige um Roslyn mais novo
+         (.Analyzers) é removido no Directory.Build.props — exige um Roslyn mais novo
          que o do SDK das imagens Docker e quebraria o publish (CS9057). -->
     <PackageVersion Include="MR.EntityFrameworkCore.KeysetPagination" Version="1.6.0" />
 
@@ -80,5 +80,12 @@
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.3" />
     <PackageVersion Include="TngTech.ArchUnitNET.xUnit" Version="0.13.3" />
     <PackageVersion Include="coverlet.collector" Version="8.0.1" />
+  </ItemGroup>
+  <!-- Analisadores da build, um dono por regra: Sonar responde pelas métricas,
+       Meziantou por comportamento e Roslynator por estilo, como sugestão na IDE. -->
+  <ItemGroup>
+    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
+    <GlobalPackageReference Include="Meziantou.Analyzer" Version="3.0.321" />
+    <GlobalPackageReference Include="Roslynator.Analyzers" Version="5.0.1" />
   </ItemGroup>
 </Project>
