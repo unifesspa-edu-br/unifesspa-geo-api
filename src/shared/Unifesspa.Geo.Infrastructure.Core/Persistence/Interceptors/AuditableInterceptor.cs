@@ -54,16 +54,24 @@ public sealed class AuditableInterceptor : SaveChangesInterceptor
         foreach (Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<EntityBase> entry
             in context.ChangeTracker.Entries<EntityBase>())
         {
-            switch (entry.State)
-            {
-                case EntityState.Added:
-                    entry.Property(nameof(EntityBase.CreatedAt)).CurrentValue = now;
-                    break;
+            CarimbarCriacao(entry, now);
+            CarimbarAlteracao(entry, now);
+        }
+    }
 
-                case EntityState.Modified:
-                    entry.Property(nameof(EntityBase.UpdatedAt)).CurrentValue = now;
-                    break;
-            }
+    private static void CarimbarCriacao(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<EntityBase> entry, DateTimeOffset instante)
+    {
+        if (entry.State == EntityState.Added)
+        {
+            entry.Property(nameof(EntityBase.CreatedAt)).CurrentValue = instante;
+        }
+    }
+
+    private static void CarimbarAlteracao(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<EntityBase> entry, DateTimeOffset instante)
+    {
+        if (entry.State == EntityState.Modified)
+        {
+            entry.Property(nameof(EntityBase.UpdatedAt)).CurrentValue = instante;
         }
     }
 }
