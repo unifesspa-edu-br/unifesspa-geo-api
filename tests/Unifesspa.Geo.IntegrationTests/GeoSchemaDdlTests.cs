@@ -1,13 +1,7 @@
 namespace Unifesspa.Geo.IntegrationTests;
 
-using System.Data;
-using System.Data.Common;
-
 using AwesomeAssertions;
 
-using Microsoft.EntityFrameworkCore;
-
-using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
@@ -19,17 +13,17 @@ using Unifesspa.Geo.IntegrationTests.Infrastructure;
 [Collection(GeoPostgisCollection.Name)]
 public sealed class GeoSchemaDdlTests
 {
-    private readonly GeoPostgisFixture _fixture;
+    private readonly CatalogoDoEsquema _catalogo;
 
     public GeoSchemaDdlTests(GeoPostgisFixture fixture)
     {
-        _fixture = fixture;
+        _catalogo = new CatalogoDoEsquema(fixture);
     }
 
     [Fact(DisplayName = "ix_estado_coordenada é um índice GIST sobre a coluna geográfica")]
     public async Task IndiceCoordenadaEstado_UsaGist()
     {
-        string? indexDef = await ObterIndexDefAsync("ix_estado_coordenada");
+        string? indexDef = await _catalogo.ObterIndexDefAsync("ix_estado_coordenada");
 
         indexDef.Should().NotBeNull("o índice espacial de estado.coordenada deve existir");
         indexDef!.Should().Contain("USING gist", "a coordenada precisa de índice GIST (ADR-0091)");
@@ -38,11 +32,11 @@ public sealed class GeoSchemaDdlTests
     [Fact(DisplayName = "ix_cidade_coordenada é GIST e ix_cidade_nome_normalizado_trgm é GIN trigram")]
     public async Task IndicesCidade_GistETrgm()
     {
-        string? gist = await ObterIndexDefAsync("ix_cidade_coordenada");
+        string? gist = await _catalogo.ObterIndexDefAsync("ix_cidade_coordenada");
         gist.Should().NotBeNull();
         gist!.Should().Contain("USING gist");
 
-        string? trgm = await ObterIndexDefAsync("ix_cidade_nome_normalizado_trgm");
+        string? trgm = await _catalogo.ObterIndexDefAsync("ix_cidade_nome_normalizado_trgm");
         trgm.Should().NotBeNull("o índice trigram de cidade.nome_normalizado deve existir");
         trgm!.Should().Contain("USING gin", "autocomplete usa GIN");
         trgm.Should().Contain("gin_trgm_ops", "o opclass trigram precisa estar presente (extensão pg_trgm)");
@@ -53,7 +47,7 @@ public sealed class GeoSchemaDdlTests
     [InlineData("ix_bairro_coordenada")]
     public async Task IndicesCoordenadaDistritoBairro_UsamGist(string indexName)
     {
-        string? indexDef = await ObterIndexDefAsync(indexName);
+        string? indexDef = await _catalogo.ObterIndexDefAsync(indexName);
         indexDef.Should().NotBeNull($"o índice espacial {indexName} deve existir");
         indexDef!.Should().Contain("USING gist", "a coordenada precisa de índice GIST (ADR-0091)");
     }
@@ -61,11 +55,11 @@ public sealed class GeoSchemaDdlTests
     [Fact(DisplayName = "Logradouro: ix_logradouro_coordenada é GIST e ix_logradouro_nome_trgm é GIN trigram")]
     public async Task IndicesLogradouro_GistETrgm()
     {
-        string? gist = await ObterIndexDefAsync("ix_logradouro_coordenada");
+        string? gist = await _catalogo.ObterIndexDefAsync("ix_logradouro_coordenada");
         gist.Should().NotBeNull();
         gist!.Should().Contain("USING gist");
 
-        string? trgm = await ObterIndexDefAsync("ix_logradouro_nome_trgm");
+        string? trgm = await _catalogo.ObterIndexDefAsync("ix_logradouro_nome_trgm");
         trgm.Should().NotBeNull();
         trgm!.Should().Contain("USING gin");
         trgm.Should().Contain("gin_trgm_ops");
@@ -74,14 +68,14 @@ public sealed class GeoSchemaDdlTests
     [Fact(DisplayName = "Logradouro: ix_logradouro_natural é UNIQUE e cep NÃO é único isoladamente")]
     public async Task Logradouro_CepNaoUnico_ChaveCompostaUnica()
     {
-        string? natural = await ObterIndexDefAsync("ix_logradouro_natural");
+        string? natural = await _catalogo.ObterIndexDefAsync("ix_logradouro_natural");
         natural.Should().NotBeNull();
         natural!.Should().Contain("UNIQUE", "a chave de upsert (cep, nome_normalizado, cidade_id) é única");
         natural.Should().Contain("cep");
         natural.Should().Contain("nome_normalizado");
 
         // Não deve existir índice único só sobre cep (CEP geral cobre vários logradouros).
-        long unicosSoCep = await ContarIndicesUnicosSomenteCepAsync();
+        long unicosSoCep = await _catalogo.ContarIndicesUnicosSomenteCepAsync();
         unicosSoCep.Should().Be(0, "cep isolado não pode ser único na tabela logradouro");
     }
 
@@ -91,7 +85,7 @@ public sealed class GeoSchemaDdlTests
     [InlineData("ix_distrito_faixa_cep_range")]
     public async Task IndicesRangeFaixaCep_ParciaisSobreCep(string indexName)
     {
-        string? indexDef = await ObterIndexDefAsync(indexName);
+        string? indexDef = await _catalogo.ObterIndexDefAsync(indexName);
 
         indexDef.Should().NotBeNull($"o índice de range {indexName} deve existir (caminho frio do lookup, #704)");
         indexDef!.Should().Contain("cep_inicial", "o range parte de cep_inicial (predicado cep_inicial <= @cep)");
@@ -106,7 +100,7 @@ public sealed class GeoSchemaDdlTests
     [Fact(DisplayName = "Execução: índice da última concluída é B-tree sobre (status, concluido_em DESC)")]
     public async Task IndiceDaUltimaExecucaoConcluida_EBtreeSobreStatusEConclusaoDescendente()
     {
-        string? indexDef = await ObterIndexDefAsync("ix_geo_importacao_execucao_status_concluido_em");
+        string? indexDef = await _catalogo.ObterIndexDefAsync("ix_geo_importacao_execucao_status_concluido_em");
 
         indexDef.Should().NotBeNull("a repetição do pacote consulta a última execução concluída");
         indexDef!.Should().Contain("USING btree");
@@ -116,7 +110,7 @@ public sealed class GeoSchemaDdlTests
     [Fact(DisplayName = "Execução: índice único parcial barra duas cargas em andamento (status = 0)")]
     public async Task IndiceDeExecucaoEmAndamento_EUnicoParcial()
     {
-        string? indexDef = await ObterIndexDefAsync("ux_geo_importacao_execucao_em_andamento");
+        string? indexDef = await _catalogo.ObterIndexDefAsync("ux_geo_importacao_execucao_em_andamento");
 
         indexDef.Should().NotBeNull();
         indexDef!.Should().Contain("CREATE UNIQUE INDEX");
@@ -128,31 +122,11 @@ public sealed class GeoSchemaDdlTests
     [InlineData("pacote_tamanho_em_bytes", "bigint")]
     public async Task ColunasDoPacoteRecebido_AceitamNulo(string coluna, string tipo)
     {
-        await using GeoDbContext context = _fixture.CreateDbContext();
-        DbConnection connection = context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
+        ColunaDoEsquema? informacao = await _catalogo.ObterColunaAsync("geo_importacao_execucao", coluna);
 
-        await using DbCommand command = connection.CreateCommand();
-        command.CommandText =
-            """
-            SELECT data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'geo_importacao_execucao'
-              AND column_name = @coluna;
-            """;
-        DbParameter parametro = command.CreateParameter();
-        parametro.ParameterName = "coluna";
-        parametro.Value = coluna;
-        command.Parameters.Add(parametro);
-
-        await using DbDataReader reader = await command.ExecuteReaderAsync();
-        (await reader.ReadAsync()).Should().BeTrue($"a coluna {coluna} deve existir");
-        reader.GetString(0).Should().Be(tipo);
-        reader.GetString(1).Should().Be("YES");
+        informacao.Should().NotBeNull($"a coluna {coluna} deve existir");
+        informacao!.Tipo.Should().Be(tipo);
+        informacao.AceitaNulo.Should().Be("YES");
     }
 
     [Theory(DisplayName = "#700: coluna nome_ordenacao é gerada por nome_normalizado com fallback em nome")]
@@ -160,9 +134,11 @@ public sealed class GeoSchemaDdlTests
     [InlineData("cidade")]
     public async Task ColunaOrdenacaoAlfabetica_GeradaComFallbackDeNome(string tabela)
     {
-        (string isGenerated, string expression) = await ObterColunaGeradaAsync(tabela, "nome_ordenacao");
+        ColunaDoEsquema? informacao = await _catalogo.ObterColunaAsync(tabela, "nome_ordenacao");
 
-        isGenerated.Should().Be("ALWAYS", "nome_ordenacao deve ser uma coluna gerada pelo banco");
+        informacao.Should().NotBeNull($"a coluna {tabela}.nome_ordenacao deve existir");
+        informacao!.Geracao.Should().Be("ALWAYS", "nome_ordenacao deve ser uma coluna gerada pelo banco");
+        string expression = informacao.Expressao;
         expression.Should().Contain("nome_normalizado");
         expression.Should().Contain("nome");
         expression.Should().Contain("translate", "o fallback do nome público remove acentos como o ETL");
@@ -174,7 +150,7 @@ public sealed class GeoSchemaDdlTests
     [InlineData("ix_cidade_nome_ordenacao", "cidade")]
     public async Task IndiceOrdenacaoAlfabetica_SobreNomeOrdenacao(string indexName, string tabela)
     {
-        string? indexDef = await ObterIndexDefAsync(indexName);
+        string? indexDef = await _catalogo.ObterIndexDefAsync(indexName);
 
         indexDef.Should().NotBeNull($"o índice de ordenação {indexName} deve existir (#700/ADR-0094)");
         indexDef!.Should().Contain($"ON public.{tabela}");
@@ -187,90 +163,8 @@ public sealed class GeoSchemaDdlTests
     [Fact(DisplayName = "extensão pg_trgm está instalada (sustenta o índice trigram)")]
     public async Task ExtensaoPgTrgm_Instalada()
     {
-        await using GeoDbContext context = _fixture.CreateDbContext();
-        DbConnection connection = context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
-
-        await using DbCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM pg_extension WHERE extname = 'pg_trgm';";
-        long presentes = Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+        long presentes = await _catalogo.ContarExtensaoPgTrgmAsync();
 
         presentes.Should().Be(1, "a migration deve criar a extensão pg_trgm");
-    }
-
-    private async Task<string?> ObterIndexDefAsync(string indexName)
-    {
-        await using GeoDbContext context = _fixture.CreateDbContext();
-        DbConnection connection = context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
-
-        await using DbCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT indexdef FROM pg_indexes WHERE indexname = @nome;";
-        DbParameter parametro = command.CreateParameter();
-        parametro.ParameterName = "nome";
-        parametro.Value = indexName;
-        command.Parameters.Add(parametro);
-
-        object? result = await command.ExecuteScalarAsync();
-        return result as string;
-    }
-
-    private async Task<(string IsGenerated, string Expression)> ObterColunaGeradaAsync(string tabela, string coluna)
-    {
-        await using GeoDbContext context = _fixture.CreateDbContext();
-        DbConnection connection = context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
-
-        await using DbCommand command = connection.CreateCommand();
-        command.CommandText =
-            """
-            SELECT is_generated, generation_expression
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = @tabela
-              AND column_name = @coluna;
-            """;
-        DbParameter tabelaParam = command.CreateParameter();
-        tabelaParam.ParameterName = "tabela";
-        tabelaParam.Value = tabela;
-        command.Parameters.Add(tabelaParam);
-
-        DbParameter colunaParam = command.CreateParameter();
-        colunaParam.ParameterName = "coluna";
-        colunaParam.Value = coluna;
-        command.Parameters.Add(colunaParam);
-
-        await using DbDataReader reader = await command.ExecuteReaderAsync();
-        bool found = await reader.ReadAsync();
-        found.Should().BeTrue($"a coluna {tabela}.{coluna} deve existir");
-
-        return (reader.GetString(0), reader.GetString(1));
-    }
-
-    private async Task<long> ContarIndicesUnicosSomenteCepAsync()
-    {
-        await using GeoDbContext context = _fixture.CreateDbContext();
-        DbConnection connection = context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
-
-        await using DbCommand command = connection.CreateCommand();
-        // Índice UNIQUE cujo conjunto de colunas é exatamente "(cep)" — a vírgula em
-        // "(cep, ..." de um índice composto não casa com "(cep)".
-        command.CommandText =
-            "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'logradouro' "
-            + "AND indexdef ILIKE '%UNIQUE%' AND indexdef ILIKE '%(cep)%';";
-        return Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 }

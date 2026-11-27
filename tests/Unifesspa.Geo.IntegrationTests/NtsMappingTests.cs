@@ -37,26 +37,31 @@ public sealed class NtsMappingTests
     [Fact(DisplayName = "Runtime (AddGeoInfrastructure) ativa NTS: paridade com o design-time")]
     public void Runtime_AtivaNts()
     {
-        IConfiguration configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
-            {
-                ["ConnectionStrings:GeoDb"] = "Host=stub;Database=stub;Username=u;Password=p",
-            })
-            .Build();
-
-        ServiceCollection services = new();
-        services.AddSingleton(configuration);
-        services.AddLogging();
-        // Interceptors transversais resolvem IUserContext scoped — stub satisfaz o DI.
-        services.AddScoped(_ => Substitute.For<IUserContext>());
-        services.AddGeoInfrastructure();
-
-        using ServiceProvider provider = services.BuildServiceProvider();
+        using ServiceProvider provider = ServicosDaInfraestruturaDoGeo().BuildServiceProvider();
         using IServiceScope scope = provider.CreateScope();
         GeoDbContext context = scope.ServiceProvider.GetRequiredService<GeoDbContext>();
 
         TipoColunaDeCoordenada(context).Should().Be(TipoColunaGeografia);
     }
+
+    private static ServiceCollection ServicosDaInfraestruturaDoGeo()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(ConfiguracaoComConexaoDeMentira());
+        services.AddLogging();
+        // Interceptors transversais resolvem IUserContext scoped — stub satisfaz o DI.
+        services.AddScoped(_ => Substitute.For<IUserContext>());
+        services.AddGeoInfrastructure();
+        return services;
+    }
+
+    private static IConfiguration ConfiguracaoComConexaoDeMentira() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["ConnectionStrings:GeoDb"] = "Host=stub;Database=stub;Username=u;Password=p",
+            })
+            .Build();
 
     private static string? TipoColunaDeCoordenada(GeoDbContext context)
     {
