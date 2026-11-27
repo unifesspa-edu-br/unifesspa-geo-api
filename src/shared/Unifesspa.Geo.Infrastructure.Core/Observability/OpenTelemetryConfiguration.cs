@@ -158,7 +158,7 @@ public static class OpenTelemetryConfiguration
     /// Extraído como <c>internal static</c> exatamente para tornar a regra de
     /// seleção testável sem precisar inspecionar o <c>TracerProvider</c> via
     /// reflection — <c>InternalsVisibleTo</c> em <c>Infrastructure.Core.csproj</c>
-    /// expõe esta API para <c>Unifesspa.Geo.Infrastructure.Core.UnitTests</c>.
+    /// expõe esta API para <c>Unifesspa.Geo.IntegrationTests</c>.
     /// </remarks>
     internal static Sampler SelecionarSampler(IHostEnvironment environment)
     {
