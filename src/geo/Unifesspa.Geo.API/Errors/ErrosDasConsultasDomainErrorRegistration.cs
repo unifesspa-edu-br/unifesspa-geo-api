@@ -19,5 +19,6 @@ internal sealed class ErrosDasConsultasDomainErrorRegistration : IDomainErrorReg
             ErrosDasConsultas.LongitudeInvalida,
             ErrosDasConsultas.RaioInvalido,
             ErrosDasConsultas.LimiteInvalido,
+            ErrosDasConsultas.ImportacaoNaoEncontrada,
         }.Select(static definicao => new KeyValuePair<string, DomainErrorMapping>(definicao.Code, definicao));
 }

@@ -12,6 +12,8 @@ internal sealed class ServicoDeImportacaoFalso : IGeoImportacaoService
 
     public ImportacaoGeoDto? Execucao { get; set; }
 
+    public int ChamadasDeIniciar { get; private set; }
+
     public Stream? CorpoRecebido { get; private set; }
 
     public string? DisparadoPor { get; private set; }
@@ -21,6 +23,7 @@ internal sealed class ServicoDeImportacaoFalso : IGeoImportacaoService
         string disparadoPor,
         CancellationToken cancellationToken)
     {
+        ChamadasDeIniciar++;
         CorpoRecebido = corpo;
         DisparadoPor = disparadoPor;
         return Task.FromResult(ResultadoDoEnvio);

@@ -50,6 +50,9 @@ internal static class ErrosDasConsultas
     public static readonly DomainErrorMapping LimiteInvalido = new(
         StatusCodes.Status400BadRequest, "uniplus.geo.proximidade.limite_invalido", "Limite de resultados inválido");
 
+    public static readonly DomainErrorMapping ImportacaoNaoEncontrada = new(
+        StatusCodes.Status404NotFound, "uniplus.geo.importacao.nao_encontrada", "Importação não encontrada");
+
     public static DomainError ErroCepFormatoInvalido() => new(
         CepFormatoInvalido.Code, "O CEP deve ter exatamente 8 dígitos (ex.: 01001000 ou 01001-000).");
 
@@ -88,4 +91,7 @@ internal static class ErrosDasConsultas
 
     public static DomainError ErroLimiteInvalido() => new(
         LimiteInvalido.Code, "O parâmetro 'limit' deve ser maior que 0.");
+
+    public static DomainError ErroImportacaoNaoEncontrada() => new(
+        ImportacaoNaoEncontrada.Code, "Não há importação cadastrada para o identificador informado.");
 }

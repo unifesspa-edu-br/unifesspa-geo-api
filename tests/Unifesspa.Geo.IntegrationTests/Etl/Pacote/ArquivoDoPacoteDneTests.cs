@@ -195,6 +195,22 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         (await recebimento.Should().ThrowAsync<IOException>()).Which.Should().NotBeOfType<DirectoryNotFoundException>();
     }
 
+    [Theory(DisplayName = "Pacote com versão fora de AAAAMM no conteúdo é recusado como pacote inválido, antes de a versão chegar à execução")]
+    [InlineData("202600")]
+    [InlineData("202613")]
+    [InlineData("20261")]
+    [InlineData("abcdef")]
+    public async Task VersaoForaDeAaaamm_EhRecusadaComoPacoteInvalido(string versao)
+    {
+        byte[] zip = MontarZip(EntradasDoPacote(versao));
+        Guid execucao = Guid.NewGuid();
+
+        Result<PacoteDneRecebido> resultado = await ReceberAsync(zip, execucao, zip.Length);
+
+        resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.PacoteInvalido);
+        File.Exists(Path.Combine(_diretorio, execucao.ToString("N"))).Should().BeFalse();
+    }
+
     [Fact(DisplayName = "Cancelamento durante a gravação apaga o arquivo")]
     public async Task CancelamentoDuranteAGravacao_ApagaOArquivo()
     {

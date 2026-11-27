@@ -16,7 +16,7 @@ public static class GeoImportacaoErrorCodes
     /// <summary>Já existe uma carga em andamento — uma execução por vez (concorrência → 409).</summary>
     public const string ImportacaoEmAndamento = "GeoImportacao.ImportacaoEmAndamento";
 
-    /// <summary>A carga foi registrada mas não pôde ser enfileirada (serviço em desligamento → 503).</summary>
+    /// <summary>A carga foi registrada mas não pôde ser enfileirada (serviço sendo encerrado → 503).</summary>
     public const string NaoEnfileirada = "GeoImportacao.NaoEnfileirada";
 
     /// <summary>Versão anterior à última já aplicada — aplicar rebaixaria os dados (→ 409).</summary>

@@ -292,7 +292,7 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
             LogNaoEnfileirada(_logger, execucao.Id, DiagnosticoDeExcecaoSanitizado.Descrever(ex));
             return Result<EnvioDoPacoteRegistrado>.Failure(new DomainError(
                 GeoImportacaoErrorCodes.NaoEnfileirada,
-                "Não foi possível enfileirar a importação (serviço em desligamento)."));
+                "Não foi possível colocar a carga na fila porque o serviço está sendo encerrado."));
         }
 
         LogDisparada(_logger, execucao.Id, execucao.VersaoDataset);

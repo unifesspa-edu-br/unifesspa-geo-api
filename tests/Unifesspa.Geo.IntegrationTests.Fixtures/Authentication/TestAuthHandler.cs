@@ -27,6 +27,9 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
     public const string CpfHeader = "X-Test-Cpf";
     public const string NomeSocialHeader = "X-Test-Nome-Social";
 
+    /// <summary>Quando presente, o token de teste sai sem a claim de identificação (subject).</summary>
+    public const string SemSubjectHeader = "X-Test-Sem-Subject";
+
     public TestAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
@@ -51,10 +54,14 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
         string[] roles = GetHeaderValues(RolesHeader);
         List<Claim> claims =
         [
-            new("sub", GetHeaderValue(UserIdHeader, "test-user-id")),
             new("name", GetHeaderValue(NameHeader, "Test User")),
             new("email", GetHeaderValue(EmailHeader, "test@unifesspa.edu.br")),
         ];
+
+        if (GetOptionalHeaderValue(SemSubjectHeader) is null)
+        {
+            claims.Add(new Claim("sub", GetHeaderValue(UserIdHeader, "test-user-id")));
+        }
 
         string? cpf = GetOptionalHeaderValue(CpfHeader);
         if (cpf is not null)

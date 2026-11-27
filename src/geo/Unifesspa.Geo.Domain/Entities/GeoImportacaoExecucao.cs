@@ -72,7 +72,7 @@ public sealed class GeoImportacaoExecucao : EntityBase
         {
             return Result<GeoImportacaoExecucao>.Failure(new DomainError(
                 GeoImportacaoErrorCodes.VersaoFormatoInvalido,
-                "Versão do dataset deve estar no formato AAAAMM (6 dígitos, mês 01–12)."));
+                "A versão da base deve estar no formato AAAAMM (6 dígitos, mês 01–12)."));
         }
 
         if (!pacote.EhConsistente)

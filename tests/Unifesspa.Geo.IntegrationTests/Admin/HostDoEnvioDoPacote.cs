@@ -14,12 +14,13 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 using Unifesspa.Geo.IntegrationTests.Etl;
 using Unifesspa.Geo.IntegrationTests.Fixtures.Authentication;
 
-/// <summary>Quem envia o pacote: sem login, com login sem o papel administrativo, ou administrador.</summary>
+/// <summary>Quem envia o pacote: sem login, com login sem o papel administrativo, administrador, ou administrador com token sem identificação.</summary>
 internal enum PerfilDoEnvio
 {
     Anonimo,
     SemPapelAdministrativo,
     Administrador,
+    AdministradorSemSubject,
 }
 
 /// <summary>
@@ -99,7 +100,11 @@ internal sealed class HostDoEnvioDoPacote : IAsyncDisposable
         requisicao.Headers.Add("Authorization", $"{TestAuthHandler.AuthorizationScheme} {TestAuthHandler.TokenValue}");
         requisicao.Headers.Add(
             TestAuthHandler.RolesHeader,
-            perfil == PerfilDoEnvio.Administrador ? "plataforma-admin" : "operador-geo");
+            perfil == PerfilDoEnvio.SemPapelAdministrativo ? "operador-geo" : "plataforma-admin");
+        if (perfil == PerfilDoEnvio.AdministradorSemSubject)
+        {
+            requisicao.Headers.Add(TestAuthHandler.SemSubjectHeader, "true");
+        }
     }
 
     private void Configurar(IWebHostBuilder builder, long? limiteEmBytes, Action<IServiceCollection>? ajustarServicos)
