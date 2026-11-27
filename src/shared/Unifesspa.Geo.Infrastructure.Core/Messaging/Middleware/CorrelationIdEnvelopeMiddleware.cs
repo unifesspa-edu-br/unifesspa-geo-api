@@ -1,7 +1,6 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Messaging.Middleware;
 
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 
 using Serilog.Context;
 
@@ -54,7 +53,7 @@ using Wolverine.Attributes;
 /// (PG queue, gRPC). Drift entre o built-in e a property Serilog
 /// <c>CorrelationId</c> deixa de existir porque há apenas um valor canônico.</para>
 /// </remarks>
-public static partial class CorrelationIdEnvelopeMiddleware
+public static class CorrelationIdEnvelopeMiddleware
 {
     /// <summary>
     /// Nome do header propagado em envelopes Wolverine (outbox → PG queue, gRPC etc.).
@@ -92,7 +91,7 @@ public static partial class CorrelationIdEnvelopeMiddleware
     /// <list type="number">
     ///   <item><description><b>Header explícito</b> <c>uniplus.correlation-id</c> no envelope —
     ///   fluxo cross-host (transport via outbox): o produtor já gerou/validou e o consumer
-    ///   preserva identicamente. Validado contra <c>CorrelationIdMiddleware.FormatoValidoPattern</c>.</description></item>
+    ///   preserva identicamente. Validado contra a regra de <c>IdDeCorrelacao</c>.</description></item>
     ///   <item><description><b>Ambient via <see cref="ICorrelationIdAccessor"/></b> (AsyncLocal
     ///   populado pelo <see cref="CorrelationIdMiddleware"/> HTTP) — fluxo in-process:
     ///   controller chama <c>ICommandBus.Send</c>, Wolverine cria envelope local sem o header
@@ -119,17 +118,20 @@ public static partial class CorrelationIdEnvelopeMiddleware
 
         string correlationId = ObterOuGerarCorrelationId(envelope, accessor);
 
+        FixarNoEnvelope(envelope, correlationId);
+
+        return IdDeCorrelacao.AbrirEscopoDeLog(correlationId);
+    }
+
+    private static void FixarNoEnvelope(Envelope envelope, string correlationId)
+    {
         // Reescreve sempre — assim, mesmo quando o header chegou ausente ou inválido,
         // PropagateIncomingHeaderToOutgoing repassa o GUID gerado aqui para qualquer
         // cascading message saída do handler. Sem isso, traços que entram pela primeira
         // vez no sistema (ex.: HTTP → ICommandBus.Send → cascading) sairiam sem o header.
         envelope.Headers[HeaderName] = correlationId;
 
-        // Activity.Current pode ser null quando OTel não está wired (suites de teste
-        // HTTP-only com Observability:Enabled=false). O ?. mantém o middleware safe.
-        Activity.Current?.SetTag(ActivityTagName, correlationId);
-
-        return LogContext.PushProperty(LogContextProperty, correlationId);
+        IdDeCorrelacao.MarcarNoRastreamento(correlationId);
     }
 
     /// <summary>
@@ -149,41 +151,17 @@ public static partial class CorrelationIdEnvelopeMiddleware
         scope.Dispose();
     }
 
+    // Ordem: (1) header explícito do envelope, fonte canônica entre hosts (o produtor já
+    // gerou e validou); (2) valor ambiente do acessor, que cobre o fluxo em processo iniciado
+    // por HTTP — o envelope local nasce sem o header, mas o valor ambiente flui pelo await e
+    // evita um segundo GUID que quebraria o drill-down; (3) GUID novo, para handlers sem origem
+    // HTTP nem header (ex.: agendador interno, mensagem que perdeu o header).
     private static string ObterOuGerarCorrelationId(Envelope envelope, ICorrelationIdAccessor accessor)
     {
-        // 1. Header explícito no envelope é a fonte canônica para fluxos cross-host
-        //    (consumer recebendo da queue durável via outbox). O valor já foi gerado/validado
-        //    pelo produtor — preservamos identicamente.
-        if (envelope.Headers.TryGetValue(HeaderName, out string? valor)
-            && !string.IsNullOrEmpty(valor)
-            && FormatoValido().IsMatch(valor))
-        {
-            return valor;
-        }
+        envelope.Headers.TryGetValue(HeaderName, out string? doEnvelope);
 
-        // 2. Fallback ambient para fluxos in-process iniciados por HTTP: controller chama
-        //    ICommandBus.Send → Wolverine cria envelope local sem o header (WolverineCommandBus
-        //    delega ao InvokeAsync sem DeliveryOptions). O CorrelationIdMiddleware HTTP
-        //    populou o AsyncLocal do CorrelationIdAccessor antes do Send; preservamos esse
-        //    valor para que o handler emita logs no mesmo id que o request original.
-        //    Sem isto, geraríamos um segundo GUID e sobrescreveríamos o LogContext do HTTP,
-        //    quebrando o drill-down end-to-end.
-        string? ambient = accessor.CorrelationId;
-        if (!string.IsNullOrEmpty(ambient) && FormatoValido().IsMatch(ambient))
-        {
-            return ambient;
-        }
-
-        // 3. Último recurso: handler invocado sem origem HTTP nem header de mensageria
-        //    (ex.: scheduler interno, retry de mensagem que perdeu o header). Gera GUID
-        //    novo para que o handler tenha pelo menos um id estável durante sua execução.
-        return Guid.NewGuid().ToString("D");
+        return IdDeCorrelacao.SeValido(doEnvelope)
+            ?? IdDeCorrelacao.SeValido(accessor.CorrelationId)
+            ?? Guid.NewGuid().ToString("D");
     }
-
-    // Pattern consumido também por CorrelationIdMiddleware (HTTP) via
-    // CorrelationIdMiddleware.FormatoValidoPattern — single source of truth garante
-    // que ambos os boundaries (HTTP e mensageria) validem com a MESMA regra. Sem isto,
-    // refactor em um lado deixaria drift silencioso no wire format do uniplus.correlation-id.
-    [GeneratedRegex(CorrelationIdMiddleware.FormatoValidoPattern, RegexOptions.None, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex FormatoValido();
 }

@@ -48,8 +48,7 @@ public static class SerilogConfiguration
     /// reconhecido por regex log scrapers.</para>
     /// <para><strong>Visibilidade:</strong> <c>internal</c> deliberadamente — é detalhe
     /// de configuração interna; o assembly <c>Unifesspa.Geo.IntegrationTests</c>
-    /// recebe acesso via <c>InternalsVisibleTo</c> para sentinelas. Pattern consistente
-    /// com <see cref="Middleware.CorrelationIdMiddleware.FormatoValidoPattern"/>.</para>
+    /// recebe acesso via <c>InternalsVisibleTo</c> para sentinelas.</para>
     /// </remarks>
     internal const string ConsoleOutputTemplate =
         "[{Timestamp:HH:mm:ss} {Level}] {Message:lj} {Properties:j} TraceId={TraceId} SpanId={SpanId}{NewLine}{Exception}";
