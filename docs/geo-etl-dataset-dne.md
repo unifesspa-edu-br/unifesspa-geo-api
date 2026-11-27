@@ -98,8 +98,8 @@ A publicação é uma única transação. Falha, cancelamento, estouro de `Geo:E
 | `TamanhoMaximoDoPacote` | 128 MiB | Tamanho máximo do pacote enviado. |
 | `QuantidadeMaximaDeEntradasDoPacote` | 32 | Quantidade máxima de entradas do zip, contando a da pasta; aceita de 16 a 256, fora disso a aplicação não inicia. |
 | `DiretorioDoPacote` | `pacotes-dne` no diretório temporário do sistema | Onde o arquivo fica enquanto a carga não popula o esquema temporário (em implantação, o volume em memória do pod). |
-| `DuracaoMaximaDaCarga` | 1 hora | Prazo da carga; passado o prazo, ela é cancelada e desfeita. |
-| `TempoLimiteDosComandosDaCarga` | 30 minutos | Prazo de cada comando longo da carga. |
+| `DuracaoMaximaDaCarga` | 1 hora | Prazo da carga; passado o prazo, ela é cancelada e desfeita. Aceita mais que zero e até 49 dias (o limite do cancelamento da carga é de cerca de 49,7 dias); fora disso a aplicação não inicia. |
+| `TempoLimiteDosComandosDaCarga` | 30 minutos | Prazo de cada comando longo da carga. Aceita mais que zero e até 2147483 segundos (cerca de 24,8 dias, limite do driver do banco), fora disso a aplicação não inicia. |
 | `IntervaloDoSinalDeVidaDaTrava` | 30 segundos | Intervalo do sinal de vida da conexão que segura a trava da carga; aceita de 1 segundo a 5 minutos, fora disso a aplicação não inicia. |
 | `ProcessoEmSegundoPlanoHabilitado` | `true` | Liga o serviço que executa as cargas; desligado, o envio é aceito e nada o consome. Só desligar em teste. |
 
