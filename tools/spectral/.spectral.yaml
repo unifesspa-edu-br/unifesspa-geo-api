@@ -2,7 +2,7 @@
 #
 # Fundamentos:
 # - ADR-0022 (umbrella V1): pt-BR em strings user-facing, ProblemDetails RFC 9457,
-#   paginação cursor opaco, vendor MIME versioning, idempotência opt-in.
+#   paginação cursor opaco, vendor MIME versioning.
 # - ADR-0023: code regex `^uniplus\.<modulo>\.<codigo>$`.
 # - ADR-0025: body de coleção é array JSON puro.
 # - ADR-0026: cursor com TTL e Link header.
@@ -93,44 +93,3 @@ rules:
       function: pattern
       functionOptions:
         match: "^\\d{4}-\\d{2}-\\d{2}$"
-
-  # --- 5. Idempotency-Key required em POSTs marcados ------------------------
-  # JSONPath do Spectral não filtra confiavelmente por extensions x-* no
-  # `given` (jsonpath-plus desserializa keys com hyphen de forma inconsistente).
-  # Solução: aplicar a regra a TODA operação POST e usar JSON Schema
-  # condicional (if/then) — só valida parameters quando a operação tem
-  # x-uniplus-idempotent: true.
-  uniplus-idempotent-post-declares-header:
-    description: Operação com x-uniplus-idempotent declara header Idempotency-Key obrigatório
-    message: "Operação com x-uniplus-idempotent precisa declarar header Idempotency-Key required (ADR-0027)"
-    severity: error
-    # [RequiresIdempotencyKey] é aplicável a qualquer verb com side-effects
-    # (POST, PUT, PATCH, DELETE). Limitar a `post` deixaria PATCH/DELETE
-    # idempotentes sem cobertura de lint.
-    given: $.paths[*][post,put,patch,delete]
-    then:
-      function: schema
-      functionOptions:
-        schema:
-          if:
-            type: object
-            required: ["x-uniplus-idempotent"]
-            properties:
-              x-uniplus-idempotent:
-                const: true
-          then:
-            type: object
-            required: [parameters]
-            properties:
-              parameters:
-                type: array
-                contains:
-                  type: object
-                  required: [name, in, required]
-                  properties:
-                    name:
-                      const: Idempotency-Key
-                    in:
-                      const: header
-                    required:
-                      const: true

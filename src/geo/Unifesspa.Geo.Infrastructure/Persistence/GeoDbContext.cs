@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Application.Abstractions.Interfaces;
 using Unifesspa.Geo.Domain.Entities;
-using Unifesspa.Geo.Infrastructure.Core.Idempotency;
 using Unifesspa.Geo.Infrastructure.Core.Persistence;
 
 /// <summary>
@@ -18,8 +17,7 @@ using Unifesspa.Geo.Infrastructure.Core.Persistence;
 /// Hospeda a hierarquia de localidade DNE+IBGE completa (<see cref="Pais"/> →
 /// <see cref="Estado"/> → <see cref="Cidade"/> → {<see cref="Distrito"/>,
 /// <see cref="Bairro"/>} → <see cref="Logradouro"/>, com satélites de indicadores,
-/// faixas de CEP, complementos e CEPs de grande usuário) e o <c>idempotency_cache</c>
-/// (entries cifradas at-rest). A entidade-sonda transitória da fundação foi
+/// faixas de CEP, complementos e CEPs de grande usuário) A entidade-sonda transitória da fundação foi
 /// substituída pelas entidades reais.
 /// </remarks>
 public sealed class GeoDbContext : DbContext, IUnitOfWork
@@ -77,12 +75,6 @@ public sealed class GeoDbContext : DbContext, IUnitOfWork
     /// <summary>Trilha de execuções do ETL DNE — versão, quem disparou, status e relatório (Story #674).</summary>
     public DbSet<GeoImportacaoExecucao> ImportacaoExecucoes => Set<GeoImportacaoExecucao>();
 
-    /// <summary>
-    /// Cache de Idempotency-Key (ADR-0027). Vive no mesmo banco do módulo
-    /// para permitir gravação adjacente no outbox.
-    /// </summary>
-    public DbSet<IdempotencyEntry> IdempotencyEntries => Set<IdempotencyEntry>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -96,12 +88,10 @@ public sealed class GeoDbContext : DbContext, IUnitOfWork
         modelBuilder.HasPostgresExtension("pg_trgm");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GeoDbContext).Assembly);
-        // Configurações cross-cutting de Infrastructure.Core (idempotency_cache).
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(IdempotencyEntry).Assembly);
         // Convenção global de soft-delete: aplica `!IsDeleted` a todo tipo
         // ISoftDeletable. Nenhuma entidade do Geo é ISoftDeletable (ADR-0092),
         // então a convenção é no-op aqui — mantida por simetria com os demais
-        // módulos e para cobrir idempotency entry (que também não é soft-delete).
+        // módulos.
         modelBuilder.AplicarFiltroGlobalSoftDelete();
         base.OnModelCreating(modelBuilder);
     }

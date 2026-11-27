@@ -64,13 +64,10 @@ builder.Services.AddSingleton<IDomainErrorRegistration, GeoDomainErrorRegistrati
 builder.Services.AddSingleton<IDomainErrorRegistration>(new ErrosDasConsultasDomainErrorRegistration());
 builder.Services.AddDomainErrorMapper(builder.Configuration);
 
-// Criptografia (entries de idempotency at-rest) + cursor pagination (ADR-0026/0031).
+// Criptografia + cursor pagination (ADR-0026/0031).
 // AddCursorPagination atende as listagens paginadas de localidades.
 builder.Services.AddGeoEncryption(builder.Configuration);
 builder.Services.AddCursorPagination(builder.Configuration);
-// Idempotency-Key (ADR-0027) — store EF adjacente ao GeoDbContext, filter global
-// que se ativa apenas em endpoints com [RequiresIdempotencyKey].
-builder.Services.AddIdempotency<GeoDbContext>(builder.Configuration);
 
 builder.Services.AddOidcAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddCorrelationIdAccessor();

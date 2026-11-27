@@ -23,9 +23,6 @@ public static class CorsConfiguration
     // pena de browsers rejeitarem o preflight (curl/server-to-server não sofre).
     //
     // - Content-Type, Authorization, Accept, X-Requested-With: básicos REST.
-    // - Idempotency-Key: header obrigatório em POSTs com [RequiresIdempotencyKey]
-    //   (ADR-0027). Sem este aqui, toda criação via SPA falha "Não foi possível
-    //   conectar ao servidor" antes da request real sair.
     // - If-Match, If-None-Match: condicionais HTTP (RFC 9110); preventivos para
     //   ETags do Contrato V1 (ADR-0022).
     private static readonly string[] DefaultHeaders =
@@ -34,7 +31,6 @@ public static class CorsConfiguration
         "Authorization",
         "Accept",
         "X-Requested-With",
-        "Idempotency-Key",
         "If-Match",
         "If-None-Match",
     ];

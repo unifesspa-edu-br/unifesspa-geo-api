@@ -12,7 +12,7 @@ using Microsoft.Extensions.Hosting;
 /// erros do construtor (JWT do ServiceAccount ausente/vazio,
 /// <c>KubernetesJwtPath</c> em branco, mutex de auth method) só estourariam no
 /// primeiro <c>GetRequiredService&lt;IGeoEncryptionService&gt;()</c>. Em
-/// produção, hosted services existentes (Idempotency-Key store, cursor
+/// produção, hosted services existentes (cursor
 /// pagination) tipicamente forçam a resolução cedo o suficiente para o pod
 /// entrar em <c>CrashLoopBackOff</c>, mas isso não é garantido por contrato.
 /// Para apps que só tocam cifragem em request, o erro voltaria ao sintoma

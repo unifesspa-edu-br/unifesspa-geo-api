@@ -163,7 +163,7 @@ public static class GeoDbContextOptionsExtensions
         // Relógio canônico (ADR de convenção de TimeProvider): os interceptors
         // dependem dele para CreatedAt/UpdatedAt/DeletedAt. TryAdd preserva
         // overrides de teste (TimeProvider fixo) e é idempotente com os demais
-        // pontos que já registram TimeProvider.System (paginação, idempotência).
+        // pontos que já registram TimeProvider.System (paginação).
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<SoftDeleteInterceptor>();
