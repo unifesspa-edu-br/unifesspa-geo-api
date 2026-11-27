@@ -13,7 +13,7 @@ public static class ProfileEndpointsExtensions
 {
     /// <summary>
     /// Maps the shared <c>/api/profile</c> endpoints (currently the authenticated-user
-    /// profile <c>/me</c>, exposing CPF and NomeSocial).
+    /// profile <c>/me</c>).
     /// </summary>
     /// <param name="endpoints">The endpoint route builder.</param>
     /// <returns>The same builder for fluent chaining.</returns>
