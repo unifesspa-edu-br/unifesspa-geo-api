@@ -47,9 +47,7 @@ internal sealed class LinhasDoArquivoSql
     /// <summary>Próxima linha sem o fim de linha, ou <see langword="null"/> no fim do arquivo.</summary>
     public async ValueTask<string?> LerLinhaAsync(CancellationToken cancellationToken)
     {
-        _tamanhoDaLinha = 0;
-        _terminouComQuebra = false;
-        NumeroDaLinha++;
+        ComecarLinha();
         while (true)
         {
             if (_posicao == _disponivel && !await PreencherAsync(cancellationToken).ConfigureAwait(false))
@@ -62,6 +60,13 @@ internal sealed class LinhasDoArquivoSql
                 return Concluir();
             }
         }
+    }
+
+    private void ComecarLinha()
+    {
+        _tamanhoDaLinha = 0;
+        _terminouComQuebra = false;
+        NumeroDaLinha++;
     }
 
     public ErroDeLeituraDoPacoteDneException Recusa(string motivo) => Recusa(motivo, LinhaDoComando ?? NumeroDaLinha);
@@ -111,12 +116,7 @@ internal sealed class LinhasDoArquivoSql
 
     private string Concluir()
     {
-        ReadOnlySpan<byte> bytes = _linha.AsSpan(0, _tamanhoDaLinha);
-        if (NumeroDaLinha == 1 && bytes.StartsWith(Encoding.UTF8.Preamble))
-        {
-            bytes = bytes[Encoding.UTF8.Preamble.Length..];
-        }
-
+        ReadOnlySpan<byte> bytes = SemMarcaDeOrdemDosBytes(_linha.AsSpan(0, _tamanhoDaLinha));
         bool retorno = bytes.EndsWith("\r"u8);
         bytes = retorno ? bytes[..^1] : bytes;
         FimDeLinha = !_terminouComQuebra ? string.Empty : retorno ? "\r\n" : "\n";
@@ -127,6 +127,12 @@ internal sealed class LinhasDoArquivoSql
 
         return Decodificar(bytes);
     }
+
+    // A marca de ordem dos bytes só vale no início do arquivo, na primeira linha.
+    private ReadOnlySpan<byte> SemMarcaDeOrdemDosBytes(ReadOnlySpan<byte> bytes) =>
+        NumeroDaLinha == 1 && bytes.StartsWith(Encoding.UTF8.Preamble)
+            ? bytes[Encoding.UTF8.Preamble.Length..]
+            : bytes;
 
     private string Decodificar(ReadOnlySpan<byte> bytes)
     {

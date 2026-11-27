@@ -21,39 +21,49 @@ internal static class ValoresDoInsert
     {
         List<object?> lidos = [];
         int posicao = 0;
-        bool fim;
+        PassoDaTupla passo;
         do
         {
-            if (!TentarLerItem(tupla, ref posicao, lidos, out fim))
-            {
-                valores = [];
-                return false;
-            }
+            passo = LerItem(tupla, ref posicao, lidos);
         }
-        while (!fim);
+        while (passo == PassoDaTupla.Continua);
 
-        valores = [.. lidos];
-        return true;
+        bool terminou = passo == PassoDaTupla.Terminou;
+        valores = terminou ? [.. lidos] : [];
+        return terminou;
     }
 
-    private static bool TentarLerItem(ReadOnlySpan<char> tupla, ref int posicao, List<object?> lidos, out bool fim)
+    private static PassoDaTupla LerItem(ReadOnlySpan<char> tupla, ref int posicao, List<object?> lidos)
     {
-        fim = false;
         posicao = PularEspacos(tupla, posicao);
         if (!TentarLerValor(tupla, ref posicao, out object? valor))
         {
-            return false;
+            return PassoDaTupla.Invalida;
         }
 
         lidos.Add(valor);
         posicao = PularEspacos(tupla, posicao);
-        fim = posicao == tupla.Length;
-        return fim || tupla[posicao++] == ',';
+        if (posicao == tupla.Length)
+        {
+            return PassoDaTupla.Terminou;
+        }
+
+        return tupla[posicao++] == ',' ? PassoDaTupla.Continua : PassoDaTupla.Invalida;
     }
 
     private static int PularEspacos(ReadOnlySpan<char> tupla, int posicao)
     {
         while (posicao < tupla.Length && tupla[posicao] is ' ' or '\t')
+        {
+            posicao++;
+        }
+
+        return posicao;
+    }
+
+    private static int PularDigitos(ReadOnlySpan<char> tupla, int posicao)
+    {
+        while (posicao < tupla.Length && tupla[posicao] is >= '0' and <= '9')
         {
             posicao++;
         }
@@ -98,11 +108,7 @@ internal static class ValoresDoInsert
             posicao++;
         }
 
-        while (posicao < tupla.Length && tupla[posicao] is >= '0' and <= '9')
-        {
-            posicao++;
-        }
-
+        posicao = PularDigitos(tupla, posicao);
         bool valido = int.TryParse(
             tupla[inicio..posicao], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int inteiro);
         valor = valido ? inteiro : null;
@@ -143,6 +149,13 @@ internal static class ValoresDoInsert
         texto.Append(atual);
         posicao += atual == '\'' ? 1 : 0;
         return PassoDoTexto.Continua;
+    }
+
+    private enum PassoDaTupla
+    {
+        Continua,
+        Terminou,
+        Invalida,
     }
 
     private enum PassoDoTexto

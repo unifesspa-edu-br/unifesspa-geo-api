@@ -120,15 +120,11 @@ internal sealed partial class EsquemaDeCargaDne : IFonteDaExecucaoDne
         {
             while (await leitor.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                string nome = leitor.GetString(0);
-                if (ComandosDoEsquemaDeCarga.EhNomeValido(nome))
-                {
-                    nomes.Add(nome);
-                }
+                nomes.Add(leitor.GetString(0));
             }
         }
 
-        return nomes;
+        return [.. nomes.Where(ComandosDoEsquemaDeCarga.EhNomeValido)];
     }
 
     private async Task DescartarEsquemaAsync(string esquema, CancellationToken cancellationToken)

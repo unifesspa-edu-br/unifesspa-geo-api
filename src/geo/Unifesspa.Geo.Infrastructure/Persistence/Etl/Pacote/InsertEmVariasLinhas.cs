@@ -77,17 +77,21 @@ internal sealed class InsertEmVariasLinhas
         ArgumentNullException.ThrowIfNull(fimDeLinha);
         long acrescimo = _fimDeLinhaPendente.Length + Encoding.UTF8.GetByteCount(linha);
         string? motivo = ConferirLimites(acrescimo);
-        if (motivo is not null)
+        if (motivo is null)
         {
-            return motivo;
+            Acrescentar(linha, fimDeLinha, acrescimo);
         }
 
+        return motivo;
+    }
+
+    private void Acrescentar(string linha, string fimDeLinha, long acrescimo)
+    {
         _texto.Append(_fimDeLinhaPendente).Append(linha);
         _fimDeLinhaPendente = fimDeLinha;
         _aspas += ContarAspas(linha);
         Bytes += acrescimo;
         Linhas++;
-        return null;
     }
 
     private string? ConferirLimites(long acrescimo)

@@ -63,24 +63,8 @@ internal static class FimDoDiretorioDoZip
 
     private static DomainError? ConferirRegistro(RegistroDeFim registro, int quantidadeMaximaDeEntradas)
     {
-        if (registro.UsaZip64)
-        {
-            return ErrosDoPacoteDne.PacoteInvalido("O pacote usa o formato zip64, que não é aceito.");
-        }
-
-        if (registro.Total > quantidadeMaximaDeEntradas)
-        {
-            return ErrosDoPacoteDne.PacoteInvalido($"O pacote tem mais de {quantidadeMaximaDeEntradas} entradas.");
-        }
-
-        if (registro.Tamanho > LimitesDoPacoteDne.BytesNoDiretorioCentralDoZip)
-        {
-            return ErrosDoPacoteDne.PacoteInvalido("O diretório do zip passa de 64 KiB.");
-        }
-
-        return registro.Deslocamento + (long)registro.Tamanho == registro.Posicao
-            ? null
-            : ErrosDoPacoteDne.PacoteInvalido("O diretório do zip é inconsistente com o tamanho do arquivo.");
+        string? motivo = registro.MotivoDaRecusa(quantidadeMaximaDeEntradas);
+        return motivo is null ? null : ErrosDoPacoteDne.PacoteInvalido(motivo);
     }
 
     [StructLayout(LayoutKind.Auto)]
@@ -88,6 +72,15 @@ internal static class FimDoDiretorioDoZip
     {
         public bool UsaZip64 =>
             Total == MarcadorDeZip64 || Tamanho == MarcadorDeZip64Grande || Deslocamento == MarcadorDeZip64Grande;
+
+        public string? MotivoDaRecusa(int quantidadeMaximaDeEntradas) => this switch
+        {
+            _ when UsaZip64 => "O pacote usa o formato zip64, que não é aceito.",
+            _ when Total > quantidadeMaximaDeEntradas => $"O pacote tem mais de {quantidadeMaximaDeEntradas} entradas.",
+            _ when Tamanho > LimitesDoPacoteDne.BytesNoDiretorioCentralDoZip => "O diretório do zip passa de 64 KiB.",
+            _ when Deslocamento + (long)Tamanho != Posicao => "O diretório do zip é inconsistente com o tamanho do arquivo.",
+            _ => null,
+        };
 
         public static RegistroDeFim Ler(ReadOnlySpan<byte> registro, long posicao) =>
             new(
