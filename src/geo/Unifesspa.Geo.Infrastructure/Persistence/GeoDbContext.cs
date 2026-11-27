@@ -16,8 +16,7 @@ using Unifesspa.Geo.Domain.Entities;
 /// Hospeda a hierarquia de localidade DNE+IBGE completa (<see cref="Pais"/> →
 /// <see cref="Estado"/> → <see cref="Cidade"/> → {<see cref="Distrito"/>,
 /// <see cref="Bairro"/>} → <see cref="Logradouro"/>, com satélites de indicadores,
-/// faixas de CEP, complementos e CEPs de grande usuário) A entidade-sonda transitória da fundação foi
-/// substituída pelas entidades reais.
+/// faixas de CEP, complementos e CEPs de grande usuário).
 /// </remarks>
 public sealed class GeoDbContext : DbContext, IUnitOfWork
 {
@@ -71,19 +70,18 @@ public sealed class GeoDbContext : DbContext, IUnitOfWork
     /// <summary>CEPs gerais oficiais de cidade ou distrito (logradouro sem nome na DNE).</summary>
     public DbSet<CepGeral> CepGerais => Set<CepGeral>();
 
-    /// <summary>Trilha de execuções do ETL DNE — versão, quem disparou, status e relatório (Story #674).</summary>
+    /// <summary>Trilha de execuções do ETL DNE — versão, quem disparou, status e relatório.</summary>
     public DbSet<GeoImportacaoExecucao> ImportacaoExecucoes => Set<GeoImportacaoExecucao>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
 
-        // pg_trgm sustenta os índices trigram (gin_trgm_ops) de busca acento-
-        // insensível em nome_normalizado (Cidade/Logradouro, F4). Extensão trusted
-        // (criável por usuário não-superusuário); a migration emite
-        // CREATE EXTENSION IF NOT EXISTS — no-op em produção (init-db já a cria),
-        // criada de fato no Postgres efêmero dos testes. postgis é adicionada
-        // automaticamente pelo plugin NetTopologySuite (ADR-0091).
+        // pg_trgm sustenta os índices trigram (gin_trgm_ops) de busca sem diferenciar acento
+        // em nome_normalizado (Cidade/Logradouro). Pode ser criada por usuário sem privilégio
+        // de superusuário; a migration emite CREATE EXTENSION IF NOT EXISTS — em produção o
+        // init-db já a cria e nada muda; nos testes ela é criada no Postgres efêmero. postgis
+        // é adicionada automaticamente pelo plugin NetTopologySuite (ADR-0091).
         modelBuilder.HasPostgresExtension("pg_trgm");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GeoDbContext).Assembly);
