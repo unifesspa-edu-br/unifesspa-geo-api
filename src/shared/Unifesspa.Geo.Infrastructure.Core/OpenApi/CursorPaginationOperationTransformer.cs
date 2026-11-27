@@ -1,10 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Core.OpenApi;
 
-using System.Reflection;
 using System.Text.Json.Nodes;
 
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
@@ -47,7 +44,7 @@ public sealed class CursorPaginationOperationTransformer : IOpenApiOperationTran
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (ResolveCursorAttribute(context) is null)
+        if (FromCursorAttribute.DaAcao(context.Description.ActionDescriptor) is null)
             return Task.CompletedTask;
 
         RemoveLeakedPageRequestParameters(operation);
@@ -56,32 +53,6 @@ public sealed class CursorPaginationOperationTransformer : IOpenApiOperationTran
         MarkAsPaginated(operation);
 
         return Task.CompletedTask;
-    }
-
-    private static FromCursorAttribute? ResolveCursorAttribute(OpenApiOperationTransformerContext context)
-    {
-        // Espelha a estratégia do PageRequestModelBinder.ResolveAttribute:
-        // ControllerParameterDescriptor.ParameterInfo é o caminho confiável
-        // para chegar ao FromCursorAttribute (BindingInfo.BinderType só guarda
-        // o tipo do binder, não o atributo em si).
-        if (context.Description.ActionDescriptor is not ControllerActionDescriptor descriptor)
-            return null;
-
-        foreach (ParameterDescriptor parameter in descriptor.Parameters)
-        {
-            if (parameter is not ControllerParameterDescriptor controllerParam)
-                continue;
-
-            if (controllerParam.ParameterType != typeof(PageRequest))
-                continue;
-
-            FromCursorAttribute? attribute = controllerParam.ParameterInfo
-                .GetCustomAttribute<FromCursorAttribute>();
-            if (attribute is not null)
-                return attribute;
-        }
-
-        return null;
     }
 
     private static void RemoveLeakedPageRequestParameters(OpenApiOperation operation)
