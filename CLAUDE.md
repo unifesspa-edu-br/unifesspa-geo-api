@@ -101,7 +101,7 @@ controller anexa **HATEOAS** (`IResourceLinksBuilder<T>`) e devolve.
   próprio banco do Geo e publica em uma única transação. Não há banco de preparação nem carga de
   dados na partida. O reference data é **isento de soft-delete**. Opções em `Geo:Etl`
   (`TamanhoMaximoDoPacote`, `QuantidadeMaximaDeEntradasDoPacote`, `DiretorioDoPacote`, `DuracaoMaximaDaCarga`, `TempoLimiteDosComandosDaCarga`,
-  `ProcessoEmSegundoPlanoHabilitado`). Detalhes em `docs/geo-etl-dataset-dne.md`.
+  `IntervaloDoSinalDeVidaDaTrava`, `ProcessoEmSegundoPlanoHabilitado`). Detalhes em `docs/geo-etl-dataset-dne.md`.
 - **Autenticação**: JWT Bearer/OIDC (Keycloak). Endpoints de leitura exigem JWT **do realm
   configurado** (sem role admin); escrita/admin (`/api/admin/geo`) exige a role `plataforma-admin`.
   `Auth:ValidateAudience` default `false`. Ver seção *Authentication* em `docs/development.md`.
