@@ -17,18 +17,6 @@ using Unifesspa.Geo.Infrastructure.Core.Errors;
 /// </summary>
 public static class AuthenticationProblemDetailsWriter
 {
-    /// <summary>
-    /// Code/title/detail canônicos do 401 emitido pela camada de autenticação.
-    /// </summary>
-    public const string UnauthorizedCode = "uniplus.auth.unauthorized";
-
-    /// <summary>
-    /// Code/title/detail canônicos do 403 emitido pela camada de autorização.
-    /// </summary>
-    public const string ForbiddenCode = "uniplus.auth.forbidden";
-
-    private const string UnauthorizedTitle = "Não autenticado";
-    private const string ForbiddenTitle = "Acesso negado";
     private const string UnauthorizedDetail =
         "Requisição requer autenticação válida. Inclua um token Bearer não expirado.";
     private const string ForbiddenDetail =
@@ -51,22 +39,18 @@ public static class AuthenticationProblemDetailsWriter
             httpContext.Response.Headers.Append(HeaderNames.WWWAuthenticate, "Bearer");
         }
 
-        return WriteAsync(httpContext, StatusCodes.Status401Unauthorized,
-            UnauthorizedCode, UnauthorizedTitle, UnauthorizedDetail);
+        return WriteAsync(httpContext, ErrosDaFronteiraHttp.NaoAutenticado, UnauthorizedDetail);
     }
 
     /// <summary>
     /// Escreve um body 403 problem+json no <paramref name="httpContext"/>.
     /// </summary>
     public static Task WriteForbiddenAsync(HttpContext httpContext) =>
-        WriteAsync(httpContext, StatusCodes.Status403Forbidden,
-            ForbiddenCode, ForbiddenTitle, ForbiddenDetail);
+        WriteAsync(httpContext, ErrosDaFronteiraHttp.AcessoNegado, ForbiddenDetail);
 
     private static async Task WriteAsync(
         HttpContext httpContext,
-        int statusCode,
-        string code,
-        string title,
+        DomainErrorMapping definicao,
         string detail)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
@@ -74,35 +58,11 @@ public static class AuthenticationProblemDetailsWriter
         if (httpContext.Response.HasStarted)
             return;
 
-        httpContext.Response.StatusCode = statusCode;
+        httpContext.Response.StatusCode = definicao.Status;
+        ProblemDetails problem = CriarProblema(httpContext, definicao, detail);
 
-        ProblemDetails problem = new()
-        {
-            Status = statusCode,
-            Type = ProblemDetailsConstants.ErrorsBaseUri + code,
-            Title = title,
-            Detail = detail,
-            Instance = $"urn:uuid:{Guid.CreateVersion7()}",
-        };
-
-        problem.Extensions["code"] = code;
-        problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
-            ?? Guid.CreateVersion7().ToString("N");
-
-        IProblemDetailsService? service = httpContext.RequestServices
-            .GetService<IProblemDetailsService>();
-
-        if (service is not null)
-        {
-            ProblemDetailsContext problemContext = new()
-            {
-                HttpContext = httpContext,
-                ProblemDetails = problem,
-            };
-
-            if (await service.TryWriteAsync(problemContext).ConfigureAwait(false))
-                return;
-        }
+        if (await TryWriteComServicoAsync(httpContext, problem).ConfigureAwait(false))
+            return;
 
         // Fallback caso AddProblemDetails não tenha sido registrado: escreve
         // o body manualmente preservando o contrato application/problem+json.
@@ -115,5 +75,32 @@ public static class AuthenticationProblemDetailsWriter
                 options: (System.Text.Json.JsonSerializerOptions?)null,
                 contentType: "application/problem+json")
             .ConfigureAwait(false);
+    }
+
+    private static ProblemDetails CriarProblema(HttpContext httpContext, DomainErrorMapping definicao, string detail)
+    {
+        ProblemDetails problem = new()
+        {
+            Status = definicao.Status,
+            Type = httpContext.RequestServices.GetRequiredService<ProblemTypeUriFactory>().Build(definicao.Code).AbsoluteUri,
+            Title = definicao.Title,
+            Detail = detail,
+            Instance = $"urn:uuid:{Guid.CreateVersion7()}",
+        };
+
+        problem.Extensions["code"] = definicao.Code;
+        problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
+            ?? Guid.CreateVersion7().ToString("N");
+        return problem;
+    }
+
+    private static async Task<bool> TryWriteComServicoAsync(HttpContext httpContext, ProblemDetails problem)
+    {
+        IProblemDetailsService? service = httpContext.RequestServices.GetService<IProblemDetailsService>();
+        if (service is null)
+            return false;
+
+        ProblemDetailsContext problemContext = new() { HttpContext = httpContext, ProblemDetails = problem };
+        return await service.TryWriteAsync(problemContext).ConfigureAwait(false);
     }
 }

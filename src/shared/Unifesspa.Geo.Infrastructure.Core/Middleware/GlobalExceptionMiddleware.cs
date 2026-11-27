@@ -17,13 +17,19 @@ public sealed partial class GlobalExceptionMiddleware
 
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
+    private readonly ProblemTypeUriFactory _problemTypeUriFactory;
 
-    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
+    public GlobalExceptionMiddleware(
+        RequestDelegate next,
+        ILogger<GlobalExceptionMiddleware> logger,
+        ProblemTypeUriFactory problemTypeUriFactory)
     {
         ArgumentNullException.ThrowIfNull(next);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(problemTypeUriFactory);
         _next = next;
         _logger = logger;
+        _problemTypeUriFactory = problemTypeUriFactory;
     }
 
     [SuppressMessage(
@@ -50,48 +56,43 @@ public sealed partial class GlobalExceptionMiddleware
         }
     }
 
-    private static async Task EscreverRespostaValidacao(HttpContext context, ValidationException exception)
+    private async Task EscreverRespostaValidacao(HttpContext context, ValidationException exception)
     {
-        context.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
-
-        Dictionary<string, object?> body = new()
-        {
-            ["type"] = ProblemDetailsConstants.ErrorsBaseUri + "uniplus.validacao",
-            ["title"] = "Erro de validação",
-            ["status"] = StatusCodes.Status422UnprocessableEntity,
-            ["instance"] = $"urn:uuid:{Guid.CreateVersion7()}",
-            ["code"] = "uniplus.validacao",
-            ["traceId"] = Activity.Current?.TraceId.ToHexString() ?? Guid.CreateVersion7().ToString("N"),
-            // Invariante: e.ErrorMessage não deve conter PII nem o valor rejeitado.
-            // Usar {PropertyValue} em templates FluentValidation viola essa restrição.
-            ["errors"] = exception.Errors
-                .Select(static e => new { field = e.PropertyName, code = e.ErrorCode, message = e.ErrorMessage })
-                .ToArray(),
-        };
+        Dictionary<string, object?> body = CorpoBase(context, ErrosDaFronteiraHttp.ErroDeValidacao);
+        // Invariante: e.ErrorMessage não deve conter PII nem o valor rejeitado.
+        // Usar {PropertyValue} em templates FluentValidation viola essa restrição.
+        body["errors"] = exception.Errors
+            .Select(static e => new { field = e.PropertyName, code = e.ErrorCode, message = e.ErrorMessage })
+            .ToArray();
 
         await context.Response
             .WriteAsJsonAsync(body, WebJsonOptions, contentType: "application/problem+json")
             .ConfigureAwait(false);
     }
 
-    private static async Task EscreverRespostaErro(HttpContext context)
+    private async Task EscreverRespostaErro(HttpContext context)
     {
-        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-
-        Dictionary<string, object?> body = new()
-        {
-            ["type"] = ProblemDetailsConstants.ErrorsBaseUri + "uniplus.internal.unexpected",
-            ["title"] = "Erro interno do servidor",
-            ["status"] = StatusCodes.Status500InternalServerError,
-            ["detail"] = "Ocorreu um erro inesperado. Tente novamente mais tarde.",
-            ["instance"] = $"urn:uuid:{Guid.CreateVersion7()}",
-            ["code"] = "uniplus.internal.unexpected",
-            ["traceId"] = Activity.Current?.TraceId.ToHexString() ?? Guid.CreateVersion7().ToString("N"),
-        };
+        Dictionary<string, object?> body = CorpoBase(context, ErrosDaFronteiraHttp.ErroInesperado);
+        body["detail"] = "Ocorreu um erro inesperado. Tente novamente mais tarde.";
 
         await context.Response
             .WriteAsJsonAsync(body, WebJsonOptions, contentType: "application/problem+json")
             .ConfigureAwait(false);
+    }
+
+    private Dictionary<string, object?> CorpoBase(HttpContext context, DomainErrorMapping definicao)
+    {
+        context.Response.StatusCode = definicao.Status;
+
+        return new Dictionary<string, object?>
+        {
+            ["type"] = _problemTypeUriFactory.Build(definicao.Code).AbsoluteUri,
+            ["title"] = definicao.Title,
+            ["status"] = definicao.Status,
+            ["instance"] = $"urn:uuid:{Guid.CreateVersion7()}",
+            ["code"] = definicao.Code,
+            ["traceId"] = Activity.Current?.TraceId.ToHexString() ?? Guid.CreateVersion7().ToString("N"),
+        };
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Erro de validação no request {Path}")]

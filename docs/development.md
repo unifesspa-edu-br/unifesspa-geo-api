@@ -46,6 +46,17 @@ foundation (`AddGeoOpenApi`, `AddGeoEncryption`, `AddGeoHealthChecks`,
 `UseGeoNpgsqlConventions`) so future maintenance does not depend on UniPlus
 package or namespace semantics.
 
+## Endereço do tipo de erro (`ProblemType:BaseUri`)
+
+O campo `type` de toda resposta de erro aponta para a página do portal de desenvolvedores
+daquele código de erro: a base configurada seguida do código.
+
+- `ProblemType:BaseUri` é obrigatório: endereço absoluto HTTPS, sem consulta nem fragmento. Sem
+  ele, ou com valor inválido, o serviço não inicia e a mensagem diz o que corrigir.
+- O valor padrão está em `src/geo/Unifesspa.Geo.API/appsettings.json`.
+- Em HML e PRD, a variável de ambiente `ProblemType__BaseUri` só é definida se o domínio do portal
+  mudar.
+
 ## Authentication
 
 The API uses JWT Bearer authentication backed by an OIDC authority:

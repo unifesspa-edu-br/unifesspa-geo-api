@@ -10,6 +10,7 @@ using Errors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 
 /// <summary>
@@ -213,26 +214,30 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
 
     private void WriteNotAcceptable(ActionExecutingContext context)
     {
-        const string code = "uniplus.contract.versao_nao_suportada";
+        context.Result = new ObjectResult(ProblemaDeVersaoNaoSuportada(context.HttpContext))
+        {
+            StatusCode = ErrosDaFronteiraHttp.VersaoDeMidiaNaoSuportada.Status,
+            ContentTypes = { "application/problem+json" },
+        };
+    }
+
+    private ProblemDetails ProblemaDeVersaoNaoSuportada(HttpContext httpContext)
+    {
+        DomainErrorMapping definicao = ErrosDaFronteiraHttp.VersaoDeMidiaNaoSuportada;
         ProblemDetails problem = new()
         {
-            Status = StatusCodes.Status406NotAcceptable,
-            Type = ProblemDetailsConstants.ErrorsBaseUri + code,
-            Title = "Versão de mídia não suportada",
+            Status = definicao.Status,
+            Type = httpContext.RequestServices.GetRequiredService<ProblemTypeUriFactory>().Build(definicao.Code).AbsoluteUri,
+            Title = definicao.Title,
             Detail = $"Nenhuma versão suportada pelo recurso '{Resource}' foi aceita pelo cliente.",
             Instance = $"urn:uuid:{Guid.CreateVersion7()}",
         };
 
-        problem.Extensions["code"] = code;
+        problem.Extensions["code"] = definicao.Code;
         problem.Extensions["available_versions"] = Versions;
         problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
             ?? Guid.CreateVersion7().ToString("N");
-
-        context.Result = new ObjectResult(problem)
-        {
-            StatusCode = StatusCodes.Status406NotAcceptable,
-            ContentTypes = { "application/problem+json" },
-        };
+        return problem;
     }
 
     [GeneratedRegex(@"^(?<resource>[a-z][a-z0-9_-]*)\.v(?<version>\d+)$", RegexOptions.IgnoreCase)]
