@@ -38,23 +38,10 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
             KeycloakTestUsers.Admin.Username,
             KeycloakTestUsers.SharedPassword);
 
-        using HttpClient client = _factory.CreateClient();
-        using HttpRequestMessage request = AuthenticatedGet("/api/auth/me", token);
-
-        using HttpResponseMessage response = await client.SendAsync(request);
+        using HttpResponseMessage response = await GetAutenticadoAsync("/api/auth/me", token);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        using JsonDocument body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        JsonElement root = body.RootElement;
-
-        root.GetProperty("email").GetString().Should().Be(KeycloakTestUsers.Admin.Email);
-        root.GetProperty("name").GetString().Should().NotBeNullOrWhiteSpace();
-        root.GetProperty("roles")
-            .EnumerateArray()
-            .Select(static role => role.GetString())
-            .Should()
-            .Contain(KeycloakTestUsers.Admin.Role);
+        await AssertIdentidadeDoAdministradorAsync(response);
     }
 
     [Fact(DisplayName = "JWT real de outro client do mesmo realm autentica sem validar audience")]
@@ -65,10 +52,7 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
             KeycloakTestUsers.SharedPassword,
             KeycloakContainerFixture.BadAudienceClientId);
 
-        using HttpClient client = _factory.CreateClient();
-        using HttpRequestMessage request = AuthenticatedGet("/api/auth/me", token);
-
-        using HttpResponseMessage response = await client.SendAsync(request);
+        using HttpResponseMessage response = await GetAutenticadoAsync("/api/auth/me", token);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -79,10 +63,7 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
         string token = CreateSignedTokenWithIssuer(
             issuer: new Uri(_keycloak.BaseAddress, "/realms/outro-realm").ToString());
 
-        using HttpClient client = _factory.CreateClient();
-        using HttpRequestMessage request = AuthenticatedGet("/api/auth/me", token);
-
-        using HttpResponseMessage response = await client.SendAsync(request);
+        using HttpResponseMessage response = await GetAutenticadoAsync("/api/auth/me", token);
 
         await AssertProblemAsync(
             response,
@@ -126,14 +107,7 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
             KeycloakTestUsers.Candidato.Username,
             KeycloakTestUsers.SharedPassword);
 
-        using HttpClient client = _factory.CreateClient();
-        using HttpRequestMessage request = new(HttpMethod.Post, "/api/admin/geo/importacoes")
-        {
-            Content = new StringContent("{\"versao\":\"202601\"}", Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        using HttpResponseMessage response = await client.SendAsync(request);
+        using HttpResponseMessage response = await PostImportacaoAutenticadoAsync(token);
 
         await AssertProblemAsync(
             response,
@@ -146,12 +120,31 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
         _factory.Dispose();
     }
 
-    private static HttpRequestMessage AuthenticatedGet(string path, string token)
+    private async Task<HttpResponseMessage> GetAutenticadoAsync(string path, string token)
     {
-        HttpRequestMessage request = new(HttpMethod.Get, path);
+        using HttpClient client = _factory.CreateClient();
+        using HttpRequestMessage request = new(HttpMethod.Get, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return request;
+        return await client.SendAsync(request);
     }
+
+    private async Task<HttpResponseMessage> PostImportacaoAutenticadoAsync(string token)
+    {
+        using HttpClient client = _factory.CreateClient();
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/admin/geo/importacoes")
+        {
+            Content = new StringContent("{\"versao\":\"202601\"}", Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await client.SendAsync(request);
+    }
+
+    private static Claim[] ClaimsDoUsuarioDeOutroRealm() =>
+    [
+        new Claim("sub", "usuario-outro-realm"),
+        new Claim("name", "Usuario Outro Realm"),
+        new Claim("email", "outro-realm@unifesspa.edu.br"),
+    ];
 
     private static string CreateSignedTokenWithIssuer(string issuer)
     {
@@ -159,12 +152,7 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
         JwtSecurityToken token = new(
             issuer: issuer,
             audience: KeycloakContainerFixture.Audience,
-            claims:
-            [
-                new Claim("sub", "usuario-outro-realm"),
-                new Claim("name", "Usuario Outro Realm"),
-                new Claim("email", "outro-realm@unifesspa.edu.br"),
-            ],
+            claims: ClaimsDoUsuarioDeOutroRealm(),
             notBefore: now.AddMinutes(-1),
             expires: now.AddMinutes(5),
             signingCredentials: new SigningCredentials(
@@ -172,6 +160,20 @@ public sealed class JwtAuthenticationEndpointTests : IDisposable
                 SecurityAlgorithms.RsaSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static async Task AssertIdentidadeDoAdministradorAsync(HttpResponseMessage response)
+    {
+        using JsonDocument body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement root = body.RootElement;
+
+        root.GetProperty("email").GetString().Should().Be(KeycloakTestUsers.Admin.Email);
+        root.GetProperty("name").GetString().Should().NotBeNullOrWhiteSpace();
+        root.GetProperty("roles")
+            .EnumerateArray()
+            .Select(static role => role.GetString())
+            .Should()
+            .Contain(KeycloakTestUsers.Admin.Role);
     }
 
     private static async Task AssertProblemAsync(
