@@ -67,33 +67,14 @@ public static class CursorKeyset
             ? filtered.Where(e => e.Id.CompareTo(anchor) > 0)
             : filtered;
 
-        List<T> fetched = await forward
-            .OrderBy(e => e.Id)
-            .Take(limit + 1)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        (List<T> itens, bool haProxima) = await LerComItemExcedenteAsync(
+            forward.OrderBy(e => e.Id), limit, cancellationToken).ConfigureAwait(false);
 
-        bool hasNext = fetched.Count > limit;
-        if (hasNext)
-            fetched.RemoveAt(fetched.Count - 1);
+        // Só há página anterior quando existe âncora (não é a primeira página).
+        bool haAnterior = afterId is not null && itens.Count > 0
+            && await ExisteAntesDeAsync(filtered, itens[0].Id, cancellationToken).ConfigureAwait(false);
 
-        if (fetched.Count == 0)
-            return new CursorKeysetPage<T>(fetched, PrevAfterId: null, NextAfterId: null);
-
-        // hasPrevious só faz sentido quando há âncora (não é a primeira página);
-        // confirmado por EXISTS indexado (sem COUNT) sobre a query filtrada.
-        // Boundaries extraídos para locais — expression tree não aceita índice.
-        Guid firstId = fetched[0].Id;
-        Guid lastId = fetched[^1].Id;
-        bool hasPrevious = afterId is not null
-            && await filtered
-                .AnyAsync(e => e.Id.CompareTo(firstId) < 0, cancellationToken)
-                .ConfigureAwait(false);
-
-        return new CursorKeysetPage<T>(
-            fetched,
-            PrevAfterId: hasPrevious ? firstId : null,
-            NextAfterId: hasNext ? lastId : null);
+        return ComAncoras(itens, haAnterior, haProxima);
     }
 
     private static async Task<CursorKeysetPage<T>> ApplyBackwardAsync<T>(
@@ -107,32 +88,50 @@ public static class CursorKeyset
             ? filtered.Where(e => e.Id.CompareTo(anchor) < 0)
             : filtered;
 
-        List<T> fetchedDesc = await backward
-            .OrderByDescending(e => e.Id)
-            .Take(limit + 1)
+        (List<T> itens, bool haAnterior) = await LerComItemExcedenteAsync(
+            backward.OrderByDescending(e => e.Id), limit, cancellationToken).ConfigureAwait(false);
+
+        // O item excedente já saiu da lista ainda em DESC (é o mais antigo); só então ela é revertida.
+        itens.Reverse();
+        bool haProxima = itens.Count > 0
+            && await ExisteDepoisDeAsync(filtered, itens[^1].Id, cancellationToken).ConfigureAwait(false);
+
+        return ComAncoras(itens, haAnterior, haProxima);
+    }
+
+    // As âncoras são o Id do primeiro e do último item, e só existem do lado em que há mais páginas.
+    private static CursorKeysetPage<T> ComAncoras<T>(List<T> itens, bool haAnterior, bool haProxima)
+        where T : EntityBase =>
+        new(
+            itens,
+            PrevAfterId: haAnterior ? itens[0].Id : null,
+            NextAfterId: haProxima ? itens[^1].Id : null);
+
+    // Busca um item além do limite: se ele veio, há mais páginas naquele sentido, e ele não faz
+    // parte da página devolvida.
+    private static async Task<(List<T> Itens, bool HaMais)> LerComItemExcedenteAsync<T>(
+        IQueryable<T> ordenada,
+        int limite,
+        CancellationToken cancellationToken)
+    {
+        List<T> itens = await ordenada
+            .Take(limite + 1)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        bool hasPrevious = fetchedDesc.Count > limit;
-        // Corta o item-probe AINDA em DESC (é o mais antigo) e só depois reverte.
-        if (hasPrevious)
-            fetchedDesc.RemoveAt(fetchedDesc.Count - 1);
-        fetchedDesc.Reverse();
-        List<T> page = fetchedDesc;
+        bool haMais = itens.Count > limite;
+        if (haMais)
+            itens.RemoveAt(itens.Count - 1);
 
-        if (page.Count == 0)
-            return new CursorKeysetPage<T>(page, PrevAfterId: null, NextAfterId: null);
-
-        // Boundaries em locais — expression tree não aceita índice from-end.
-        Guid firstId = page[0].Id;
-        Guid lastId = page[^1].Id;
-        bool hasNext = await filtered
-            .AnyAsync(e => e.Id.CompareTo(lastId) > 0, cancellationToken)
-            .ConfigureAwait(false);
-
-        return new CursorKeysetPage<T>(
-            page,
-            PrevAfterId: hasPrevious ? firstId : null,
-            NextAfterId: hasNext ? lastId : null);
+        return (itens, haMais);
     }
+
+    // O lado oposto ao navegado é confirmado por EXISTS indexado (sem COUNT) sobre a query filtrada.
+    private static Task<bool> ExisteAntesDeAsync<T>(IQueryable<T> filtered, Guid id, CancellationToken cancellationToken)
+        where T : EntityBase =>
+        filtered.AnyAsync(e => e.Id.CompareTo(id) < 0, cancellationToken);
+
+    private static Task<bool> ExisteDepoisDeAsync<T>(IQueryable<T> filtered, Guid id, CancellationToken cancellationToken)
+        where T : EntityBase =>
+        filtered.AnyAsync(e => e.Id.CompareTo(id) > 0, cancellationToken);
 }
