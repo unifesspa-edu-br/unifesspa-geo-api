@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Unifesspa.Geo.Domain.Entities;
 
 /// <summary>
-/// Mapeamento do registro de execução do ETL DNE (Story #674). O destaque é o índice
+/// Mapeamento do registro de execução do ETL DNE. O destaque é o índice
 /// único parcial que garante <strong>no máximo uma</strong> execução em andamento
 /// (concorrência → 409): UNIQUE sobre <c>status</c> filtrado por <c>status = 0</c>
 /// (<see cref="StatusImportacao.EmAndamento"/>) — por isso o enum não pode ser reordenado.
@@ -29,6 +29,7 @@ internal sealed class GeoImportacaoExecucaoConfiguration : IEntityTypeConfigurat
         builder.Property(e => e.VersaoDataset).HasMaxLength(20).IsRequired();
         builder.Property(e => e.Status).IsRequired();
         builder.Property(e => e.IniciadoEm).IsRequired();
+        builder.Property(e => e.PacoteSha256).HasMaxLength(64);
         builder.Property(e => e.DisparadoPor).HasMaxLength(200).IsRequired();
         builder.Property(e => e.RelatorioJson).HasColumnType("jsonb");
         builder.Property(e => e.Mensagem).HasMaxLength(1000);
@@ -41,6 +42,11 @@ internal sealed class GeoImportacaoExecucaoConfiguration : IEntityTypeConfigurat
             .IsUnique()
             .HasFilter("status = 0")
             .HasDatabaseName("ux_geo_importacao_execucao_em_andamento");
+
+        // Repetição do pacote: a consulta da última execução concluída percorre (status, concluido_em DESC).
+        builder.HasIndex(e => new { e.Status, e.ConcluidoEm })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_geo_importacao_execucao_status_concluido_em");
 
         builder.HasIndex(e => e.IniciadoEm)
             .HasDatabaseName("ix_geo_importacao_execucao_iniciado_em");

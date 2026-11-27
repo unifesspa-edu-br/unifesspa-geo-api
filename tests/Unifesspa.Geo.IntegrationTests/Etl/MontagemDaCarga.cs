@@ -45,7 +45,7 @@ internal sealed class MontagemDaCarga : IDisposable
     public async Task<Guid> RegistrarExecucaoAsync(string versao)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext(RelogioDaCarga);
-        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(versao, "teste", RelogioDaCarga.GetUtcNow()).Value!;
+        GeoImportacaoExecucao execucao = GeoImportacaoExecucao.Iniciar(PacotesDeTeste.Recebido(versao), "teste", RelogioDaCarga.GetUtcNow()).Value!;
         contexto.ImportacaoExecucoes.Add(execucao);
         await contexto.SaveChangesAsync();
         return execucao.Id;

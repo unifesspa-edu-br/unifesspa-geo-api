@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
+
 /// <summary>
 /// Consome a fila de disparos da carga e executa cada carga num escopo de DI próprio
 /// (o executor e o <c>GeoDbContext</c> são scoped). A reconciliação de execuções
@@ -14,19 +16,23 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IGeoImportacaoFila _fila;
+    private readonly ArquivoDoPacoteDne _arquivos;
     private readonly ILogger<GeoImportacaoBackgroundService> _logger;
 
     public GeoImportacaoBackgroundService(
         IServiceScopeFactory scopeFactory,
         IGeoImportacaoFila fila,
+        ArquivoDoPacoteDne arquivos,
         ILogger<GeoImportacaoBackgroundService> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(fila);
+        ArgumentNullException.ThrowIfNull(arquivos);
         ArgumentNullException.ThrowIfNull(logger);
 
         _scopeFactory = scopeFactory;
         _fila = fila;
+        _arquivos = arquivos;
         _logger = logger;
     }
 
@@ -51,6 +57,7 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
         {
             LogErroProcessando(_logger, carga.ExecucaoId, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
             await TentarMarcarFalhaInesperadaAsync(carga.ExecucaoId).ConfigureAwait(false);
+            ApagarArquivoTolerandoFalha(carga.ExecucaoId);
             return true;
         }
         finally
@@ -122,11 +129,24 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
         }
     }
 
-    private static async Task SoltarTravasAsync(IReadOnlyList<CargaReservada> pendentes)
+    private async Task SoltarTravasAsync(IReadOnlyList<CargaReservada> pendentes)
     {
         foreach (CargaReservada carga in pendentes)
         {
+            ApagarArquivoTolerandoFalha(carga.ExecucaoId);
             await carga.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void ApagarArquivoTolerandoFalha(Guid execucaoId)
+    {
+        try
+        {
+            _arquivos.ApagarSeExistir(execucaoId);
+        }
+        catch (Exception excecao) when (excecao is IOException or UnauthorizedAccessException)
+        {
+            LogErroApagarArquivo(_logger, execucaoId, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
         }
     }
 
@@ -139,6 +159,7 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
         {
             cancellationToken.ThrowIfCancellationRequested();
             await executor.MarcarInterrompidaNoDesligamentoAsync(carga.ExecucaoId, cancellationToken).ConfigureAwait(false);
+            ApagarArquivoTolerandoFalha(carga.ExecucaoId);
             await carga.DisposeAsync().ConfigureAwait(false);
             LogInterrompidaNoDesligamento(_logger, carga.ExecucaoId);
         }
@@ -152,6 +173,9 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: execução {ExecucaoId} enfileirada e não processada foi marcada como falha no desligamento do processo em segundo plano.")]
     private static partial void LogInterrompidaNoDesligamento(ILogger logger, Guid execucaoId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: não foi possível apagar o arquivo do pacote da execução {ExecucaoId}. Diagnóstico: {Diagnostico}")]
+    private static partial void LogErroApagarArquivo(ILogger logger, Guid execucaoId, string diagnostico);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao drenar a fila no desligamento do processo em segundo plano. Diagnóstico: {Diagnostico}")]
     private static partial void LogErroDrenarFila(ILogger logger, string diagnostico);

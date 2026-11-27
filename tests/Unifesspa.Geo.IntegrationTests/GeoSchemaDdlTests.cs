@@ -103,6 +103,58 @@ public sealed class GeoSchemaDdlTests
         indexDef.Should().Contain("USING btree", "o range usa B-tree, não GiST");
     }
 
+    [Fact(DisplayName = "Execução: índice da última concluída é B-tree sobre (status, concluido_em DESC)")]
+    public async Task IndiceDaUltimaExecucaoConcluida_EBtreeSobreStatusEConclusaoDescendente()
+    {
+        string? indexDef = await ObterIndexDefAsync("ix_geo_importacao_execucao_status_concluido_em");
+
+        indexDef.Should().NotBeNull("a repetição do pacote consulta a última execução concluída");
+        indexDef!.Should().Contain("USING btree");
+        indexDef.Should().Contain("(status, concluido_em DESC)");
+    }
+
+    [Fact(DisplayName = "Execução: índice único parcial barra duas cargas em andamento (status = 0)")]
+    public async Task IndiceDeExecucaoEmAndamento_EUnicoParcial()
+    {
+        string? indexDef = await ObterIndexDefAsync("ux_geo_importacao_execucao_em_andamento");
+
+        indexDef.Should().NotBeNull();
+        indexDef!.Should().Contain("CREATE UNIQUE INDEX");
+        indexDef.Should().Contain("WHERE (status = 0)");
+    }
+
+    [Theory(DisplayName = "Execução: colunas do pacote recebido aceitam nulo (execuções anteriores)")]
+    [InlineData("pacote_sha256", "character varying")]
+    [InlineData("pacote_tamanho_em_bytes", "bigint")]
+    public async Task ColunasDoPacoteRecebido_AceitamNulo(string coluna, string tipo)
+    {
+        await using GeoDbContext context = _fixture.CreateDbContext();
+        DbConnection connection = context.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync();
+        }
+
+        await using DbCommand command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'geo_importacao_execucao'
+              AND column_name = @coluna;
+            """;
+        DbParameter parametro = command.CreateParameter();
+        parametro.ParameterName = "coluna";
+        parametro.Value = coluna;
+        command.Parameters.Add(parametro);
+
+        await using DbDataReader reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue($"a coluna {coluna} deve existir");
+        reader.GetString(0).Should().Be(tipo);
+        reader.GetString(1).Should().Be("YES");
+    }
+
     [Theory(DisplayName = "#700: coluna nome_ordenacao é gerada por nome_normalizado com fallback em nome")]
     [InlineData("estado")]
     [InlineData("cidade")]

@@ -50,6 +50,13 @@ internal sealed class ConexaoDoBancoDaCarga
     public Task<long> LinhasAsync(string esquema, string tabela) =>
         EscalarAsync($"SELECT count(*) AS \"Value\" FROM \"{esquema}\".\"{tabela}\"");
 
+    public async Task<List<string>> TextosAsync(string esquema, string tabela, string coluna)
+    {
+        string consulta = $"SELECT \"{coluna}\" AS \"Value\" FROM \"{esquema}\".\"{tabela}\"";
+        await using GeoDbContext contexto = _fixture.CreateDbContext();
+        return await contexto.Database.SqlQueryRaw<string>(consulta).ToListAsync();
+    }
+
     public async Task ExecutarAsync(string comando)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext();

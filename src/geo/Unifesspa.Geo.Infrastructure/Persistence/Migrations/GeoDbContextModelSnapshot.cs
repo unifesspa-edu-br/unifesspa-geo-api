@@ -1001,6 +1001,15 @@ namespace Unifesspa.Geo.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("mensagem");
 
+                    b.Property<string>("PacoteSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("pacote_sha256");
+
+                    b.Property<long?>("PacoteTamanhoEmBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("pacote_tamanho_em_bytes");
+
                     b.Property<string>("RelatorioJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("relatorio_json");
@@ -1029,6 +1038,10 @@ namespace Unifesspa.Geo.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_geo_importacao_execucao_em_andamento")
                         .HasFilter("status = 0");
+
+                    b.HasIndex("Status", "ConcluidoEm")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_geo_importacao_execucao_status_concluido_em");
 
                     b.ToTable("geo_importacao_execucao", (string)null);
                 });

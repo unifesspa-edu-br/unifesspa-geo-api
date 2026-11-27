@@ -1,22 +1,24 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.Errors;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
-/// Conferência do diretório do zip, sem descompactar nada: exatamente as 15 entradas <c>.sql</c>,
-/// no máximo uma imagem auxiliar, nenhuma outra entrada, nenhuma cifrada, tamanhos declarados
-/// dentro dos limites e uma só versão AAAAMM válida. Todas as faltas voltam juntas.
+/// Conferência do diretório do zip, sem descompactar nada: exatamente as 15 tabelas <c>.sql</c>,
+/// todas no topo ou na mesma pasta, nenhuma tabela desconhecida, nenhuma entrada cifrada, arquivos que
+/// acompanham o pacote pequenos (e ignorados), tamanhos declarados dentro dos limites e uma só
+/// versão AAAAMM válida. Todas as faltas voltam juntas.
 /// </summary>
 internal static class ConferenciaDoPacoteDne
 {
     /// <summary>Devolve a versão AAAAMM do pacote ou o erro com todas as faltas encontradas.</summary>
-    public static Result<string> Conferir(IReadOnlyList<EntradaDoPacoteDne> entradas)
+    public static Result<string> Conferir(IReadOnlyList<EntradaDoPacoteDne> entradas, int quantidadeMaximaDeEntradas)
     {
         ArgumentNullException.ThrowIfNull(entradas);
 
         List<string> faltas = [];
-        ConferirQuantidadeETamanhos(entradas, faltas);
+        ConferirQuantidadeETamanhos(entradas, quantidadeMaximaDeEntradas, faltas);
         ContagemDasEntradasDne contagem = new();
         foreach (EntradaDoPacoteDne entrada in entradas)
         {
@@ -31,11 +33,11 @@ internal static class ConferenciaDoPacoteDne
             : Result<string>.Failure(ErrosDoPacoteDne.PacoteInvalido(string.Join(' ', faltas)));
     }
 
-    private static void ConferirQuantidadeETamanhos(IReadOnlyList<EntradaDoPacoteDne> entradas, List<string> faltas)
+    private static void ConferirQuantidadeETamanhos(IReadOnlyList<EntradaDoPacoteDne> entradas, int quantidadeMaximaDeEntradas, List<string> faltas)
     {
-        if (entradas.Count > LimitesDoPacoteDne.EntradasPorPacote)
+        if (entradas.Count > quantidadeMaximaDeEntradas)
         {
-            faltas.Add($"O pacote tem mais de {LimitesDoPacoteDne.EntradasPorPacote} entradas.");
+            faltas.Add($"O pacote tem mais de {quantidadeMaximaDeEntradas} entradas.");
         }
 
         if (entradas.Any(entrada => entrada.TamanhoDeclarado > LimitesDoPacoteDne.BytesPorEntrada))

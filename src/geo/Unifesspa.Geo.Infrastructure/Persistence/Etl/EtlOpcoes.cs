@@ -9,6 +9,9 @@ public sealed class EtlOpcoes
     /// <summary>Caminho da seção de configuração.</summary>
     public const string SectionName = "Geo:Etl";
 
+    /// <summary>Padrão de <see cref="QuantidadeMaximaDeEntradasDoPacote"/>.</summary>
+    public const int QuantidadePadraoDeEntradasDoPacote = 32;
+
     /// <summary>
     /// Liga o <c>BackgroundService</c> que consome a fila e executa as cargas. Default
     /// <see langword="true"/> — manter ligado em produção: com ele desligado, o endpoint ainda
@@ -34,6 +37,12 @@ public sealed class EtlOpcoes
     /// Tamanho máximo, em bytes, do pacote enviado. Padrão de 128 MiB; deve ser maior que zero.
     /// </summary>
     public long TamanhoMaximoDoPacote { get; set; } = 128L * 1024 * 1024;
+
+    /// <summary>
+    /// Quantidade máxima de entradas do zip (arquivos e pasta, todas contadas). Padrão de 32; deve
+    /// estar entre 16 e 256.
+    /// </summary>
+    public int QuantidadeMaximaDeEntradasDoPacote { get; set; } = QuantidadePadraoDeEntradasDoPacote;
 
     /// <summary>
     /// Diretório onde o pacote enviado fica enquanto a carga não popula o esquema de carga

@@ -74,6 +74,20 @@ public sealed class EsquemaDeCargaDneTests : IDisposable
         cidades.Should().ContainSingle().Which.Should().Match<CidadeIdCru>(c => c.IdCidade == 1 && c.CodigoIbge == "1500402");
     }
 
+    [Fact(DisplayName = "Texto com CRLF dentro das aspas chega ao esquema de carga com os mesmos bytes")]
+    public async Task TextoComQuebraDeLinha_ChegaComOsMesmosBytes()
+    {
+        Guid execucao = Guid.NewGuid();
+        PacoteSinteticoDne pacote = PacoteSinteticoDne.Completo(Versao);
+        pacote.Com("cidade_ibge", ("cidade_ibge", "1500402"), ("gentilico", "marabaense\r\nde 'verdade'\nfim"));
+        pacote.Gravar(_diretorio, execucao);
+
+        await using IFonteDaCargaDne fonte = await _esquemaDeCarga.PrepararAsync(execucao, Versao, CancellationToken.None);
+
+        (await _banco.TextosAsync(ComandosDoEsquemaDeCarga.Nome(execucao), "cidade_ibge", "gentilico"))
+            .Should().Contain("marabaense\r\nde 'verdade'\nfim");
+    }
+
     [Fact(DisplayName = "Coluna extra do arquivo não vira coluna do esquema de carga")]
     public async Task ColunaExtra_NaoChegaAoEsquema()
     {

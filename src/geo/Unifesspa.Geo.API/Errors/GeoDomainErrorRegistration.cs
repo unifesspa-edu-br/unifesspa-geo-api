@@ -10,7 +10,7 @@ using Unifesspa.Geo.Infrastructure.Core.Errors;
 /// <summary>
 /// Registry de mapeamentos de erros de domínio do módulo Geo para wire codes /
 /// status HTTP. As entidades de localidade (reference data) não têm CRUD de usuário;
-/// os mapeamentos são do registro de execução do ETL (Story #674).
+/// os mapeamentos são do registro de execução do ETL e do recebimento do pacote.
 /// </summary>
 [SuppressMessage(
     "Performance",
@@ -20,12 +20,6 @@ internal sealed class GeoDomainErrorRegistration : IDomainErrorRegistration
 {
     public IEnumerable<KeyValuePair<string, DomainErrorMapping>> GetMappings() =>
     [
-        new(GeoImportacaoErrorCodes.VersaoObrigatoria,
-            new DomainErrorMapping(
-                StatusCodes.Status422UnprocessableEntity,
-                "uniplus.geo.importacao.versao_obrigatoria",
-                "Versão do dataset é obrigatória")),
-
         new(GeoImportacaoErrorCodes.VersaoFormatoInvalido,
             new DomainErrorMapping(
                 StatusCodes.Status422UnprocessableEntity,
@@ -61,5 +55,23 @@ internal sealed class GeoDomainErrorRegistration : IDomainErrorRegistration
                 StatusCodes.Status409Conflict,
                 "uniplus.geo.importacao.transicao_invalida",
                 "Transição de estado da importação inválida")),
+
+        new(GeoImportacaoErrorCodes.PacoteInvalido,
+            new DomainErrorMapping(
+                StatusCodes.Status422UnprocessableEntity,
+                "uniplus.geo.importacao.pacote_invalido",
+                "O pacote enviado não é válido")),
+
+        new(GeoImportacaoErrorCodes.PacoteAcimaDoLimite,
+            new DomainErrorMapping(
+                StatusCodes.Status413PayloadTooLarge,
+                "uniplus.geo.importacao.pacote_acima_do_limite",
+                "O pacote enviado é maior que o limite permitido")),
+
+        new(GeoImportacaoErrorCodes.TipoDeConteudoNaoSuportado,
+            new DomainErrorMapping(
+                StatusCodes.Status415UnsupportedMediaType,
+                "uniplus.geo.importacao.tipo_de_conteudo_nao_suportado",
+                "O envio deve ser um arquivo zip (application/zip)")),
     ];
 }

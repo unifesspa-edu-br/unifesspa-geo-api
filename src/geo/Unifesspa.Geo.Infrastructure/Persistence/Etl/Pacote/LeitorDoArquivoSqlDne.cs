@@ -71,7 +71,10 @@ internal sealed class LeitorDoArquivoSqlDne
         string? linha;
         while ((linha = await _linhas.LerLinhaAsync(cancellationToken).ConfigureAwait(false)) is not null)
         {
-            object?[]? valores = Processar(linha);
+            InsertEmVariasLinhas? juntado = TextoAbertoNoInicioDoInsert(linha)
+                ? await InsertEmVariasLinhas.LerAsync(_linhas, linha, cancellationToken).ConfigureAwait(false)
+                : null;
+            object?[]? valores = ProcessarComando(juntado?.Comando ?? linha, juntado?.NumeroDaLinhaDeInicio);
             if (valores is not null)
             {
                 yield return valores;
@@ -79,6 +82,24 @@ internal sealed class LeitorDoArquivoSqlDne
         }
 
         ConferirFimDoArquivo();
+    }
+
+    private bool TextoAbertoNoInicioDoInsert(string linha) =>
+        _estado == EstadoDoArquivoSql.AposCreateTable
+        && linha.StartsWith(_inicioDoInsert, StringComparison.Ordinal)
+        && InsertEmVariasLinhas.ContarAspas(linha) % 2 == 1;
+
+    private object?[]? ProcessarComando(string comando, int? linhaDeInicio)
+    {
+        _linhas.LinhaDoComando = linhaDeInicio;
+        try
+        {
+            return Processar(comando);
+        }
+        finally
+        {
+            _linhas.LinhaDoComando = null;
+        }
     }
 
     private void ConferirFimDoArquivo()

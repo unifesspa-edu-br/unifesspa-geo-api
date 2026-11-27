@@ -4,23 +4,24 @@ using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
-/// Porta da API para o ETL de atualização periódica do Geo (Story #674). O ETL é um
-/// serviço de Infrastructure (ADR-0092), não um command Wolverine — não há regra de
-/// negócio nem evento de domínio, é carga de reference data autoritativo.
-/// Esta porta expõe à borda apenas o <strong>disparo</strong> e o
-/// <strong>acompanhamento</strong>; a execução pesada roda em segundo plano.
+/// Porta da API para a atualização da base dos Correios. O ETL é um serviço de Infrastructure
+/// (ADR-0092), não um command Wolverine — não há regra de negócio nem evento de domínio, é
+/// carga de reference data autoritativo. Esta porta expõe à borda apenas o
+/// <strong>registro do pacote recebido</strong> e o <strong>acompanhamento</strong>; a execução
+/// pesada roda em segundo plano.
 /// </summary>
 public interface IGeoImportacaoService
 {
     /// <summary>
-    /// Registra uma carga da <paramref name="versao"/> (AAAAMM) no estado "em andamento"
-    /// e a enfileira para execução em segundo plano. Retorna o Id da execução para
-    /// acompanhamento. Falha com erro de conflito quando já há uma carga em andamento
-    /// (uma execução por vez), ou de validação quando a versão é inválida.
+    /// Recebe o pacote enviado no <paramref name="corpo"/> e registra a carga. Recusa, sem ler o
+    /// corpo, quando já há carga em andamento; recusa pacote acima do limite ou inválido, versão
+    /// anterior à última aplicada e carga simultânea; devolve a publicação vigente quando o resumo
+    /// SHA-256 é o da última carga concluída; senão registra a execução como em andamento e a
+    /// enfileira. O arquivo gravado é apagado em toda recusa e na repetição.
     /// </summary>
-    /// <param name="versao">Release DNE no formato AAAAMM.</param>
-    /// <param name="disparadoPor">Subject do administrador, ou <c>seed</c> no boot de dev.</param>
-    Task<Result<Guid>> IniciarAsync(string versao, string disparadoPor, CancellationToken cancellationToken);
+    /// <param name="corpo">Fluxo com o zip do pacote, lido uma única vez.</param>
+    /// <param name="disparadoPor">Subject do administrador.</param>
+    Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(Stream corpo, string disparadoPor, CancellationToken cancellationToken);
 
     /// <summary>
     /// Obtém o estado e o relatório de uma execução pelo Id, ou <see langword="null"/>

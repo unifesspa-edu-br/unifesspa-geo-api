@@ -3,8 +3,10 @@ namespace Unifesspa.Geo.API.Controllers;
 using System.Diagnostics.CodeAnalysis;
 
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
+using Unifesspa.Geo.API.Filters;
 using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Application.Abstractions.Authentication;
 using Unifesspa.Geo.Application.DTOs;
@@ -13,15 +15,12 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
-/// Gatilho administrativo da atualização periódica do ETL DNE (Story #674), sob o
-/// prefixo <c>/api/admin/...</c> e restrito ao role <c>plataforma-admin</c>. Dispara uma
-/// carga (<c>202 Accepted</c>, execução em segundo plano) e expõe o acompanhamento. Um
-/// job externo (cron de infra) chama o disparo mensalmente — não há scheduler embutido.
+/// Envio do pacote dos Correios e acompanhamento da atualização da base, sob o prefixo
+/// <c>/api/admin/...</c> e restritos ao role <c>plataforma-admin</c>.
 /// </summary>
 /// <remarks>
-/// Não usa <c>Idempotency-Key</c> (ADR-0027): a proteção contra disparos duplicados é o
-/// lock de concorrência (índice único parcial → <c>409</c> enquanto há carga em
-/// andamento) e a idempotência de fundo vem do upsert por chave natural do ETL.
+/// Não usa <c>Idempotency-Key</c> (ADR-0027): o resumo SHA-256 do pacote identifica o envio e a
+/// trava da carga recusa o envio simultâneo.
 /// </remarks>
 [ApiController]
 [Route("api")]
@@ -49,49 +48,35 @@ public sealed class GeoImportacoesController : ControllerBase
     }
 
     /// <summary>
-    /// Dispara a importação de uma versão (AAAAMM) do dataset DNE. Restrito a
-    /// <c>plataforma-admin</c>. Retorna <c>202 Accepted</c> com link de acompanhamento;
-    /// <c>409</c> se já houver uma carga em andamento.
+    /// Recebe o pacote dos Correios (<c>application/zip</c> no corpo) e inicia a carga em segundo
+    /// plano. Restrito a <c>plataforma-admin</c>. <c>202</c> com <c>Location</c> da nova execução;
+    /// <c>200</c> com <c>Location</c> da execução vigente quando o pacote é o já publicado.
     /// </summary>
     [HttpPost("admin/geo/importacoes")]
     [Authorize(Roles = "plataforma-admin")]
+    [ServiceFilter(typeof(ValidacaoDoEnvioDoPacoteFilter), Order = 1)]
+    [ServiceFilter(typeof(UmEnvioPorVezFilter), Order = 2)]
+    [ProducesResponseType(typeof(ImportacaoGeoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ImportacaoGeoDto), StatusCodes.Status202Accepted)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status415UnsupportedMediaType)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> Disparar(
-        [FromBody] DispararImportacaoRequest request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Enviar(CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
-
         string disparadoPor = _userContext.UserId;
 
-        Result<Guid> resultado = await _servico
-            .IniciarAsync(request.Versao, disparadoPor, cancellationToken)
+        Result<EnvioDoPacoteRegistrado> envio = await _servico
+            .IniciarAsync(Request.Body, disparadoPor, cancellationToken)
             .ConfigureAwait(false);
 
-        if (resultado.IsFailure)
-        {
-            return resultado.ToActionResult(_mapper);
-        }
-
-        ImportacaoGeoDto? dto = await _servico.ObterAsync(resultado.Value, cancellationToken).ConfigureAwait(false);
-        if (dto is null)
-        {
-            // A execução acabou de ser registrada (mesmo contexto); não recuperá-la é uma
-            // inconsistência interna — 500 explícito, não um 202 degradado sem corpo/Location.
-            return Problem(
-                title: "Falha ao recuperar a execução recém-registrada.",
-                statusCode: StatusCodes.Status500InternalServerError);
-        }
-
-        ImportacaoGeoDto comLinks = dto with { Links = _linksBuilder.Build(dto) };
-        return AcceptedAtAction(nameof(Obter), routeValues: new { id = resultado.Value }, value: comLinks);
+        return envio.IsFailure
+            ? envio.ToActionResult(_mapper)
+            : await RespostaDoEnvioAsync(envio.Value!, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -113,6 +98,27 @@ public sealed class GeoImportacoesController : ControllerBase
         }
 
         ImportacaoGeoDto comLinks = dto with { Links = _linksBuilder.Build(dto) };
+        return Ok(comLinks);
+    }
+
+    private async Task<IActionResult> RespostaDoEnvioAsync(EnvioDoPacoteRegistrado envio, CancellationToken cancellationToken)
+    {
+        ImportacaoGeoDto? dto = await _servico.ObterAsync(envio.ExecucaoId, cancellationToken).ConfigureAwait(false);
+        if (dto is null)
+        {
+            return Problem(
+                title: "Falha ao recuperar a execução recém-registrada.",
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        IReadOnlyDictionary<string, string> links = _linksBuilder.Build(dto);
+        ImportacaoGeoDto comLinks = dto with { Links = links };
+        if (envio.Desfecho == DesfechoDoEnvioDoPacote.CargaEnfileirada)
+        {
+            return Accepted(new Uri(links["self"], UriKind.Relative), comLinks);
+        }
+
+        Response.Headers.Location = links["self"];
         return Ok(comLinks);
     }
 }
