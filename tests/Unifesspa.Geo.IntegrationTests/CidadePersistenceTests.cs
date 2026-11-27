@@ -7,6 +7,7 @@ using Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence;
 
 /// <summary>
@@ -59,7 +60,9 @@ public sealed class CidadePersistenceTests
     public async Task Cidade_HomonimosUfDistintas_Aceita()
     {
         EstadoSemeado semeado = EstadoSemeado.Novo();
-        Estado rs = GeoTestKeys.Ok(Estado.Importar(semeado.Pais.Id, GeoTestKeys.Uf(), "Rio Grande do Sul", null, null, null, null, null, null, null, null, null, VersaoDataset));
+        Estado rs = GeoTestKeys.Ok(Estado.Importar(
+            new UfNoPais(semeado.Pais.Id, GeoTestKeys.Uf()), new NomeComFormaDeBusca("Rio Grande do Sul", null),
+            default, null, default, default, new ProvenienciaDaCarga(VersaoDataset)));
 
         Cidade bomJesusPi = NovaCidade(semeado.Estado.Id, "PI", GeoTestKeys.CodigoIbge(), "Bom Jesus");
         Cidade bomJesusRs = NovaCidade(rs.Id, "RS", GeoTestKeys.CodigoIbge(), "Bom Jesus");

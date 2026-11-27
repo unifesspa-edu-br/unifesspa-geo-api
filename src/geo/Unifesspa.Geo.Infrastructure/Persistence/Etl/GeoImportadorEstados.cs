@@ -13,7 +13,7 @@ using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
 
 /// <summary>
 /// Importa Estado, indicadores do Estado e faixas de CEP do Estado (ADR-0092) dentro da
-/// transação aberta por <see cref="GeoImportadorPaisEstadoCidade"/>. Upsert por chave
+/// transação aberta por <see cref="GeoImportadorPaisEstadoCidade"/>. Gravação por chave
 /// natural (UF): a recarga preserva o Guid e não duplica.
 /// </summary>
 internal sealed class GeoImportadorEstados
@@ -42,8 +42,9 @@ internal sealed class GeoImportadorEstados
         Dictionary<string, EstadoIndicadorCru> indicadores = await AgregarContandoAsync(
             fonte.LerEstadoIndicadoresAsync(cancellationToken), i => ChaveSigla(i.Uf), contadorIndicadores).ConfigureAwait(false);
 
+        ProvenienciaDaCarga proveniencia = new(fonte.Versao);
         Dictionary<string, Guid> estadosPorUf = await ImportarEstadosAsync(
-            fonte, brasilId, indicadores, relatorio.Tabela("estado"), cancellationToken).ConfigureAwait(false);
+            fonte, brasilId, indicadores, proveniencia, relatorio.Tabela("estado"), cancellationToken).ConfigureAwait(false);
         await ImportarIndicadoresAsync(estadosPorUf, indicadores, fonte.Versao, contadorIndicadores, cancellationToken).ConfigureAwait(false);
         await ImportarFaixasAsync(fonte, estadosPorUf, relatorio.Tabela("estado_faixa"), cancellationToken).ConfigureAwait(false);
         return estadosPorUf;
@@ -53,52 +54,54 @@ internal sealed class GeoImportadorEstados
         IGeoFonteDados fonte,
         Guid brasilId,
         Dictionary<string, EstadoIndicadorCru> indicadores,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, Guid> estadosPorUf = new(StringComparer.Ordinal);
-
         // Sem o País (Brasil) carregado, os estados ficariam órfãos de FK — aborta o nível.
         if (brasilId == Guid.Empty)
         {
-            return estadosPorUf;
+            return new Dictionary<string, Guid>(StringComparer.Ordinal);
         }
 
         Dictionary<string, Estado> existentes =
             await _contexto.Estados.ToDictionaryAsync(e => e.Uf, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
-        await UpsertarEstadosAsync(fonte, brasilId, indicadores, existentes, estadosPorUf, contador, cancellationToken).ConfigureAwait(false);
+        Dictionary<string, Guid> estadosPorUf = await UpsertarEstadosAsync(
+            fonte, brasilId, indicadores, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
         return estadosPorUf;
     }
 
-    private async Task UpsertarEstadosAsync(
+    private async Task<Dictionary<string, Guid>> UpsertarEstadosAsync(
         IGeoFonteDados fonte,
         Guid brasilId,
         Dictionary<string, EstadoIndicadorCru> indicadores,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, Estado> existentes,
-        Dictionary<string, Guid> estadosPorUf,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
+        Dictionary<string, Guid> estadosPorUf = new(StringComparer.Ordinal);
         Dictionary<string, Estado> jaVistos = new(StringComparer.Ordinal);
 
         await foreach (EstadoCru cru in fonte.LerEstadosAsync(cancellationToken).ConfigureAwait(false))
         {
             contador.ContarLido();
-            Estado? estado = UpsertarEstado(cru, brasilId, indicadores, fonte.Versao, existentes, jaVistos, contador);
-            if (estado is not null)
+            if (UpsertarEstado(cru, brasilId, indicadores, proveniencia, existentes, jaVistos, contador) is { } estado)
             {
                 estadosPorUf[estado.Uf] = estado.Id;
             }
         }
+
+        return estadosPorUf;
     }
 
     private Estado? UpsertarEstado(
         EstadoCru cru,
         Guid brasilId,
         Dictionary<string, EstadoIndicadorCru> indicadores,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, Estado> existentes,
         Dictionary<string, Estado> jaVistos,
         ContadorTabela contador)
@@ -109,14 +112,19 @@ internal sealed class GeoImportadorEstados
             return null;
         }
 
-        indicadores.TryGetValue(uf, out EstadoIndicadorCru? indicador);
-        PosicaoGeografica c = CoordenadaDne.De(cru.Latitude, cru.Longitude);
+        ClassificacaoDaUfNoIbge classificacao = new(indicadores.GetValueOrDefault(uf)?.CodigoIbge, cru.Regiao);
         return Upsert(
             uf, jaVistos, existentes,
-            () => Estado.Importar(brasilId, uf, cru.Nome ?? string.Empty, cru.NomeSemAcento, cru.Regiao, cru.Capital, indicador?.CodigoIbge, c.Latitude, c.Longitude, c.Ponto, cru.FaixaIni, cru.FaixaFim, versao),
-            existente => existente.Atualizar(brasilId, cru.Nome ?? string.Empty, cru.NomeSemAcento, cru.Regiao, cru.Capital, indicador?.CodigoIbge, c.Latitude, c.Longitude, c.Ponto, cru.FaixaIni, cru.FaixaFim, versao),
+            () => Estado.Importar(new UfNoPais(brasilId, uf), NomeDe(cru), classificacao, cru.Capital, PosicaoDe(cru), FaixaGeralDe(cru), proveniencia),
+            existente => existente.Atualizar(brasilId, NomeDe(cru), classificacao, cru.Capital, PosicaoDe(cru), FaixaGeralDe(cru), proveniencia),
             _contexto.Estados, contador);
     }
+
+    private static NomeComFormaDeBusca NomeDe(EstadoCru cru) => new(cru.Nome ?? string.Empty, cru.NomeSemAcento);
+
+    private static PosicaoGeografica PosicaoDe(EstadoCru cru) => CoordenadaDne.De(cru.Latitude, cru.Longitude);
+
+    private static FaixaDeCep FaixaGeralDe(EstadoCru cru) => new(cru.FaixaIni, cru.FaixaFim);
 
     private async Task ImportarIndicadoresAsync(
         Dictionary<string, Guid> estadosPorUf,

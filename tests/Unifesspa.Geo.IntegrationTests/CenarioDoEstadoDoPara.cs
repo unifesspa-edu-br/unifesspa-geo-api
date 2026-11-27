@@ -28,12 +28,13 @@ internal sealed record CenarioDoEstadoDoPara(Pais Brasil, Estado Para, EstadoInd
 
     private static Estado NovoEstado(Pais brasil) =>
         GeoTestKeys.Ok(Estado.Importar(
-            paisId: brasil.Id, uf: GeoTestKeys.Uf(), nome: "Pará", nomeNormalizado: "para",
-            regiao: "Norte", capital: "Belém", codigoIbge: "15",
-            latitude: -1.45502m, longitude: -48.5024m,
-            coordenada: new Point(-48.5024, -1.45502) { SRID = 4326 },
-            cepInicial: "66000000", cepFinal: "68899999",
-            versaoDataset: VersaoDataset));
+            uf: new UfNoPais(brasil.Id, GeoTestKeys.Uf()),
+            nome: new NomeComFormaDeBusca("Pará", "para"),
+            classificacao: new ClassificacaoDaUfNoIbge("15", "Norte"),
+            capital: "Belém",
+            posicao: new PosicaoGeografica(-1.45502m, -48.5024m, new Point(-48.5024, -1.45502) { SRID = 4326 }),
+            faixaGeral: new FaixaDeCep("66000000", "68899999"),
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 
     private static EstadoIndicador NovoIndicador(Estado para) =>
         GeoTestKeys.Ok(EstadoIndicador.Importar(

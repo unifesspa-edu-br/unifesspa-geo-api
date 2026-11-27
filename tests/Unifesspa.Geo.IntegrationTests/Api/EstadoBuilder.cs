@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.IntegrationTests.Api;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
@@ -59,6 +60,11 @@ internal sealed class EstadoBuilder
 
     public Estado Construir() =>
         GeoTestKeys.Ok(Estado.Importar(
-            _paisId, _uf, _nome, GeoReferenceSeed.Normalizar(_nome), _regiao, _capital, _codigoIbge,
-            _latitude, _longitude, null, null, null, GeoReferenceSeed.Versao, _vigente));
+            new UfNoPais(_paisId, _uf),
+            new NomeComFormaDeBusca(_nome, GeoReferenceSeed.Normalizar(_nome)),
+            new ClassificacaoDaUfNoIbge(_codigoIbge, _regiao),
+            _capital,
+            new PosicaoGeografica(_latitude, _longitude, null),
+            new FaixaDeCep(null, null),
+            GeoReferenceSeed.Proveniencia(_vigente)));
 }
