@@ -18,7 +18,6 @@ public static class DomainErrorMappingServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         AddProblemTypeOptions(services, configuration);
-        services.AddSingleton<IDomainErrorRegistration, KernelDomainErrorRegistration>();
         services.AddSingleton<IDomainErrorRegistration>(new ErrosDaFronteiraHttpDomainErrorRegistration());
         services.AddSingleton<IDomainErrorMapper>(provider => new DomainErrorMappingRegistry(
             provider.GetServices<IDomainErrorRegistration>(),
