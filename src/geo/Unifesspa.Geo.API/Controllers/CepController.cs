@@ -5,12 +5,15 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using Unifesspa.Geo.API.Errors;
 using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.Cep;
+using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
+using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Endpoint autenticado de lookup de CEP — reference data (sem role administrativa,
@@ -34,11 +37,16 @@ public sealed class CepController : ControllerBase
 {
     private readonly IQueryBus _queryBus;
     private readonly IResourceLinksBuilder<CepResolvidoDto> _linksBuilder;
+    private readonly IDomainErrorMapper _mapper;
 
-    public CepController(IQueryBus queryBus, IResourceLinksBuilder<CepResolvidoDto> linksBuilder)
+    public CepController(
+        IQueryBus queryBus,
+        IResourceLinksBuilder<CepResolvidoDto> linksBuilder,
+        IDomainErrorMapper mapper)
     {
         _queryBus = queryBus;
         _linksBuilder = linksBuilder;
+        _mapper = mapper;
     }
 
     /// <summary>
@@ -51,18 +59,13 @@ public sealed class CepController : ControllerBase
     [VendorMediaType(Resource = "cep", Versions = [1])]
     [ProducesResponseType(typeof(CepResolvidoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status406NotAcceptable)]
     public async Task<IActionResult> Resolver(string cep, CancellationToken cancellationToken)
     {
         if (!CepValido.TentarNormalizar(cep, out string? cepNormalizado))
         {
-            return BadRequest(new ProblemDetails
-            {
-                Title = "CEP inválido",
-                Detail = "O CEP deve ter exatamente 8 dígitos (ex.: 01001000 ou 01001-000).",
-                Status = StatusCodes.Status400BadRequest,
-            });
+            return Result.Failure(ErrosDasConsultas.ErroCepFormatoInvalido()).ToActionResult(_mapper);
         }
 
         CepResolvidoDto? endereco = await _queryBus
@@ -71,7 +74,7 @@ public sealed class CepController : ControllerBase
 
         if (endereco is null)
         {
-            return NotFound();
+            return Result.Failure(ErrosDasConsultas.ErroCepNaoEncontrado()).ToActionResult(_mapper);
         }
 
         return Ok(endereco with { Links = _linksBuilder.Build(endereco) });

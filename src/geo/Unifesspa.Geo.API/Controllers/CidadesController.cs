@@ -1,17 +1,20 @@
 namespace Unifesspa.Geo.API.Controllers;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using Unifesspa.Geo.API.Errors;
+using Unifesspa.Geo.API.Formatting;
 using Unifesspa.Geo.Application.Abstractions.Messaging;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Application.Queries.Cidades;
+using Unifesspa.Geo.Infrastructure.Core.Errors;
 using Unifesspa.Geo.Infrastructure.Core.Formatting;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 using Unifesspa.Geo.Infrastructure.Core.Pagination;
+using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Endpoints autenticados de leitura de Cidades — reference data
@@ -26,22 +29,22 @@ using Unifesspa.Geo.Infrastructure.Core.Pagination;
     "Performance",
     "CA1515:Consider making public types internal",
     Justification = "ASP.NET Core ControllerFeatureProvider só descobre controllers public.")]
-public sealed partial class CidadesController : ControllerBase
+public sealed class CidadesController : ControllerBase
 {
     private const string ResourceTag = "cidades";
-
-    /// <summary>Limite defensivo de comprimento do termo de busca (cobre o Nome máximo + margem).</summary>
-    private const int BuscaMaxLength = 256;
 
     private readonly IQueryBus _queryBus;
     private readonly IResourceLinksBuilder<CidadeResumoDto> _resumoLinks;
     private readonly IResourceLinksBuilder<CidadeDetalheDto> _detalheLinks;
+    private readonly IDomainErrorMapper _mapper;
 
     public CidadesController(
         IQueryBus queryBus,
         IResourceLinksBuilder<CidadeResumoDto> resumoLinks,
-        IResourceLinksBuilder<CidadeDetalheDto> detalheLinks)
+        IResourceLinksBuilder<CidadeDetalheDto> detalheLinks,
+        IDomainErrorMapper mapper)
     {
+        _mapper = mapper;
         _queryBus = queryBus;
         _resumoLinks = resumoLinks;
         _detalheLinks = detalheLinks;
@@ -69,16 +72,20 @@ public sealed partial class CidadesController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(page);
 
-        if (q is { Length: > BuscaMaxLength })
+        if (TermoDeBusca.Validar(q) is { } recusa)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Title = "Termo de busca muito longo",
-                Detail = $"O parâmetro 'q' não pode exceder {BuscaMaxLength} caracteres.",
-                Status = StatusCodes.Status400BadRequest,
-            });
+            return Result.Failure(recusa).ToActionResult(_mapper);
         }
 
+        return await ListarPaginaAsync(page, uf, q, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ListarPaginaAsync(
+        PageRequest page,
+        string? uf,
+        string? q,
+        CancellationToken cancellationToken)
+    {
         ListarCidadesResult resultado = await _queryBus
             .Send(new ListarCidadesQuery(page.AfterSortKey, page.AfterId, page.Limit, page.Direction, uf, q), cancellationToken)
             .ConfigureAwait(false);
@@ -100,18 +107,13 @@ public sealed partial class CidadesController : ControllerBase
     [VendorMediaType(Resource = "cidade", Versions = [1])]
     [ProducesResponseType(typeof(CidadeDetalheDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status406NotAcceptable)]
     public async Task<IActionResult> ObterPorCodigoIbge(string codigoIbge, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(codigoIbge) || !CodigoIbgeRegex().IsMatch(codigoIbge))
+        if (FormatoDoCodigoIbge.Validar(codigoIbge) is { } recusa)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Title = "Código IBGE inválido",
-                Detail = "O código IBGE deve ter exatamente 7 dígitos.",
-                Status = StatusCodes.Status400BadRequest,
-            });
+            return Result.Failure(recusa).ToActionResult(_mapper);
         }
 
         CidadeDetalheDto? cidade = await _queryBus
@@ -120,14 +122,9 @@ public sealed partial class CidadesController : ControllerBase
 
         if (cidade is null)
         {
-            return NotFound();
+            return Result.Failure(ErrosDasConsultas.ErroCidadeNaoEncontrada()).ToActionResult(_mapper);
         }
 
         return Ok(cidade with { Links = _detalheLinks.Build(cidade) });
     }
-
-    // [0-9] e não \d: em .NET \d casa dígitos Unicode (ex.: árabe-índicos); a chave
-    // IBGE é ASCII — um "7 dígitos" não-ASCII deve ser 400 (formato), não 404.
-    [GeneratedRegex(@"^[0-9]{7}$")]
-    private static partial Regex CodigoIbgeRegex();
 }
