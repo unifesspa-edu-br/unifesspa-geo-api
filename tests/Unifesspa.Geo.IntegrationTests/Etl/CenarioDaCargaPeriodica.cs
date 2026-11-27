@@ -44,6 +44,9 @@ internal sealed class CenarioDaCargaPeriodica
 
     public RelogioFixo Relogio { get; } = new();
 
+    /// <summary>Opções da carga usadas pelo executor montado pelo cenário.</summary>
+    public EtlOpcoes Opcoes { get; init; } = new();
+
     /// <summary>Interceptadores do EF Core aplicados a todo contexto criado pelo cenário, inclusive o da finalização da carga.</summary>
     public IReadOnlyList<IInterceptor> Interceptadores { get; set; } = [];
 
@@ -107,7 +110,7 @@ internal sealed class CenarioDaCargaPeriodica
             CriarImportadorVersao(ctx, fonteFactory, configuracao),
             CriarFinalizacao(cacheLazy, metricas, fonteFactory),
             Relogio,
-            Options.Create(new EtlOpcoes()),
+            Options.Create(Opcoes),
             NullLogger<CargaDaImportacao>.Instance);
     }
 
