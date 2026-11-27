@@ -18,13 +18,13 @@ internal readonly record struct CepGeralParaCarga(
     Guid? DistritoId,
     string Uf,
     PosicaoGeografica Posicao,
-    string Versao)
+    ProvenienciaDaCarga Proveniencia)
 {
     public static CepGeralParaCarga? De(
         CepGeralCru linha,
         Dictionary<int, Guid> cidadesPorIdDne,
         Dictionary<int, LocalidadeResolvida> distritosPorIdDne,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador)
     {
         string? cep = ChaveCodigo(linha.Cep);
@@ -38,7 +38,7 @@ internal readonly record struct CepGeralParaCarga(
             contador.ContarOrfao(cep);
             return null;
         }
-        return Montar(linha, cep, cidadeId, distritosPorIdDne, versao, contador);
+        return Montar(linha, cep, cidadeId, distritosPorIdDne, proveniencia, contador);
     }
 
     private static CepGeralParaCarga Montar(
@@ -46,7 +46,7 @@ internal readonly record struct CepGeralParaCarga(
         string cep,
         Guid cidadeId,
         Dictionary<int, LocalidadeResolvida> distritosPorIdDne,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador) =>
         new(
             cep,
@@ -54,11 +54,11 @@ internal readonly record struct CepGeralParaCarga(
             ResolverCoerente(distritosPorIdDne, linha.DistritoIdDne, cidadeId, contador),
             linha.Uf ?? string.Empty,
             CoordenadaDne.DoPontoValidado(linha.Latitude, linha.Longitude),
-            versao);
+            proveniencia);
 
     public Result<CepGeral> Criar() =>
-        CepGeral.Importar(Cep, CidadeId, DistritoId, Uf, Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, Versao);
+        CepGeral.Importar(Cep, CidadeId, DistritoId, Uf, Posicao, Proveniencia);
 
     public Result Atualizar(CepGeral existente) =>
-        existente.Atualizar(CidadeId, DistritoId, Uf, Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, Versao);
+        existente.Atualizar(CidadeId, DistritoId, Uf, Posicao, Proveniencia);
 }

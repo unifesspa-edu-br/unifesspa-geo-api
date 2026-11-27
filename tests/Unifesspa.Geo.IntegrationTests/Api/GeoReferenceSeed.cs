@@ -71,10 +71,10 @@ internal static partial class GeoReferenceSeed
             new PosicaoGeografica(latitude, longitude, null), null, Proveniencia(vigente)));
 
     public static LogradouroComplemento NovoComplemento(string cep, string complemento, bool vigente = true) =>
-        GeoTestKeys.Ok(LogradouroComplemento.Importar(cep, complemento, Normalizar(complemento), Versao, vigente));
+        GeoTestKeys.Ok(LogradouroComplemento.Importar(cep, complemento, Normalizar(complemento), Proveniencia(vigente)));
 
     public static CepGrandeUsuario NovoGrandeUsuario(string cep, string nome, bool vigente = true) =>
-        GeoTestKeys.Ok(CepGrandeUsuario.Importar(cep, nome, Normalizar(nome), Versao, vigente));
+        GeoTestKeys.Ok(CepGrandeUsuario.Importar(cep, new NomeComFormaDeBusca(nome, Normalizar(nome)), Proveniencia(vigente)));
 
     public static CepGeral NovoCepGeral(
         string cep,
@@ -82,7 +82,7 @@ internal static partial class GeoReferenceSeed
         string uf,
         Guid? distritoId = null,
         bool vigente = true) =>
-        GeoTestKeys.Ok(CepGeral.Importar(cep, cidadeId, distritoId, uf, null, null, null, Versao, vigente));
+        GeoTestKeys.Ok(CepGeral.Importar(cep, cidadeId, distritoId, uf, default, Proveniencia(vigente)));
 
     public static CidadeFaixaCep NovaCidadeFaixa(Guid cidadeId, string cepInicial, string cepFinal, bool vigente = true) =>
         GeoTestKeys.Ok(CidadeFaixaCep.Importar(cidadeId, new FaixaDeCep(cepInicial, cepFinal), Proveniencia(vigente)));

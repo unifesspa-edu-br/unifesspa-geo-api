@@ -35,7 +35,7 @@ internal sealed record ResolucaoLocalidades(
 internal readonly record struct LocalidadeResolvida(Guid Id, Guid CidadeId);
 
 /// <summary>
-/// Carga das folhas de volume modesto via upsert por chave natural (idempotente):
+/// Carga das folhas de volume modesto por gravação por chave natural (idempotente):
 /// Distrito e Bairro (+faixas), CEP de grande usuário e CEP geral.
 /// Executa dentro da transação ativa do <see cref="GeoDbContext"/> e devolve a
 /// <see cref="ResolucaoLocalidades"/> (dicionários de FK) para a carga em lote dos
@@ -65,8 +65,8 @@ internal sealed class GeoImportadorDistritoBairro
         Dictionary<int, LocalidadeResolvida> bairrosPorIdDne =
             await ImportarBairrosAsync(fonte, cidadesPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         await ImportarFaixasDeBairroAsync(fonte, bairrosPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
-        await ImportarGrandesUsuariosAsync(fonte, relatorio, cancellationToken).ConfigureAwait(false);
-        await ImportarCepGeraisAsync(fonte, cidadesPorIdDne, distritosPorIdDne, relatorio, cancellationToken).ConfigureAwait(false);
+        await ImportarGrandesUsuariosAsync(fonte, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
+        await ImportarCepGeraisAsync(fonte, cidadesPorIdDne, distritosPorIdDne, proveniencia, relatorio, cancellationToken).ConfigureAwait(false);
         return new ResolucaoLocalidades(cidadesPorIdDne, distritosPorIdDne, bairrosPorIdDne);
     }
 
@@ -234,6 +234,7 @@ internal sealed class GeoImportadorDistritoBairro
 
     private async Task ImportarGrandesUsuariosAsync(
         IGeoFonteDados fonte,
+        ProvenienciaDaCarga proveniencia,
         RelatorioImportacao relatorio,
         CancellationToken cancellationToken)
     {
@@ -243,7 +244,7 @@ internal sealed class GeoImportadorDistritoBairro
         await foreach (CepGrandeUsuarioCru linha in fonte.LerCepGrandesUsuariosAsync(cancellationToken).ConfigureAwait(false))
         {
             gravacao.Contador.ContarLido();
-            if (CepGrandeUsuarioParaCarga.De(linha, fonte.Versao, gravacao.Contador) is { } dados)
+            if (CepGrandeUsuarioParaCarga.De(linha, proveniencia, gravacao.Contador) is { } dados)
             {
                 gravacao.Gravar(dados.Cep, dados.Criar, dados.Atualizar);
             }
@@ -253,11 +254,12 @@ internal sealed class GeoImportadorDistritoBairro
     }
 
     // CEP geral de cidade/distrito (linha de logradouro sem nome na fonte). Chave natural =
-    // CEP; reexecutar atualiza in place.
+    // CEP; reexecutar atualiza o registro existente.
     private async Task ImportarCepGeraisAsync(
         IGeoFonteDados fonte,
         Dictionary<int, Guid> cidadesPorIdDne,
         Dictionary<int, LocalidadeResolvida> distritosPorIdDne,
+        ProvenienciaDaCarga proveniencia,
         RelatorioImportacao relatorio,
         CancellationToken cancellationToken)
     {
@@ -267,7 +269,7 @@ internal sealed class GeoImportadorDistritoBairro
         await foreach (CepGeralCru linha in fonte.LerCepGeraisAsync(cancellationToken).ConfigureAwait(false))
         {
             gravacao.Contador.ContarLido();
-            if (CepGeralParaCarga.De(linha, cidadesPorIdDne, distritosPorIdDne, fonte.Versao, gravacao.Contador) is { } dados)
+            if (CepGeralParaCarga.De(linha, cidadesPorIdDne, distritosPorIdDne, proveniencia, gravacao.Contador) is { } dados)
             {
                 gravacao.Gravar(dados.Cep, dados.Criar, dados.Atualizar);
             }

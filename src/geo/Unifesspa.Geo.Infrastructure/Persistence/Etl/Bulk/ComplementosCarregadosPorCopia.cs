@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Npgsql;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -39,12 +40,14 @@ internal sealed class ComplementosCarregadosPorCopia : ITabelaCarregadaPorCopia<
         """;
 
     private readonly IGeoFonteDados _fonte;
+    private readonly ProvenienciaDaCarga _proveniencia;
 
     public ComplementosCarregadosPorCopia(IGeoFonteDados fonte)
     {
         ArgumentNullException.ThrowIfNull(fonte);
 
         _fonte = fonte;
+        _proveniencia = new ProvenienciaDaCarga(fonte.Versao);
     }
 
     public ComandosDaTabelaPorCopia Comandos { get; } = new(
@@ -84,5 +87,5 @@ internal sealed class ComplementosCarregadosPorCopia : ITabelaCarregadaPorCopia<
             cru.Cep ?? string.Empty,
             cru.Complemento ?? string.Empty,
             cru.ComplementoSemAcento ?? cru.Complemento ?? string.Empty,
-            _fonte.Versao);
+            _proveniencia);
 }

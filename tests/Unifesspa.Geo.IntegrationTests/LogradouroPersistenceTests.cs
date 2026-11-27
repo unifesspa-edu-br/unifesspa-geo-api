@@ -7,6 +7,7 @@ using Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence;
 
 /// <summary>
@@ -94,8 +95,10 @@ public sealed class LogradouroPersistenceTests
     public async Task CepGrandeUsuario_CepUnico()
     {
         string cep = GeoTestKeys.Cep();
-        CepGrandeUsuario g1 = GeoTestKeys.Ok(CepGrandeUsuario.Importar(cep, "Órgão A", null, VersaoDataset));
-        CepGrandeUsuario g2 = GeoTestKeys.Ok(CepGrandeUsuario.Importar(cep, "Órgão B", null, VersaoDataset));
+        CepGrandeUsuario g1 = GeoTestKeys.Ok(CepGrandeUsuario.Importar(
+            cep, new NomeComFormaDeBusca("Órgão A", null), new ProvenienciaDaCarga(VersaoDataset)));
+        CepGrandeUsuario g2 = GeoTestKeys.Ok(CepGrandeUsuario.Importar(
+            cep, new NomeComFormaDeBusca("Órgão B", null), new ProvenienciaDaCarga(VersaoDataset)));
 
         await _banco.GravarAsync(g1);
         await _banco.ExigirViolacaoUniqueAsync(g2, "ix_cep_grande_usuario_cep");
@@ -127,7 +130,8 @@ public sealed class LogradouroPersistenceTests
     }
 
     private static LogradouroComplemento NovoComplemento(string cep, string complemento, string complementoNormalizado) =>
-        GeoTestKeys.Ok(LogradouroComplemento.Importar(cep, complemento, complementoNormalizado, VersaoDataset));
+        GeoTestKeys.Ok(LogradouroComplemento.Importar(
+            cep, complemento, complementoNormalizado, new ProvenienciaDaCarga(VersaoDataset)));
 
     private static Logradouro NovoLogradouro(string cep, string nome, string nomeNormalizado, Guid cidadeId, bool ativo = true) =>
         GeoTestKeys.Ok(Logradouro.Importar(

@@ -34,8 +34,9 @@ internal sealed record CenarioDoLogradouroDaSe(
             ativo: true, versaoDataset: VersaoDataset));
 
     private static LogradouroComplemento NovoComplemento(string cep) =>
-        GeoTestKeys.Ok(LogradouroComplemento.Importar(cep, "lado par", "lado par", VersaoDataset));
+        GeoTestKeys.Ok(LogradouroComplemento.Importar(cep, "lado par", "lado par", new ProvenienciaDaCarga(VersaoDataset)));
 
     private static CepGrandeUsuario NovoGrandeUsuario() =>
-        GeoTestKeys.Ok(CepGrandeUsuario.Importar(GeoTestKeys.Cep(), "UNESP", "unesp", VersaoDataset));
+        GeoTestKeys.Ok(CepGrandeUsuario.Importar(
+            GeoTestKeys.Cep(), new NomeComFormaDeBusca("UNESP", "unesp"), new ProvenienciaDaCarga(VersaoDataset)));
 }
