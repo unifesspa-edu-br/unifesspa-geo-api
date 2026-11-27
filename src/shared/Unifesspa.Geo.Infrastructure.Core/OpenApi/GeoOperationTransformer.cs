@@ -2,8 +2,6 @@ namespace Unifesspa.Geo.Infrastructure.Core.OpenApi;
 
 using System.Text.Json.Nodes;
 
-using Idempotency;
-
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -11,8 +9,6 @@ using Microsoft.OpenApi;
 /// <summary>
 /// Operation transformer que injeta metadata institucional por operação:
 /// <list type="bullet">
-///   <item><description>Header <c>Idempotency-Key</c> declarado como required quando a action tem <c>[RequiresIdempotencyKey]</c>.</description></item>
-///   <item><description>Extension <c>x-uniplus-idempotent: true</c> em endpoints com idempotência opt-in, preservada por compatibilidade V1.</description></item>
 ///   <item><description>Content type de respostas 4xx/5xx coagido para <c>application/problem+json</c> — espelha o que o middleware de fato emite via <c>result.ToActionResult(mapper)</c> (ADR-0023, RFC 9457). Sem isso o spec declararia <c>application/json</c> (default do MVC) e clientes gerados rejeitariam o response real.</description></item>
 /// </list>
 /// </summary>
@@ -36,36 +32,6 @@ public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
         IList<object> metadata = context.Description.ActionDescriptor.EndpointMetadata;
 
         ApplyAuthorizationMetadata(operation, context, metadata);
-
-        bool requiresIdempotency = metadata.OfType<RequiresIdempotencyKeyAttribute>().Any();
-        if (requiresIdempotency)
-        {
-            operation.Parameters ??= [];
-            operation.Parameters.Add(new OpenApiParameter
-            {
-                Name = "Idempotency-Key",
-                In = ParameterLocation.Header,
-                Required = true,
-                Description = "Chave opaca (1-255 ASCII printable, sem ',' ou ';') para retry seguro do comando. "
-                    + "Replay com mesma key + mesmo body retorna response cacheada (ADR-0027).",
-                Schema = new OpenApiSchema
-                {
-                    Type = JsonSchemaType.String,
-                    MinLength = 1,
-                    MaxLength = 255,
-                    // ECMA-262 (JSON Schema) — espelha IdempotencyFilter.IsKeyValid:
-                    // ASCII printable (0x21-0x7E) menos ',' (0x2C) e ';' (0x3B),
-                    // que são separadores em sf-list (draft-ietf-httpapi-idempotency-key).
-                    // Mantém o contrato consistente com a validação de runtime — clientes
-                    // gerados a partir do spec recebem 400 imediato em chave inválida em vez
-                    // de aceitar a chamada e ser rejeitado pelo filter.
-                    Pattern = @"^[\x21-\x2B\x2D-\x3A\x3C-\x7E]+$",
-                },
-            });
-
-            operation.Extensions ??= new Dictionary<string, IOpenApiExtension>(StringComparer.Ordinal);
-            operation.Extensions["x-uniplus-idempotent"] = new JsonNodeExtension(JsonValue.Create(true));
-        }
 
         return Task.CompletedTask;
     }

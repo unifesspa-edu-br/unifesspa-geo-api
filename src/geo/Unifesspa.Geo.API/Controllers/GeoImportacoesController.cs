@@ -20,7 +20,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// <c>/api/admin/...</c> e restritos ao role <c>plataforma-admin</c>.
 /// </summary>
 /// <remarks>
-/// Não usa <c>Idempotency-Key</c> (ADR-0027): o resumo SHA-256 do pacote identifica o envio e a
+/// Não usa chave de idempotência de requisição: o resumo SHA-256 do pacote identifica o envio e a
 /// trava da carga recusa o envio simultâneo.
 /// </remarks>
 [ApiController]

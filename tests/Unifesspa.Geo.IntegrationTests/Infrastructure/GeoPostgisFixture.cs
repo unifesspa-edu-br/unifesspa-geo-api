@@ -57,7 +57,7 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
             // chegaria tarde para a connection string lazy do DbContext/Wolverine).
             Environment.SetEnvironmentVariable(ConnectionStringEnvVar, ConnectionString);
 
-            // Aplica o schema (extensão postgis + tabela-sonda + idempotency_cache).
+            // Aplica o schema (extensão postgis + tabela-sonda).
             // Como superusuário do container, o CREATE EXTENSION postgis cria de fato.
             await using GeoDbContext context = CreateDbContext();
             await context.Database.MigrateAsync().ConfigureAwait(false);
