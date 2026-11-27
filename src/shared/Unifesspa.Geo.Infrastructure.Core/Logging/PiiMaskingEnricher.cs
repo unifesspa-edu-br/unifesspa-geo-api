@@ -29,19 +29,21 @@ public sealed partial class PiiMaskingEnricher : ILogEventEnricher
             return texto;
         }
 
-        return CpfPattern().Replace(texto, static match =>
+        return CpfPattern().Replace(texto, MascararCpfEncontrado);
+    }
+
+    private static string MascararCpfEncontrado(Match encontrado)
+    {
+        Span<char> digitos = stackalloc char[11];
+        int count = 0;
+        foreach (char c in encontrado.ValueSpan)
         {
-            Span<char> digitos = stackalloc char[11];
-            int count = 0;
-            foreach (char c in match.ValueSpan)
-            {
-                if (char.IsAsciiDigit(c))
-                    digitos[count++] = c;
-            }
-            return count == 11
-                ? $"***.{new string(digitos[3..6])}.{new string(digitos[6..9])}-**"
-                : "***.***.***-**";
-        });
+            if (char.IsAsciiDigit(c))
+                digitos[count++] = c;
+        }
+        return count == 11
+            ? $"***.{new string(digitos[3..6])}.{new string(digitos[6..9])}-**"
+            : "***.***.***-**";
     }
 
     private static LogEventPropertyValue MascararValor(LogEventPropertyValue valor) => valor switch
@@ -61,111 +63,73 @@ public sealed partial class PiiMaskingEnricher : ILogEventEnricher
 
     private static StructureValue MascararEstrutura(StructureValue original)
     {
-        LogEventProperty[]? propriedadesMascaradas = null;
-
-        for (int i = 0; i < original.Properties.Count; i++)
-        {
-            LogEventProperty propriedadeOriginal = original.Properties[i];
-            LogEventPropertyValue valorMascarado = MascararValor(propriedadeOriginal.Value);
-
-            if (!ReferenceEquals(valorMascarado, propriedadeOriginal.Value))
-            {
-                if (propriedadesMascaradas is null)
-                {
-                    propriedadesMascaradas = new LogEventProperty[original.Properties.Count];
-                    for (int j = 0; j < i; j++)
-                    {
-                        propriedadesMascaradas[j] = original.Properties[j];
-                    }
-                }
-
-                propriedadesMascaradas[i] = new LogEventProperty(propriedadeOriginal.Name, valorMascarado);
-            }
-            else if (propriedadesMascaradas is not null)
-            {
-                propriedadesMascaradas[i] = propriedadeOriginal;
-            }
-        }
-
-        return propriedadesMascaradas is null
-            ? original
-            : new StructureValue(propriedadesMascaradas, original.TypeTag);
+        LogEventProperty[]? mascaradas = CopiaSoSeAlgoMudou(original.Properties, original.Properties.Count, MascararPropriedade);
+        return mascaradas is null ? original : new StructureValue(mascaradas, original.TypeTag);
     }
 
     private static SequenceValue MascararSequencia(SequenceValue original)
     {
-        LogEventPropertyValue[]? elementosMascarados = null;
-
-        for (int i = 0; i < original.Elements.Count; i++)
-        {
-            LogEventPropertyValue elementoOriginal = original.Elements[i];
-            LogEventPropertyValue valorMascarado = MascararValor(elementoOriginal);
-
-            if (!ReferenceEquals(valorMascarado, elementoOriginal))
-            {
-                if (elementosMascarados is null)
-                {
-                    elementosMascarados = new LogEventPropertyValue[original.Elements.Count];
-                    for (int j = 0; j < i; j++)
-                    {
-                        elementosMascarados[j] = original.Elements[j];
-                    }
-                }
-
-                elementosMascarados[i] = valorMascarado;
-            }
-            else if (elementosMascarados is not null)
-            {
-                elementosMascarados[i] = elementoOriginal;
-            }
-        }
-
-        return elementosMascarados is null ? original : new SequenceValue(elementosMascarados);
+        LogEventPropertyValue[]? mascarados = CopiaSoSeAlgoMudou(original.Elements, original.Elements.Count, MascararElemento);
+        return mascarados is null ? original : new SequenceValue(mascarados);
     }
 
     private static DictionaryValue MascararDicionario(DictionaryValue original)
     {
-        KeyValuePair<ScalarValue, LogEventPropertyValue>[]? entradasMascaradas = null;
+        KeyValuePair<ScalarValue, LogEventPropertyValue>[]? mascaradas =
+            CopiaSoSeAlgoMudou(original.Elements, original.Elements.Count, MascararEntrada);
+        return mascaradas is null ? original : new DictionaryValue(mascaradas);
+    }
+
+    // A estrutura só é recriada se algum valor foi mascarado: antes da primeira mudança copia os
+    // originais; depois dela, os inalterados ficam como estão. A igualdade por referência indica "não mudou".
+    private static T[]? CopiaSoSeAlgoMudou<T>(IEnumerable<T> originais, int quantidade, Func<T, (T Valor, bool Mudou)> mascarar)
+    {
+        T[]? copia = null;
         int indice = 0;
-
-        foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> entrada in original.Elements)
+        foreach (T original in originais)
         {
-            ScalarValue chaveMascarada = entrada.Key.Value is string textoChave
-                ? MascararScalar(entrada.Key, textoChave)
-                : entrada.Key;
-            LogEventPropertyValue valorMascarado = MascararValor(entrada.Value);
-
-            bool chaveAlterada = !ReferenceEquals(chaveMascarada, entrada.Key);
-            bool valorAlterado = !ReferenceEquals(valorMascarado, entrada.Value);
-
-            if (chaveAlterada || valorAlterado)
-            {
-                if (entradasMascaradas is null)
-                {
-                    entradasMascaradas = new KeyValuePair<ScalarValue, LogEventPropertyValue>[original.Elements.Count];
-                    int j = 0;
-                    foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> preservada in original.Elements)
-                    {
-                        if (j == indice)
-                        {
-                            break;
-                        }
-
-                        entradasMascaradas[j++] = preservada;
-                    }
-                }
-
-                entradasMascaradas[indice] = new KeyValuePair<ScalarValue, LogEventPropertyValue>(chaveMascarada, valorMascarado);
-            }
-            else if (entradasMascaradas is not null)
-            {
-                entradasMascaradas[indice] = entrada;
-            }
-
+            (T valor, bool mudou) = mascarar(original);
+            copia ??= mudou ? CopiarOsAnteriores(originais, quantidade, indice) : null;
+            copia?[indice] = valor;
             indice++;
         }
 
-        return entradasMascaradas is null ? original : new DictionaryValue(entradasMascaradas);
+        return copia;
+    }
+
+    private static T[] CopiarOsAnteriores<T>(IEnumerable<T> originais, int quantidade, int ate)
+    {
+        T[] copia = new T[quantidade];
+        int indice = 0;
+        foreach (T anterior in originais.Take(ate))
+        {
+            copia[indice++] = anterior;
+        }
+
+        return copia;
+    }
+
+    private static (LogEventProperty, bool) MascararPropriedade(LogEventProperty propriedade)
+    {
+        LogEventPropertyValue valor = MascararValor(propriedade.Value);
+        return ReferenceEquals(valor, propriedade.Value)
+            ? (propriedade, false)
+            : (new LogEventProperty(propriedade.Name, valor), true);
+    }
+
+    private static (LogEventPropertyValue, bool) MascararElemento(LogEventPropertyValue elemento)
+    {
+        LogEventPropertyValue valor = MascararValor(elemento);
+        return (valor, !ReferenceEquals(valor, elemento));
+    }
+
+    private static (KeyValuePair<ScalarValue, LogEventPropertyValue>, bool) MascararEntrada(
+        KeyValuePair<ScalarValue, LogEventPropertyValue> entrada)
+    {
+        ScalarValue chave = entrada.Key.Value is string textoChave ? MascararScalar(entrada.Key, textoChave) : entrada.Key;
+        LogEventPropertyValue valor = MascararValor(entrada.Value);
+        bool mudou = !ReferenceEquals(chave, entrada.Key) || !ReferenceEquals(valor, entrada.Value);
+        return (mudou ? new KeyValuePair<ScalarValue, LogEventPropertyValue>(chave, valor) : entrada, mudou);
     }
 
     // Word boundaries ((?<!\d) / (?!\d)) impedem casar sub-sequências de 11 dígitos
