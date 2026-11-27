@@ -15,8 +15,6 @@ public sealed class RegistroDeErrosDaImportacaoTests
         new GeoDomainErrorRegistration().GetMappings().ToDictionary(m => m.Key, m => m.Value);
 
     [Theory(DisplayName = "Código de erro da importação é registrado com o status, o código e o título esperados")]
-    [InlineData(GeoImportacaoErrorCodes.VersaoFormatoInvalido, StatusCodes.Status422UnprocessableEntity, "uniplus.geo.importacao.versao_formato_invalido", "Versão da base fora do formato AAAAMM")]
-    [InlineData(GeoImportacaoErrorCodes.DisparadoPorObrigatorio, StatusCodes.Status422UnprocessableEntity, "uniplus.geo.importacao.disparado_por_obrigatorio", "A identificação de quem disparou a carga é obrigatória")]
     [InlineData(GeoImportacaoErrorCodes.ImportacaoEmAndamento, StatusCodes.Status409Conflict, "uniplus.geo.importacao.em_andamento", "Já existe uma importação do Geo em andamento")]
     [InlineData(GeoImportacaoErrorCodes.NaoEnfileirada, StatusCodes.Status503ServiceUnavailable, "uniplus.geo.importacao.nao_enfileirada", "Não foi possível colocar a carga na fila porque o serviço está sendo encerrado")]
     [InlineData(GeoImportacaoErrorCodes.VersaoNaoProgressiva, StatusCodes.Status409Conflict, "uniplus.geo.importacao.versao_nao_progressiva", "A versão do pacote é anterior à última versão aplicada")]
@@ -31,10 +29,10 @@ public sealed class RegistroDeErrosDaImportacaoTests
         Mapeamentos[codigo].Title.Should().Be(titulo);
     }
 
-    [Fact(DisplayName = "O registro mapeia exatamente os oito códigos conferidos acima")]
+    [Fact(DisplayName = "O registro mapeia exatamente os seis códigos conferidos acima")]
     public void Registro_MapeiaExatamenteOsCodigosConferidos()
     {
-        Mapeamentos.Should().HaveCount(8);
+        Mapeamentos.Should().HaveCount(6);
     }
 
     [Theory(DisplayName = "O erro de pacote acima do limite cita o limite formatado, não em bytes")]

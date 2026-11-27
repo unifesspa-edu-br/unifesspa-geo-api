@@ -7,12 +7,6 @@ namespace Unifesspa.Geo.Domain.Errors;
 /// </summary>
 public static class GeoImportacaoErrorCodes
 {
-    /// <summary>Versão fora do formato AAAAMM (6 dígitos, mês 01–12).</summary>
-    public const string VersaoFormatoInvalido = "GeoImportacao.VersaoFormatoInvalido";
-
-    /// <summary>Identificação de quem disparou a carga ausente.</summary>
-    public const string DisparadoPorObrigatorio = "GeoImportacao.DisparadoPorObrigatorio";
-
     /// <summary>Já existe uma carga em andamento — uma execução por vez (concorrência → 409).</summary>
     public const string ImportacaoEmAndamento = "GeoImportacao.ImportacaoEmAndamento";
 

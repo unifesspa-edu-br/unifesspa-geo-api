@@ -57,50 +57,53 @@ public sealed class GeoImportacaoExecucao : EntityBase
 
     /// <summary>
     /// Abre uma execução no estado <see cref="StatusImportacao.EmAndamento"/> para o pacote
-    /// recebido. Valida o formato da versão do pacote (AAAAMM), o resumo SHA-256 e o tamanho,
-    /// e a identificação do disparador antes de criar.
+    /// recebido. Recusa com <see cref="GeoImportacaoErrorCodes.PacoteInvalido"/> a versão fora do
+    /// formato AAAAMM e o pacote sem resumo SHA-256 ou sem bytes. A identificação do disparador é
+    /// invariante: vazia ou nula é erro de programação, não recusa de negócio.
     /// </summary>
     /// <param name="pacote">Pacote recebido: versão AAAAMM, resumo SHA-256 e tamanho em bytes.</param>
-    /// <param name="disparadoPor">Subject do administrador.</param>
+    /// <param name="disparadoPor">Subject do administrador; não pode ser vazio.</param>
     /// <param name="iniciadoEm">Instante de início (relógio injetado).</param>
+    /// <exception cref="ArgumentException"><paramref name="disparadoPor"/> é nulo, vazio ou só espaços.</exception>
     public static Result<GeoImportacaoExecucao> Iniciar(PacoteRecebido pacote, string disparadoPor, DateTimeOffset iniciadoEm)
     {
         ArgumentNullException.ThrowIfNull(pacote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(disparadoPor);
 
-        string versaoNormalizada = pacote.Versao?.Trim() ?? string.Empty;
-        if (!EhVersaoValida(versaoNormalizada))
-        {
-            return Result<GeoImportacaoExecucao>.Failure(new DomainError(
-                GeoImportacaoErrorCodes.VersaoFormatoInvalido,
-                "A versão da base deve estar no formato AAAAMM (6 dígitos, mês 01–12)."));
-        }
+        string versao = pacote.Versao?.Trim() ?? string.Empty;
+        DomainError? recusa = RecusaDoPacote(pacote, versao);
 
-        if (!pacote.EhConsistente)
+        return recusa is not null
+            ? Result<GeoImportacaoExecucao>.Failure(recusa)
+            : Result<GeoImportacaoExecucao>.Success(Abrir(pacote, versao, disparadoPor, iniciadoEm));
+    }
+
+    private static DomainError? RecusaDoPacote(PacoteRecebido pacote, string versao)
+    {
+        if (!EhVersaoValida(versao))
         {
-            return Result<GeoImportacaoExecucao>.Failure(new DomainError(
+            return new DomainError(
                 GeoImportacaoErrorCodes.PacoteInvalido,
-                "O resumo SHA-256 e o tamanho do pacote recebido são obrigatórios."));
+                "A versão do pacote deve estar no formato AAAAMM (6 dígitos, mês 01–12).");
         }
 
-        if (string.IsNullOrWhiteSpace(disparadoPor))
-        {
-            return Result<GeoImportacaoExecucao>.Failure(new DomainError(
-                GeoImportacaoErrorCodes.DisparadoPorObrigatorio,
-                "A identificação de quem disparou a carga é obrigatória."));
-        }
+        return pacote.EhConsistente
+            ? null
+            : new DomainError(
+                GeoImportacaoErrorCodes.PacoteInvalido,
+                "O resumo SHA-256 e o tamanho do pacote recebido são obrigatórios.");
+    }
 
-        var execucao = new GeoImportacaoExecucao
+    private static GeoImportacaoExecucao Abrir(PacoteRecebido pacote, string versao, string disparadoPor, DateTimeOffset iniciadoEm) =>
+        new()
         {
-            VersaoDataset = versaoNormalizada,
+            VersaoDataset = versao,
             PacoteSha256 = pacote.Sha256,
             PacoteTamanhoEmBytes = pacote.TamanhoEmBytes,
             DisparadoPor = disparadoPor.Trim(),
             Status = StatusImportacao.EmAndamento,
             IniciadoEm = iniciadoEm,
         };
-
-        return Result<GeoImportacaoExecucao>.Success(execucao);
-    }
 
     /// <summary>
     /// Marca a execução como concluída com sucesso, gravando o relatório. Só é válido

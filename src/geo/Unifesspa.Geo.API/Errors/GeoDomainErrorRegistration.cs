@@ -20,18 +20,6 @@ internal sealed class GeoDomainErrorRegistration : IDomainErrorRegistration
 {
     public IEnumerable<KeyValuePair<string, DomainErrorMapping>> GetMappings() =>
     [
-        new(GeoImportacaoErrorCodes.VersaoFormatoInvalido,
-            new DomainErrorMapping(
-                StatusCodes.Status422UnprocessableEntity,
-                "uniplus.geo.importacao.versao_formato_invalido",
-                "Versão da base fora do formato AAAAMM")),
-
-        new(GeoImportacaoErrorCodes.DisparadoPorObrigatorio,
-            new DomainErrorMapping(
-                StatusCodes.Status422UnprocessableEntity,
-                "uniplus.geo.importacao.disparado_por_obrigatorio",
-                "A identificação de quem disparou a carga é obrigatória")),
-
         new(GeoImportacaoErrorCodes.ImportacaoEmAndamento,
             new DomainErrorMapping(
                 StatusCodes.Status409Conflict,
