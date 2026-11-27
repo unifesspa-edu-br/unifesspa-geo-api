@@ -31,21 +31,56 @@ public sealed class OtelCollectorContainerFixture : IAsyncLifetime
     private const ushort HttpPort = 4318;
     private const string ConfigPath = "/etc/otelcol-contrib/config.yaml";
 
+    private const string ConfigReceivers =
+        """
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+                endpoint: 0.0.0.0:4317
+              http:
+                endpoint: 0.0.0.0:4318
+        """;
+
+    private const string ConfigProcessors =
+        """
+        processors:
+          batch:
+            timeout: 100ms
+        """;
+
+    private const string ConfigExporters =
+        """
+        exporters:
+          debug:
+            verbosity: detailed
+        """;
+
+    private const string ConfigServicePipelines =
+        """
+        service:
+          pipelines:
+            traces:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [debug]
+            metrics:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [debug]
+            logs:
+              receivers: [otlp]
+              processors: [batch]
+              exporters: [debug]
+        """;
+
     private readonly IContainer _container;
 
     public OtelCollectorContainerFixture()
     {
         byte[] config = Encoding.UTF8.GetBytes(BuildMinimalConfig());
 
-        _container = new ContainerBuilder(Image)
-            .WithPortBinding(GrpcPort, true)
-            .WithPortBinding(HttpPort, true)
-            .WithResourceMapping(config, ConfigPath)
-            .WithCommand("--config", ConfigPath)
-            .WithWaitStrategy(
-                Wait.ForUnixContainer()
-                    .UntilMessageIsLogged("Everything is ready. Begin running and processing data."))
-            .Build();
+        _container = CriarContainer(config);
     }
 
     /// <summary>
@@ -86,16 +121,12 @@ public sealed class OtelCollectorContainerFixture : IAsyncLifetime
     {
         ArgumentNullException.ThrowIfNull(tokensEsperados);
 
-        TimeSpan limite = timeout ?? TimeSpan.FromSeconds(10);
-        DateTimeOffset deadline = DateTimeOffset.UtcNow + limite;
+        DateTimeOffset deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(10));
 
         while (true)
         {
             string output = await GetLogsAsync().ConfigureAwait(false);
-            bool todosPresentes = tokensEsperados.All(
-                token => output.Contains(token, StringComparison.Ordinal));
-
-            if (todosPresentes || DateTimeOffset.UtcNow >= deadline)
+            if (ContemTodos(output, tokensEsperados) || DateTimeOffset.UtcNow >= deadline)
             {
                 return output;
             }
@@ -109,36 +140,20 @@ public sealed class OtelCollectorContainerFixture : IAsyncLifetime
     public async Task DisposeAsync() =>
         await _container.DisposeAsync().ConfigureAwait(false);
 
-    private static string BuildMinimalConfig() => """
-        receivers:
-          otlp:
-            protocols:
-              grpc:
-                endpoint: 0.0.0.0:4317
-              http:
-                endpoint: 0.0.0.0:4318
+    private static IContainer CriarContainer(byte[] config) =>
+        new ContainerBuilder(Image)
+            .WithPortBinding(GrpcPort, true)
+            .WithPortBinding(HttpPort, true)
+            .WithResourceMapping(config, ConfigPath)
+            .WithCommand("--config", ConfigPath)
+            .WithWaitStrategy(
+                Wait.ForUnixContainer()
+                    .UntilMessageIsLogged("Everything is ready. Begin running and processing data."))
+            .Build();
 
-        processors:
-          batch:
-            timeout: 100ms
+    private static bool ContemTodos(string output, IReadOnlyCollection<string> tokensEsperados) =>
+        tokensEsperados.All(token => output.Contains(token, StringComparison.Ordinal));
 
-        exporters:
-          debug:
-            verbosity: detailed
-
-        service:
-          pipelines:
-            traces:
-              receivers: [otlp]
-              processors: [batch]
-              exporters: [debug]
-            metrics:
-              receivers: [otlp]
-              processors: [batch]
-              exporters: [debug]
-            logs:
-              receivers: [otlp]
-              processors: [batch]
-              exporters: [debug]
-        """;
+    private static string BuildMinimalConfig() =>
+        string.Join("\n\n", ConfigReceivers, ConfigProcessors, ConfigExporters, ConfigServicePipelines);
 }
