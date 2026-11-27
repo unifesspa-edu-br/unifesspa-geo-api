@@ -44,8 +44,7 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        // Só valida a instância default — projeto não usa named options para cifragem.
-        if (!string.IsNullOrEmpty(name) && !string.Equals(name, Options.DefaultName, StringComparison.Ordinal))
+        if (InstanciaPadraoDasOpcoes.Ignora(name))
         {
             return ValidateOptionsResult.Skip;
         }

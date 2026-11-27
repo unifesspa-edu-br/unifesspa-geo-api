@@ -1,6 +1,5 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Errors;
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 using Kernel.Results;
@@ -35,7 +34,10 @@ public static class ResultExtensions
     private static ObjectResult BuildProblemDetailsResult(DomainError error, IDomainErrorMapper mapper)
     {
         DomainErrorMapping mapping = MapeamentoOuFalha(error, mapper);
-        ProblemDetails problem = CriarProblema(error, mapping, mapper.GetProblemTypeUri(mapping.Code));
+
+        // Invariante: error.Message não deve conter PII (CPF, e-mail, nome).
+        // O linter AssertNoPiiAsync detecta violações nos testes de integração.
+        ProblemDetails problem = mapping.ComoProblema(mapper.GetProblemTypeUri(mapping.Code), error.Message);
 
         return new ObjectResult(problem) { StatusCode = mapping.Status };
     }
@@ -49,24 +51,5 @@ public static class ResultExtensions
 
         throw new InvalidOperationException(
             $"O erro de domínio '{error.Code}' não tem mapeamento HTTP registrado; todo erro devolvido por uma ação precisa estar em um IDomainErrorRegistration.");
-    }
-
-    private static ProblemDetails CriarProblema(DomainError error, DomainErrorMapping mapping, Uri type)
-    {
-        ProblemDetails problem = new()
-        {
-            Status = mapping.Status,
-            Type = type.AbsoluteUri,
-            Title = mapping.Title,
-            // Invariante: error.Message não deve conter PII (CPF, e-mail, nome).
-            // O linter AssertNoPiiAsync detecta violações nos testes de integração.
-            Detail = error.Message,
-            Instance = $"urn:uuid:{Guid.CreateVersion7()}",
-        };
-
-        problem.Extensions["code"] = mapping.Code;
-        problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
-            ?? Guid.CreateVersion7().ToString("N");
-        return problem;
     }
 }

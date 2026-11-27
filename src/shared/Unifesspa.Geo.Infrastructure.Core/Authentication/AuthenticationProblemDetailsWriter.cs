@@ -1,7 +1,5 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Authentication;
 
-using System.Diagnostics;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -59,40 +57,22 @@ public static class AuthenticationProblemDetailsWriter
             return;
 
         httpContext.Response.StatusCode = definicao.Status;
-        ProblemDetails problem = CriarProblema(httpContext, definicao, detail);
+        Uri tipo = httpContext.RequestServices.GetRequiredService<ProblemTypeUriFactory>().Build(definicao.Code);
+        ProblemDetails problem = definicao.ComoProblema(tipo, detail);
 
-        if (await TryWriteComServicoAsync(httpContext, problem).ConfigureAwait(false))
-            return;
-
-        // Fallback caso AddProblemDetails não tenha sido registrado: escreve
-        // o body manualmente preservando o contrato application/problem+json.
-        // O overload <c>WriteAsJsonAsync&lt;TValue&gt;(response, value, contentType)</c>
-        // é obrigatório aqui — a sobrecarga sem contentType reescreve o header
-        // como "application/json; charset=utf-8" mesmo após Response.ContentType
-        // ter sido setado, quebrando o contrato problem+json.
-        await httpContext.Response.WriteAsJsonAsync(
-                problem,
-                options: (System.Text.Json.JsonSerializerOptions?)null,
-                contentType: "application/problem+json")
-            .ConfigureAwait(false);
+        if (!await TryWriteComServicoAsync(httpContext, problem).ConfigureAwait(false))
+            await EscreverSemOServicoAsync(httpContext, problem).ConfigureAwait(false);
     }
 
-    private static ProblemDetails CriarProblema(HttpContext httpContext, DomainErrorMapping definicao, string detail)
-    {
-        ProblemDetails problem = new()
-        {
-            Status = definicao.Status,
-            Type = httpContext.RequestServices.GetRequiredService<ProblemTypeUriFactory>().Build(definicao.Code).AbsoluteUri,
-            Title = definicao.Title,
-            Detail = detail,
-            Instance = $"urn:uuid:{Guid.CreateVersion7()}",
-        };
-
-        problem.Extensions["code"] = definicao.Code;
-        problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
-            ?? Guid.CreateVersion7().ToString("N");
-        return problem;
-    }
+    // Caso AddProblemDetails não tenha sido registrado, escreve o corpo à mão preservando o
+    // contrato application/problem+json. A sobrecarga de WriteAsJsonAsync com contentType é
+    // obrigatória: a sem contentType reescreve o cabeçalho como "application/json; charset=utf-8"
+    // mesmo depois de Response.ContentType ter sido definido, e quebra o contrato problem+json.
+    private static Task EscreverSemOServicoAsync(HttpContext httpContext, ProblemDetails problem) =>
+        httpContext.Response.WriteAsJsonAsync(
+            problem,
+            options: (System.Text.Json.JsonSerializerOptions?)null,
+            contentType: "application/problem+json");
 
     private static async Task<bool> TryWriteComServicoAsync(HttpContext httpContext, ProblemDetails problem)
     {

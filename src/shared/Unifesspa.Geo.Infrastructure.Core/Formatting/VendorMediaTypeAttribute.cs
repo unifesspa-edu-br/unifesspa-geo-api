@@ -1,6 +1,5 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Formatting;
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -214,30 +213,18 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
 
     private void WriteNotAcceptable(ActionExecutingContext context)
     {
-        context.Result = new ObjectResult(ProblemaDeVersaoNaoSuportada(context.HttpContext))
+        DomainErrorMapping definicao = ErrosDaFronteiraHttp.VersaoDeMidiaNaoSuportada;
+        Uri tipo = context.HttpContext.RequestServices.GetRequiredService<ProblemTypeUriFactory>().Build(definicao.Code);
+        ProblemDetails problema = definicao.ComoProblema(
+            tipo,
+            $"Nenhuma versão suportada pelo recurso '{Resource}' foi aceita pelo cliente.",
+            [new("available_versions", Versions)]);
+
+        context.Result = new ObjectResult(problema)
         {
-            StatusCode = ErrosDaFronteiraHttp.VersaoDeMidiaNaoSuportada.Status,
+            StatusCode = definicao.Status,
             ContentTypes = { "application/problem+json" },
         };
-    }
-
-    private ProblemDetails ProblemaDeVersaoNaoSuportada(HttpContext httpContext)
-    {
-        DomainErrorMapping definicao = ErrosDaFronteiraHttp.VersaoDeMidiaNaoSuportada;
-        ProblemDetails problem = new()
-        {
-            Status = definicao.Status,
-            Type = httpContext.RequestServices.GetRequiredService<ProblemTypeUriFactory>().Build(definicao.Code).AbsoluteUri,
-            Title = definicao.Title,
-            Detail = $"Nenhuma versão suportada pelo recurso '{Resource}' foi aceita pelo cliente.",
-            Instance = $"urn:uuid:{Guid.CreateVersion7()}",
-        };
-
-        problem.Extensions["code"] = definicao.Code;
-        problem.Extensions["available_versions"] = Versions;
-        problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
-            ?? Guid.CreateVersion7().ToString("N");
-        return problem;
     }
 
     [GeneratedRegex(@"^(?<resource>[a-z][a-z0-9_-]*)\.v(?<version>\d+)$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]

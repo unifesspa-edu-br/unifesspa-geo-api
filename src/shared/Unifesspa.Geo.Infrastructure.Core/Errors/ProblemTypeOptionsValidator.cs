@@ -25,7 +25,7 @@ internal sealed class ProblemTypeOptionsValidator : IValidateOptions<ProblemType
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!string.IsNullOrEmpty(name) && !string.Equals(name, Options.DefaultName, StringComparison.Ordinal))
+        if (InstanciaPadraoDasOpcoes.Ignora(name))
         {
             return ValidateOptionsResult.Skip;
         }
@@ -47,6 +47,11 @@ internal sealed class ProblemTypeOptionsValidator : IValidateOptions<ProblemType
             return RecusaComOValorRecebido(MotivoNaoAbsoluta, baseUri);
         }
 
+        return FalhaDoEnderecoAbsoluto(baseUri);
+    }
+
+    private static string? FalhaDoEnderecoAbsoluto(Uri baseUri)
+    {
         if (!string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
         {
             return RecusaComOValorRecebido(MotivoSemHttps, baseUri);
