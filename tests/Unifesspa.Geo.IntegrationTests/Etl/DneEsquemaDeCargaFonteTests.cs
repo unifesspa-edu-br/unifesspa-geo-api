@@ -34,14 +34,9 @@ public sealed class DneEsquemaDeCargaFonteTests
     public async Task LeRegistros_MapeiaColunas()
     {
         await CriarEsquemaAsync();
-        await using DneEsquemaDeCargaFonte fonte = new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
+        await using DneEsquemaDeCargaFonte fonte = NovaFonte();
 
-        List<PaisCru> paises = await ColetarAsync(fonte.LerPaisesAsync);
-        paises.Should().HaveCount(2);
-        paises.Should().Contain(p => p.SiglaIso == "BRA" && p.Nome == "Brasil");
-
-        List<EstadoCru> estados = await ColetarAsync(fonte.LerEstadosAsync);
-        estados.Should().ContainSingle(e => e.Uf == "PA" && e.Latitude == "-1.9981271");
+        await ConferirPaisesEEstadosAsync(fonte);
 
         List<CidadeCru> cidades = await ColetarAsync(fonte.LerCidadesAsync);
         cidades.Should().ContainSingle(c => c.CodigoIbge == CodigoMaraba && c.Uf == "PA");
@@ -57,29 +52,15 @@ public sealed class DneEsquemaDeCargaFonteTests
         await LimparDominioAsync();
         await CriarEsquemaAsync();
 
-        await using DneEsquemaDeCargaFonte fonte = new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            GeoImportadorPaisEstadoCidade importador = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
-            await importador.ImportarAsync(fonte, CancellationToken.None);
-        }
+        await using DneEsquemaDeCargaFonte fonte = NovaFonte();
+        await ImportarTopoAsync(fonte);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
         (await leitura.Paises.CountAsync()).Should().Be(1);
         Estado para = await leitura.Estados.SingleAsync(e => e.Uf == "PA");
         para.CodigoIbge.Should().Be("15");
 
-        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba);
-        maraba.MesorregiaoNome.Should().Be("Sudeste Paraense");
-        maraba.Coordenada.Should().NotBeNull();
-
-        CidadeIndicador indicador = await leitura.CidadeIndicadores.SingleAsync(i => i.CidadeId == maraba.Id);
-        indicador.MortalidadeInfantil.Should().BeNull(); // '-' no esquema de carga degradou para null
-
-        // Carga de cidade_faixa pelo id_cidade (a tabela não tem cidade_ibge).
-        CidadeFaixaCep faixa = await leitura.CidadeFaixasCep.SingleAsync(f => f.CidadeId == maraba.Id);
-        faixa.CepInicial.Should().Be("68500000");
-        faixa.CepFinal.Should().Be("68519999");
+        await ConferirCidadeDeMarabaComIndicadorEFaixaAsync(leitura);
     }
 
     [Fact(DisplayName = "Folhas: lê id_cidade/cidade_id como inteiro e distrito_id NULL do logradouro")]
@@ -87,37 +68,13 @@ public sealed class DneEsquemaDeCargaFonteTests
     {
         await CriarEsquemaAsync();
         await CriarFolhasDoEsquemaAsync();
-        await using DneEsquemaDeCargaFonte fonte = new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
+        await using DneEsquemaDeCargaFonte fonte = NovaFonte();
 
-        List<CidadeIdCru> ids = await ColetarAsync(fonte.LerCidadeIdsAsync);
-        ids.Should().ContainSingle(c => c.IdCidade == 1 && c.CodigoIbge == CodigoMaraba);
-
-        List<DistritoCru> distritos = await ColetarAsync(fonte.LerDistritosAsync);
-        distritos.Should().ContainSingle(d => d.IdDistrito == 10 && d.CidadeIdDne == 1 && d.Nome == "Cidade Nova");
-
+        await ConferirCidadeIdsEDistritosAsync(fonte);
         List<LogradouroCru> logradouros = await ColetarAsync(fonte.LerLogradourosAsync);
-        logradouros.Should().HaveCount(3); // inclui a linha com tipo e sem nome (segue o fluxo de logradouro)
-        logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.DistritoIdDne == 10 && l.CidadeIdDne == 1 && l.CepAtivo == "S");
-        logradouros.Should().ContainSingle(l => l.Cep == "68500001" && l.DistritoIdDne == null); // distrito_id NULL preservado
-
-        // A fonte projeta o TEXTO COMPLETO sem acento (logradouro_sem_acento, "Rua A"),
-        // não o nome sem o tipo (nome_logradouro, "A") — é ele que alimenta a busca e a chave.
-        logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.Nome == "A" && l.LogradouroSemAcento == "Rua A");
-
-        // Linha sem nome (CEP geral da cidade) não é logradouro: entra só em LerCepGeraisAsync.
-        logradouros.Should().NotContain(l => l.Cep == "68525000");
-        List<CepGeralCru> cepGerais = await ColetarAsync(fonte.LerCepGeraisAsync);
-        // Linha com tipo mas sem nome NÃO é CEP geral (o contrato exige tipo vazio também).
-        cepGerais.Should().ContainSingle()
-            .Which.Should().Match<CepGeralCru>(g => g.Cep == "68525000" && g.CidadeIdDne == 1 && g.DistritoIdDne == null && g.Uf == "PA");
-
-        // As faixas referenciam o pai pela coluna id_distrito/id_bairro (PK da fonte na
-        // própria tabela de faixa), não distrito_id/bairro_id — lê o esquema de carga.
-        List<FaixaLocalidadeCru> distritoFaixas = await ColetarAsync(fonte.LerDistritoFaixasAsync);
-        distritoFaixas.Should().ContainSingle(f => f.IdPaiDne == 10 && f.FaixaIni == "68500000" && f.FaixaFim == "68519999");
-
-        List<FaixaLocalidadeCru> bairroFaixas = await ColetarAsync(fonte.LerBairroFaixasAsync);
-        bairroFaixas.Should().ContainSingle(f => f.IdPaiDne == 100 && f.FaixaIni == "68500000" && f.FaixaFim == "68509999");
+        ConferirLogradouros(logradouros);
+        await ConferirCepGeraisAsync(fonte, logradouros);
+        await ConferirFaixasDeDistritoEBairroAsync(fonte);
     }
 
     [Theory(DisplayName = "Versão fora do formato AAAAMM é rejeitada no construtor (anti-injeção)")]
@@ -141,6 +98,82 @@ public sealed class DneEsquemaDeCargaFonteTests
     {
         Action criar = () => _ = new DneEsquemaDeCargaFonte(_fixture.ConnectionString, Versao, esquema, () => Task.CompletedTask);
         criar.Should().Throw<ArgumentException>();
+    }
+
+    private DneEsquemaDeCargaFonte NovaFonte() =>
+        new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
+
+    private static async Task ConferirPaisesEEstadosAsync(DneEsquemaDeCargaFonte fonte)
+    {
+        List<PaisCru> paises = await ColetarAsync(fonte.LerPaisesAsync);
+        paises.Should().HaveCount(2);
+        paises.Should().Contain(p => p.SiglaIso == "BRA" && p.Nome == "Brasil");
+
+        List<EstadoCru> estados = await ColetarAsync(fonte.LerEstadosAsync);
+        estados.Should().ContainSingle(e => e.Uf == "PA" && e.Latitude == "-1.9981271");
+    }
+
+    private async Task ImportarTopoAsync(DneEsquemaDeCargaFonte fonte)
+    {
+        await using GeoDbContext ctx = _fixture.CreateDbContext();
+        GeoImportadorPaisEstadoCidade importador = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
+        await importador.ImportarAsync(fonte, CancellationToken.None);
+    }
+
+    private static async Task ConferirCidadeDeMarabaComIndicadorEFaixaAsync(GeoDbContext leitura)
+    {
+        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba);
+        maraba.MesorregiaoNome.Should().Be("Sudeste Paraense");
+        maraba.Coordenada.Should().NotBeNull();
+
+        CidadeIndicador indicador = await leitura.CidadeIndicadores.SingleAsync(i => i.CidadeId == maraba.Id);
+        indicador.MortalidadeInfantil.Should().BeNull(); // '-' no esquema de carga degradou para null
+
+        // Carga de cidade_faixa pelo id_cidade (a tabela não tem cidade_ibge).
+        CidadeFaixaCep faixa = await leitura.CidadeFaixasCep.SingleAsync(f => f.CidadeId == maraba.Id);
+        faixa.CepInicial.Should().Be("68500000");
+        faixa.CepFinal.Should().Be("68519999");
+    }
+
+    private static async Task ConferirCidadeIdsEDistritosAsync(DneEsquemaDeCargaFonte fonte)
+    {
+        List<CidadeIdCru> ids = await ColetarAsync(fonte.LerCidadeIdsAsync);
+        ids.Should().ContainSingle(c => c.IdCidade == 1 && c.CodigoIbge == CodigoMaraba);
+
+        List<DistritoCru> distritos = await ColetarAsync(fonte.LerDistritosAsync);
+        distritos.Should().ContainSingle(d => d.IdDistrito == 10 && d.CidadeIdDne == 1 && d.Nome == "Cidade Nova");
+    }
+
+    private static void ConferirLogradouros(List<LogradouroCru> logradouros)
+    {
+        logradouros.Should().HaveCount(3); // inclui a linha com tipo e sem nome (segue o fluxo de logradouro)
+        logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.DistritoIdDne == 10 && l.CidadeIdDne == 1 && l.CepAtivo == "S");
+        logradouros.Should().ContainSingle(l => l.Cep == "68500001" && l.DistritoIdDne == null); // distrito_id NULL preservado
+
+        // A fonte projeta o TEXTO COMPLETO sem acento (logradouro_sem_acento, "Rua A"),
+        // não o nome sem o tipo (nome_logradouro, "A") — é ele que alimenta a busca e a chave.
+        logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.Nome == "A" && l.LogradouroSemAcento == "Rua A");
+    }
+
+    private static async Task ConferirCepGeraisAsync(DneEsquemaDeCargaFonte fonte, List<LogradouroCru> logradouros)
+    {
+        // Linha sem nome (CEP geral da cidade) não é logradouro: entra só em LerCepGeraisAsync.
+        logradouros.Should().NotContain(l => l.Cep == "68525000");
+        List<CepGeralCru> cepGerais = await ColetarAsync(fonte.LerCepGeraisAsync);
+        // Linha com tipo mas sem nome NÃO é CEP geral (o contrato exige tipo vazio também).
+        cepGerais.Should().ContainSingle()
+            .Which.Should().Match<CepGeralCru>(g => g.Cep == "68525000" && g.CidadeIdDne == 1 && g.DistritoIdDne == null && g.Uf == "PA");
+    }
+
+    private static async Task ConferirFaixasDeDistritoEBairroAsync(DneEsquemaDeCargaFonte fonte)
+    {
+        // As faixas referenciam o pai pela coluna id_distrito/id_bairro (PK da fonte na
+        // própria tabela de faixa), não distrito_id/bairro_id — lê o esquema de carga.
+        List<FaixaLocalidadeCru> distritoFaixas = await ColetarAsync(fonte.LerDistritoFaixasAsync);
+        distritoFaixas.Should().ContainSingle(f => f.IdPaiDne == 10 && f.FaixaIni == "68500000" && f.FaixaFim == "68519999");
+
+        List<FaixaLocalidadeCru> bairroFaixas = await ColetarAsync(fonte.LerBairroFaixasAsync);
+        bairroFaixas.Should().ContainSingle(f => f.IdPaiDne == 100 && f.FaixaIni == "68500000" && f.FaixaFim == "68509999");
     }
 
     private static async Task<List<T>> ColetarAsync<T>(Func<CancellationToken, IAsyncEnumerable<T>> ler)

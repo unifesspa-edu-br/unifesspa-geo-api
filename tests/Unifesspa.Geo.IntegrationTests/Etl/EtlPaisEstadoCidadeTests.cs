@@ -15,7 +15,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Carga do ETL País/Estado/Cidade (Story #672) sobre Postgres+PostGIS real
+/// Carga do ETL País/Estado/Cidade sobre Postgres+PostGIS real
 /// (<see cref="GeoPostgisFixture"/>): carga inicial, idempotência com Guid preservado,
 /// parse tolerante, órfãos, filtro Brasil, dedup intra-fonte e rollback transacional.
 /// Cada teste limpa as tabelas antes (a coleção roda sem paralelismo).
@@ -42,34 +42,11 @@ public sealed class EtlPaisEstadoCidadeTests
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
 
-        (await leitura.Paises.CountAsync()).Should().Be(1);
-        Pais brasil = await leitura.Paises.SingleAsync();
-        brasil.SiglaIso.Should().Be("BRA");
-
-        (await leitura.Estados.CountAsync()).Should().Be(2);
-        Estado para = await leitura.Estados.SingleAsync(e => e.Uf == "PA");
-        para.PaisId.Should().Be(brasil.Id);
-        para.CodigoIbge.Should().Be("15");
-
-        // A cidade órfã (UF inexistente) não entra; restam as 2 válidas.
-        (await leitura.Cidades.CountAsync()).Should().Be(2);
-        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba);
-        maraba.EstadoId.Should().Be(para.Id);
-        maraba.MesorregiaoNome.Should().Be("Sudeste Paraense"); // territorial embutido (join por código IBGE)
-        maraba.Coordenada.Should().NotBeNull();
-        maraba.Coordenada!.SRID.Should().Be(4326);
-
-        (await leitura.EstadoIndicadores.CountAsync()).Should().Be(2);
-        (await leitura.EstadoFaixasCep.CountAsync()).Should().Be(2);
-        (await leitura.CidadeIndicadores.CountAsync()).Should().Be(2);
-        (await leitura.CidadeFaixasCep.CountAsync()).Should().Be(1);
-
-        // Métrica IBGE decimal/inteira não-nula carregada com InvariantCulture (ponto
-        // decimal) — pega um eventual erro de tipo/cultura que a degradação não cobre.
-        EstadoIndicador indicadorPara = await leitura.EstadoIndicadores.SingleAsync(i => i.EstadoId == para.Id);
-        indicadorPara.Idh.Should().Be(0.69m);
-        indicadorPara.ReceitasBrutas.Should().Be(52747856526.44m);
-        indicadorPara.PopulacaoResidente2022.Should().Be(8120131);
+        Pais brasil = await ConferirPaisBrasilAsync(leitura);
+        Estado para = await ConferirEstadosAsync(leitura, brasil);
+        await ConferirCidadesAsync(leitura, para);
+        await ConferirSatelitesAsync(leitura);
+        await ConferirMetricasIbgeNaoNulasAsync(leitura, para);
     }
 
     [Fact(DisplayName = "Relatório: indicador sem chave natural na fonte é contado em Lidos e IgnoradosSemChave (não some na agregação)")]
@@ -131,9 +108,7 @@ public sealed class EtlPaisEstadoCidadeTests
         await LimparAsync();
         FonteEmMemoria fonte = FonteCompleta();
         await ExecutarAsync(fonte);
-
         IdsCapturados primeiros = await CapturarIdsAsync();
-
         RelatorioImportacao segunda = await ExecutarAsync(fonte);
         IdsCapturados segundos = await CapturarIdsAsync();
 
@@ -141,20 +116,8 @@ public sealed class EtlPaisEstadoCidadeTests
         // ninguém (país/estado/cidade têm filhos; faixas preservam Id por idempotência).
         segundos.Should().Be(primeiros, "o upsert in place não pode trocar a PK entre cargas");
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        (await leitura.Paises.CountAsync()).Should().Be(1);
-        (await leitura.Estados.CountAsync()).Should().Be(2);
-        (await leitura.Cidades.CountAsync()).Should().Be(2);
-        (await leitura.EstadoIndicadores.CountAsync()).Should().Be(2);
-        (await leitura.EstadoFaixasCep.CountAsync()).Should().Be(2);
-        (await leitura.CidadeFaixasCep.CountAsync()).Should().Be(1);
-
-        segunda.Tabelas["pais"].Atualizados.Should().Be(1);
-        segunda.Tabelas["pais"].Inseridos.Should().Be(0);
-        segunda.Tabelas["estado"].Atualizados.Should().Be(2);
-        segunda.Tabelas["cidade"].Atualizados.Should().Be(2);
-        segunda.Tabelas["estado_faixa"].Atualizados.Should().Be(2);
-        segunda.Tabelas["estado_faixa"].Inseridos.Should().Be(0);
+        await ConferirContagensDasTabelasAposAReexecucaoAsync();
+        ConferirSegundoPasseSoAtualizou(segunda);
     }
 
     [Fact(DisplayName = "Dedup intra-fonte: duas linhas com a mesma UF não disparam unique violation; a 2ª conta como duplicata")]
@@ -190,6 +153,73 @@ public sealed class EtlPaisEstadoCidadeTests
         (await leitura.Estados.CountAsync()).Should().Be(0);
     }
 
+    private static async Task<Pais> ConferirPaisBrasilAsync(GeoDbContext leitura)
+    {
+        (await leitura.Paises.CountAsync()).Should().Be(1);
+        Pais brasil = await leitura.Paises.SingleAsync();
+        brasil.SiglaIso.Should().Be("BRA");
+        return brasil;
+    }
+
+    private static async Task<Estado> ConferirEstadosAsync(GeoDbContext leitura, Pais brasil)
+    {
+        (await leitura.Estados.CountAsync()).Should().Be(2);
+        Estado para = await leitura.Estados.SingleAsync(e => e.Uf == "PA");
+        para.PaisId.Should().Be(brasil.Id);
+        para.CodigoIbge.Should().Be("15");
+        return para;
+    }
+
+    private static async Task ConferirCidadesAsync(GeoDbContext leitura, Estado para)
+    {
+        // A cidade órfã (UF inexistente) não entra; restam as 2 válidas.
+        (await leitura.Cidades.CountAsync()).Should().Be(2);
+        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == CodigoMaraba);
+        maraba.EstadoId.Should().Be(para.Id);
+        maraba.MesorregiaoNome.Should().Be("Sudeste Paraense"); // territorial embutido (join por código IBGE)
+        maraba.Coordenada.Should().NotBeNull();
+        maraba.Coordenada!.SRID.Should().Be(4326);
+    }
+
+    private static async Task ConferirSatelitesAsync(GeoDbContext leitura)
+    {
+        (await leitura.EstadoIndicadores.CountAsync()).Should().Be(2);
+        (await leitura.EstadoFaixasCep.CountAsync()).Should().Be(2);
+        (await leitura.CidadeIndicadores.CountAsync()).Should().Be(2);
+        (await leitura.CidadeFaixasCep.CountAsync()).Should().Be(1);
+    }
+
+    // Métrica IBGE decimal/inteira não-nula carregada com InvariantCulture (ponto
+    // decimal) — pega um eventual erro de tipo/cultura que a degradação não cobre.
+    private static async Task ConferirMetricasIbgeNaoNulasAsync(GeoDbContext leitura, Estado para)
+    {
+        EstadoIndicador indicadorPara = await leitura.EstadoIndicadores.SingleAsync(i => i.EstadoId == para.Id);
+        indicadorPara.Idh.Should().Be(0.69m);
+        indicadorPara.ReceitasBrutas.Should().Be(52747856526.44m);
+        indicadorPara.PopulacaoResidente2022.Should().Be(8120131);
+    }
+
+    private async Task ConferirContagensDasTabelasAposAReexecucaoAsync()
+    {
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        (await leitura.Paises.CountAsync()).Should().Be(1);
+        (await leitura.Estados.CountAsync()).Should().Be(2);
+        (await leitura.Cidades.CountAsync()).Should().Be(2);
+        (await leitura.EstadoIndicadores.CountAsync()).Should().Be(2);
+        (await leitura.EstadoFaixasCep.CountAsync()).Should().Be(2);
+        (await leitura.CidadeFaixasCep.CountAsync()).Should().Be(1);
+    }
+
+    private static void ConferirSegundoPasseSoAtualizou(RelatorioImportacao segunda)
+    {
+        segunda.Tabelas["pais"].Atualizados.Should().Be(1);
+        segunda.Tabelas["pais"].Inseridos.Should().Be(0);
+        segunda.Tabelas["estado"].Atualizados.Should().Be(2);
+        segunda.Tabelas["cidade"].Atualizados.Should().Be(2);
+        segunda.Tabelas["estado_faixa"].Atualizados.Should().Be(2);
+        segunda.Tabelas["estado_faixa"].Inseridos.Should().Be(0);
+    }
+
     private async Task<IdsCapturados> CapturarIdsAsync()
     {
         await using GeoDbContext leitura = _fixture.CreateDbContext();
@@ -222,20 +252,34 @@ public sealed class EtlPaisEstadoCidadeTests
     private static FonteEmMemoria FonteCompleta()
     {
         FonteEmMemoria fonte = new() { Versao = "202601" };
+        AdicionarPaisesEEstados(fonte);
+        AdicionarIndicadoresEFaixasDosEstados(fonte);
+        AdicionarCidades(fonte);
+        AdicionarFaixasDasCidades(fonte);
+        return fonte;
+    }
 
+    private static void AdicionarPaisesEEstados(FonteEmMemoria fonte)
+    {
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
         fonte.Paises.Add(DadosDne.Pais("ARG", "Argentina", "AR"));
         fonte.Paises.Add(DadosDne.Pais("USA", "Estados Unidos", "US"));
 
         fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", latitude: "-1.9981271", longitude: "-54.9306152", faixaIni: "66000000", faixaFim: "68899999"));
         fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", latitude: "-23.5", longitude: "-46.6", faixaIni: "01000000", faixaFim: "19999999"));
+    }
 
+    private static void AdicionarIndicadoresEFaixasDosEstados(FonteEmMemoria fonte)
+    {
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15", idh: "0.69", populacao: "8120131", receitas: "52747856526.44"));
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35", idh: "0.806", populacao: "44411238"));
 
         fonte.EstadoFaixas.Add(DadosDne.EstadoFaixa("PA", "66000000", "68899999", "Pará"));
         fonte.EstadoFaixas.Add(DadosDne.EstadoFaixa("SP", "01000000", "19999999", "São Paulo"));
+    }
 
+    private static void AdicionarCidades(FonteEmMemoria fonte)
+    {
         fonte.Cidades.Add(DadosDne.Cidade(CodigoMaraba, "Marabá", "PA", ddd: "94", latitude: "-5.36867", longitude: "-49.11731"));
         fonte.Cidades.Add(DadosDne.Cidade(CodigoSaoPaulo, "São Paulo", "SP", ddd: "11", latitude: "-23.56287", longitude: "-46.65468"));
         fonte.Cidades.Add(DadosDne.Cidade(CodigoCidadeOrfa, "Cidade Órfã", "ZZ")); // UF sem estado carregado
@@ -244,14 +288,15 @@ public sealed class EtlPaisEstadoCidadeTests
 
         fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(CodigoMaraba, mortalidadeInfantil: "-", populacao: "283542", aniversario: "05/04"));
         fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(CodigoSaoPaulo, mortalidadeInfantil: "11.5", populacao: "11451245"));
+    }
 
+    private static void AdicionarFaixasDasCidades(FonteEmMemoria fonte)
+    {
         // id_cidade (int4 da fonte) → cidade_ibge: a faixa de CEP do município só expõe
-        // o id na tabela real, não o código IBGE (#14) — resolvido via LerCidadeIdsAsync.
+        // o id na tabela real, não o código IBGE — resolvido via LerCidadeIdsAsync.
         fonte.CidadeIds.Add(DadosDne.CidadeId(1, CodigoMaraba));
         fonte.CidadeIds.Add(DadosDne.CidadeId(2, CodigoSaoPaulo));
 
         fonte.CidadeFaixas.Add(DadosDne.CidadeFaixa(1, "68500000", "68519999"));
-
-        return fonte;
     }
 }
