@@ -4,8 +4,7 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
 /// <summary>
-/// Schema transformer que aplica invariantes de domínio a propriedades
-/// tipadas. Hoje cobre <c>cpf</c> (regex de 11 dígitos + nota PII).
+/// Schema transformer que completa o tipo das propriedades enumeradas.
 /// <para>
 /// O <c>code</c> de ProblemDetails NÃO é coberto aqui: o campo vive em
 /// <c>ProblemDetails.Extensions["code"]</c> (<c>[JsonExtensionData]</c>) e
@@ -24,33 +23,22 @@ public sealed class GeoSchemaTransformer : IOpenApiSchemaTransformer
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(context);
 
-        // Enum-as-string sem `type` explícito: o ASP.NET Core OpenAPI generator
-        // emite `enum: [...]` quando JsonStringEnumConverter está registrado,
-        // mas não popula `type: "string"`. Sem o type, geradores de cliente
-        // (openapi-typescript, openapi-generator, NSwag) podem tratar a schema
-        // como `any`, perdendo type safety. Inferimos string sempre que houver
-        // enum sem type — invariante OpenAPI 3.1.
+        InferirTipoDoEnum(schema);
+
+        return Task.CompletedTask;
+    }
+
+    // Enum-as-string sem `type` explícito: o ASP.NET Core OpenAPI generator
+    // emite `enum: [...]` quando JsonStringEnumConverter está registrado,
+    // mas não popula `type: "string"`. Sem o type, geradores de cliente
+    // (openapi-typescript, openapi-generator, NSwag) podem tratar a schema
+    // como `any`, perdendo type safety. Inferimos string sempre que houver
+    // enum sem type — invariante OpenAPI 3.1.
+    private static void InferirTipoDoEnum(OpenApiSchema schema)
+    {
         if (schema.Enum is { Count: > 0 } && !schema.Type.HasValue)
         {
             schema.Type = JsonSchemaType.String;
         }
-
-        // JsonSchemaType é [Flags] — propriedades nullable saem como
-        // String | Null, então comparação por igualdade exata pula schemas
-        // legítimos. HasFlag pega ambos os casos (String puro e String|Null).
-        if (!schema.Type.HasValue || !schema.Type.Value.HasFlag(JsonSchemaType.String))
-            return Task.CompletedTask;
-
-        string? propertyName = context.JsonPropertyInfo?.Name;
-        if (propertyName is null)
-            return Task.CompletedTask;
-
-        if (string.Equals(propertyName, "cpf", StringComparison.Ordinal))
-        {
-            schema.Pattern = @"^\d{11}$";
-            schema.Description ??= "CPF (apenas dígitos, sem formatação). PII — sempre mascarar em logs ('***.999.999-**', ADR-0011).";
-        }
-
-        return Task.CompletedTask;
     }
 }
