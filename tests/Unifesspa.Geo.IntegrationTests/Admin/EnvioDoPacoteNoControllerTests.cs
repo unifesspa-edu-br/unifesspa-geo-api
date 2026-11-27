@@ -58,12 +58,12 @@ public sealed class EnvioDoPacoteNoControllerTests
         resposta.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(status);
     }
 
-    [Fact(DisplayName = "Execução que não pode ser relida depois do registro responde 500")]
-    public async Task ExecucaoNaoRelida_Responde500()
+    [Fact(DisplayName = "Execução que não pode ser relida depois do registro é falha do serviço")]
+    public async Task ExecucaoNaoRelida_LancaFalhaDoServico()
     {
-        IActionResult resposta = await EnviarAsync(new MemoryStream(), new DefaultHttpContext());
+        Func<Task> enviar = () => EnviarAsync(new MemoryStream(), new DefaultHttpContext());
 
-        resposta.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        await enviar.Should().ThrowAsync<InvalidOperationException>();
     }
 
     private void PrepararExecucao(DesfechoDoEnvioDoPacote desfecho)

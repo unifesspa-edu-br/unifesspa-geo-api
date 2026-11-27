@@ -103,14 +103,7 @@ public sealed class GeoImportacoesController : ControllerBase
 
     private async Task<IActionResult> RespostaDoEnvioAsync(EnvioDoPacoteRegistrado envio, CancellationToken cancellationToken)
     {
-        ImportacaoGeoDto? dto = await _servico.ObterAsync(envio.ExecucaoId, cancellationToken).ConfigureAwait(false);
-        if (dto is null)
-        {
-            return Problem(
-                title: "Falha ao recuperar a execução recém-registrada.",
-                statusCode: StatusCodes.Status500InternalServerError);
-        }
-
+        ImportacaoGeoDto dto = await ReleituraDaExecucaoRegistradaAsync(envio, cancellationToken).ConfigureAwait(false);
         IReadOnlyDictionary<string, string> links = _linksBuilder.Build(dto);
         ImportacaoGeoDto comLinks = dto with { Links = links };
         if (envio.Desfecho == DesfechoDoEnvioDoPacote.CargaEnfileirada)
@@ -121,4 +114,11 @@ public sealed class GeoImportacoesController : ControllerBase
         Response.Headers.Location = links["self"];
         return Ok(comLinks);
     }
+
+    private async Task<ImportacaoGeoDto> ReleituraDaExecucaoRegistradaAsync(
+        EnvioDoPacoteRegistrado envio,
+        CancellationToken cancellationToken) =>
+        await _servico.ObterAsync(envio.ExecucaoId, cancellationToken).ConfigureAwait(false)
+        ?? throw new InvalidOperationException(
+            $"A execução {envio.ExecucaoId} acabou de ser registrada e não foi encontrada para montar a resposta do envio.");
 }
