@@ -54,45 +54,57 @@ public sealed class CursorEncoder
 
     public async Task<CursorDecodeResult> TryDecodeAsync(string token, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(token))
+        byte[]? cifrado = DecodificarBase64Url(token);
+        byte[]? claro = cifrado is null ? null : await DecifrarAsync(cifrado, cancellationToken).ConfigureAwait(false);
+        CursorPayload? payload = claro is null ? null : LerPayload(claro);
+
+        if (payload is null)
             return CursorDecodeResult.Invalid();
 
-        byte[] ciphertext;
+        return payload.ExpiresAt <= _timeProvider.GetUtcNow()
+            ? CursorDecodeResult.Expired(payload)
+            : CursorDecodeResult.Success(payload);
+    }
+
+    // As três etapas devolvem null na falha: cursor ilegível, adulterado ou sem os campos
+    // obrigatórios é sempre o mesmo resultado para quem chama (Invalid), sem expor o motivo.
+    private static byte[]? DecodificarBase64Url(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
         try
         {
-            ciphertext = Base64Url.DecodeFromChars(token);
+            return Base64Url.DecodeFromChars(token);
         }
         catch (FormatException)
         {
-            return CursorDecodeResult.Invalid();
+            return null;
         }
+    }
 
-        byte[] plaintext;
+    private async Task<byte[]?> DecifrarAsync(byte[] cifrado, CancellationToken cancellationToken)
+    {
         try
         {
-            plaintext = await _encryption.DecryptAsync(KeyName, ciphertext, cancellationToken).ConfigureAwait(false);
+            return await _encryption.DecryptAsync(KeyName, cifrado, cancellationToken).ConfigureAwait(false);
         }
         catch (EncryptionFailureException)
         {
-            return CursorDecodeResult.Invalid();
+            return null;
         }
+    }
 
-        CursorPayload? payload;
+    private static CursorPayload? LerPayload(byte[] claro)
+    {
         try
         {
-            payload = JsonSerializer.Deserialize<CursorPayload>(plaintext, PayloadJsonOptions);
+            CursorPayload? payload = JsonSerializer.Deserialize<CursorPayload>(claro, PayloadJsonOptions);
+            return string.IsNullOrEmpty(payload?.After) || string.IsNullOrEmpty(payload.ResourceTag) ? null : payload;
         }
         catch (JsonException)
         {
-            return CursorDecodeResult.Invalid();
+            return null;
         }
-
-        if (payload is null || string.IsNullOrEmpty(payload.After) || string.IsNullOrEmpty(payload.ResourceTag))
-            return CursorDecodeResult.Invalid();
-
-        if (payload.ExpiresAt <= _timeProvider.GetUtcNow())
-            return CursorDecodeResult.Expired(payload);
-
-        return CursorDecodeResult.Success(payload);
     }
 }
