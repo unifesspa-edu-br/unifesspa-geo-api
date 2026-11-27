@@ -112,9 +112,9 @@ public sealed class EtlNomeOficialDoMunicipioTests
         await GeoReferenceSeed.LimparAsync(_fixture);
         await using GeoDbContext ctx = _fixture.CreateDbContext();
         Pais brasil = GeoReferenceSeed.NovoBrasil();
-        Estado para = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará");
-        Cidade antiga = GeoReferenceSeed.NovaCidade(
-            para.Id, "PA", FonteComMunicipiosDeApostrofo.PauDArcoPara, "Pau DArco", nomeNormalizado: "pau darco");
+        Estado para = new EstadoBuilder(brasil.Id, "PA", "Pará").Construir();
+        Cidade antiga = new CidadeBuilder(para.Id, "PA", FonteComMunicipiosDeApostrofo.PauDArcoPara, "Pau DArco")
+            .ComNomeNormalizado("pau darco").Construir();
         ctx.Paises.Add(brasil);
         ctx.Estados.Add(para);
         ctx.Cidades.Add(antiga);
