@@ -43,7 +43,7 @@ internal readonly record struct LocalidadeParaCarga(
         return Montar(linha, cidadeId, nomeNormalizado, proveniencia);
     }
 
-    // Latitude e longitude saem do ponto já validado (limitado a ±90/±180): dado sujo
+    // Latitude e longitude só são gravadas dentro de ±90/±180 (posição validada): dado sujo
     // não pode estourar o numeric(9,6) da coluna.
     private static LocalidadeParaCarga Montar(
         LocalidadeDaFonte linha,
@@ -54,7 +54,7 @@ internal readonly record struct LocalidadeParaCarga(
             cidadeId,
             linha.Uf ?? string.Empty,
             new NomeComFormaDeBusca(linha.Nome ?? string.Empty, nomeNormalizado),
-            CoordenadaDne.DoPontoValidado(linha.Latitude, linha.Longitude),
+            CoordenadaDne.Ler(linha.Latitude, linha.Longitude),
             linha.IdDne?.ToString(System.Globalization.CultureInfo.InvariantCulture),
             proveniencia);
 

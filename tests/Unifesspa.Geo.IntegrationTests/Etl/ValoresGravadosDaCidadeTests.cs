@@ -43,15 +43,16 @@ public sealed class ValoresGravadosDaCidadeTests
             new RegiaoGravada("1502", "Marabá"), new RegiaoGravada("150003", null), "202601", true));
     }
 
-    [Fact(DisplayName = "Primeira carga: o nome oficial do IBGE prevalece, a coordenada fora da faixa fica só nas colunas e sem território tudo é nulo")]
+    [Fact(DisplayName = "Primeira carga: o nome oficial do IBGE prevalece, a coordenada fora do domínio deixa a posição vazia e sem território tudo é nulo")]
     public async Task PrimeiraCarga_GravaACidadeComNomeOficial()
     {
         await _carga.CarregarAPrimeiraAsync();
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
+        // Latitude -95.5 e longitude 200.25 estão fora do domínio: a posição inteira fica vazia.
         CidadeGravada.De(await LerAsync(leitura, CodigoDeSaoPaulo)).Should().Be(new CidadeGravada(
             await _carga.EstadoIdAsync("SP"), "SP", CodigoDeSaoPaulo, "São Paulo", "sao paulo", "sao paulo", "11",
-            PosicaoGravada.SoNasColunas(-95.5m, 200.25m), SemRegiao, SemRegiao, SemRegiao, SemRegiao, "202601", true));
+            PosicaoGravada.Ausente, SemRegiao, SemRegiao, SemRegiao, SemRegiao, "202601", true));
     }
 
     [Fact(DisplayName = "Segunda carga: a cidade troca os valores, mantém o identificador e o território em branco vira nulo")]
@@ -81,9 +82,10 @@ public sealed class ValoresGravadosDaCidadeTests
     {
         await using GeoDbContext leitura = _fixture.CreateDbContext();
         (await leitura.Cidades.CountAsync()).Should().Be(2);
+        // Latitude 91 e longitude -181 estão fora do domínio: a posição inteira fica vazia.
         CidadeGravada.De(await LerAsync(leitura, CodigoDeMaraba)).Should().Be(new CidadeGravada(
             await _carga.EstadoIdAsync("PA"), "PA", CodigoDeMaraba, "Marabá Nova", "maraba nova", "maraba nova", "91",
-            PosicaoGravada.SoNasColunas(91m, -181m), SemRegiao, SemRegiao, SemRegiao, SemRegiao, "202602", true));
+            PosicaoGravada.Ausente, SemRegiao, SemRegiao, SemRegiao, SemRegiao, "202602", true));
         CidadeGravada.De(await LerAsync(leitura, CodigoDeSaoPaulo)).Should().Be(new CidadeGravada(
             await _carga.EstadoIdAsync("SP"), "SP", CodigoDeSaoPaulo, "São Paulo", "sao paulo", "sao paulo", null,
             PosicaoGravada.Valida(-23.55m, -46.63m),

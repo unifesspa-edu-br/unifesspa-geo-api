@@ -174,7 +174,7 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
     private Guid? ResolverCidade(LogradouroCru cru) =>
         cru.CidadeIdDne is int idCidade && _resolucao.CidadesPorIdDne.TryGetValue(idCidade, out Guid cidade) ? cidade : null;
 
-    // Latitude e longitude saem do ponto já validado (o PontoFactory limita a ±90 e ±180): o texto
+    // Latitude e longitude só são gravadas dentro de ±90 e ±180 (posição validada): o texto
     // é lido uma só vez e os valores cabem no numeric(9,6) por construção.
     // O nome normalizado é o texto completo sem acento (tipo e nome), que alimenta a busca por
     // texto e compõe a chave de atualização; sem ele na fonte, cai para o texto completo e
@@ -188,7 +188,7 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
                 cru.NomeCompleto,
                 cru.LogradouroSemAcento ?? cru.NomeCompleto ?? cru.Nome ?? string.Empty),
             new LocalidadeDoLogradouro(cidade, distrito, bairro, cru.Uf ?? string.Empty),
-            CoordenadaDne.DoPontoValidado(cru.Latitude, cru.Longitude),
+            CoordenadaDne.Ler(cru.Latitude, cru.Longitude),
             ParseTolerante.ParaBoolSn(cru.CepAtivo),
             _proveniencia);
 }

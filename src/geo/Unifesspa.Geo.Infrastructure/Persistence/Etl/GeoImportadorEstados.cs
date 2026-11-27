@@ -122,7 +122,7 @@ internal sealed class GeoImportadorEstados
 
     private static NomeComFormaDeBusca NomeDe(EstadoCru cru) => new(cru.Nome ?? string.Empty, cru.NomeSemAcento);
 
-    private static PosicaoGeografica PosicaoDe(EstadoCru cru) => CoordenadaDne.De(cru.Latitude, cru.Longitude);
+    private static PosicaoGeografica PosicaoDe(EstadoCru cru) => CoordenadaDne.Ler(cru.Latitude, cru.Longitude);
 
     private static FaixaDeCep FaixaGeralDe(EstadoCru cru) => new(cru.FaixaIni, cru.FaixaFim);
 

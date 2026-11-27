@@ -53,7 +53,7 @@ internal readonly record struct CepGeralParaCarga(
             cidadeId,
             ResolverCoerente(distritosPorIdDne, linha.DistritoIdDne, cidadeId, contador),
             linha.Uf ?? string.Empty,
-            CoordenadaDne.DoPontoValidado(linha.Latitude, linha.Longitude),
+            CoordenadaDne.Ler(linha.Latitude, linha.Longitude),
             proveniencia);
 
     public Result<CepGeral> Criar() =>
