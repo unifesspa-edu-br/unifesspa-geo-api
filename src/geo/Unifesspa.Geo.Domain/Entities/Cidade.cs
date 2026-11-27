@@ -3,12 +3,13 @@ namespace Unifesspa.Geo.Domain.Entities;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
 /// <summary>
 /// Município — eixo central do Geo, referenciado por outros módulos por
-/// <see cref="CodigoIbge"/> (#587: Campus/LocalOferta). Reference data sem
+/// <see cref="CodigoIbge"/> (usado por Campus e LocalOferta). Reference data sem
 /// soft-delete (ADR-0092). Os campos <strong>territoriais</strong> (meso/micro/
 /// região intermediária e imediata, código + nome) ficam embutidos aqui (identidade
 /// geográfica); os socioeconômicos vão no satélite <see cref="CidadeIndicador"/>.
@@ -17,7 +18,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// Chave natural <see cref="CodigoIbge"/> (7 dígitos, UNIQUE) — homônimos em UFs
 /// distintas coexistem (a chave é o código, não o nome). <see cref="NomeNormalizado"/>
 /// guarda o nome do município sem acento e sem apóstrofo, e ganha índice trigram para o
-/// autocomplete acento-insensível da F4 — não compõe a chave (fica nullable).
+/// autocomplete acento-insensível — não compõe a chave (fica nullable).
 /// </remarks>
 public sealed class Cidade : EntityBase
 {
@@ -32,7 +33,7 @@ public sealed class Cidade : EntityBase
 
     public string Nome { get; private set; } = string.Empty;
 
-    /// <summary>Nome sem acentos e sem apóstrofo (gerado na carga a partir do nome oficial) — base do autocomplete (F4).</summary>
+    /// <summary>Nome sem acentos e sem apóstrofo (gerado na carga a partir do nome oficial) — base do autocomplete.</summary>
     public string? NomeNormalizado { get; private set; }
 
     /// <summary>
@@ -67,10 +68,10 @@ public sealed class Cidade : EntityBase
 
     public string? RegiaoImediataNome { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
-    /// <summary><see langword="false"/> quando o código IBGE some da release vigente (stale do ETL).</summary>
+    /// <summary><see langword="false"/> quando o código IBGE some da versão vigente (registro não vigente).</summary>
     public bool Vigente { get; private set; } = true;
 
     // Construtor privado para materialização do EF Core.
@@ -79,163 +80,93 @@ public sealed class Cidade : EntityBase
     }
 
     /// <summary>
-    /// Importa um Município a partir de valores já tipados (parse tolerante no ETL).
-    /// Valida só o mínimo: <paramref name="estadoId"/>, chave natural
-    /// (<paramref name="codigoIbge"/>), <paramref name="nome"/> e proveniência
-    /// (<paramref name="versaoDataset"/>).
+    /// Importa um Município a partir de valores já tipados (leitura tolerante na carga).
+    /// Valida só o mínimo: o estado em <paramref name="estado"/>, a chave natural
+    /// (<paramref name="codigoIbge"/>), o nome em <paramref name="nome"/> e a versão da base em
+    /// <paramref name="proveniencia"/>.
     /// </summary>
     public static Result<Cidade> Importar(
-        Guid estadoId,
-        string uf,
         string codigoIbge,
-        string nome,
-        string? nomeNormalizado,
+        EstadoDaCidade estado,
+        NomeComFormaDeBusca nome,
         string? ddd,
-        decimal? latitude,
-        decimal? longitude,
-        Point? coordenada,
-        string? mesorregiaoCodigo,
-        string? mesorregiaoNome,
-        string? microrregiaoCodigo,
-        string? microrregiaoNome,
-        string? regiaoIntermediariaCodigo,
-        string? regiaoIntermediariaNome,
-        string? regiaoImediataCodigo,
-        string? regiaoImediataNome,
-        string versaoDataset,
-        bool vigente = true)
+        PosicaoGeografica posicao,
+        DivisaoRegionalDaCidade divisao,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(uf);
         ArgumentNullException.ThrowIfNull(codigoIbge);
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (estadoId == Guid.Empty)
+        DomainError? erro = Validar(estado.EstadoId, codigoIbge, nome.Nome, proveniencia);
+        if (erro is not null)
         {
-            return Result<Cidade>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeEstadoObrigatorio,
-                "Estado da Cidade é obrigatório."));
+            return Result<Cidade>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(codigoIbge))
-        {
-            return Result<Cidade>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeCodigoIbgeObrigatorio,
-                "Código IBGE da Cidade é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result<Cidade>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeNomeObrigatorio,
-                "Nome da Cidade é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<Cidade>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) da Cidade é obrigatória."));
-        }
-
-        var cidade = new Cidade
-        {
-            EstadoId = estadoId,
-            Uf = GeoTexto.NormalizarChaveMaiuscula(uf),
-            CodigoIbge = codigoIbge.Trim(),
-            Nome = nome.Trim(),
-            NomeNormalizado = GeoTexto.NormalizarBuscaOpcional(nomeNormalizado),
-            Ddd = GeoTexto.NormalizarOpcional(ddd),
-            Latitude = latitude,
-            Longitude = longitude,
-            Coordenada = coordenada,
-            MesorregiaoCodigo = GeoTexto.NormalizarOpcional(mesorregiaoCodigo),
-            MesorregiaoNome = GeoTexto.NormalizarOpcional(mesorregiaoNome),
-            MicrorregiaoCodigo = GeoTexto.NormalizarOpcional(microrregiaoCodigo),
-            MicrorregiaoNome = GeoTexto.NormalizarOpcional(microrregiaoNome),
-            RegiaoIntermediariaCodigo = GeoTexto.NormalizarOpcional(regiaoIntermediariaCodigo),
-            RegiaoIntermediariaNome = GeoTexto.NormalizarOpcional(regiaoIntermediariaNome),
-            RegiaoImediataCodigo = GeoTexto.NormalizarOpcional(regiaoImediataCodigo),
-            RegiaoImediataNome = GeoTexto.NormalizarOpcional(regiaoImediataNome),
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var cidade = new Cidade { CodigoIbge = codigoIbge.Trim() };
+        cidade.Aplicar(estado, nome, ddd, posicao, divisao, proveniencia);
 
         return Result<Cidade>.Success(cidade);
     }
 
     /// <summary>
-    /// Reaplica os dados de uma release sobre um Município já existente (upsert in
-    /// place do ETL), preservando <see cref="EntityBase.Id"/> (referenciado por
+    /// Reaplica os dados de uma versão da base sobre um Município já existente (atualização
+    /// pela chave natural da carga), preservando <see cref="EntityBase.Id"/> (referenciado por
     /// Indicador/faixas e por outros módulos via código IBGE) e a chave natural
-    /// <see cref="CodigoIbge"/>. Os campos territoriais são reaplicados juntos
-    /// (a fonte os agrega por código IBGE antes da chamada). Valida o mínimo
-    /// <strong>antes</strong> de mutar — em falha, o estado não é tocado.
+    /// <see cref="CodigoIbge"/>. Os campos territoriais são reaplicados juntos (a fonte os agrega
+    /// por código IBGE antes da chamada). Valida o mínimo <strong>antes</strong> de mutar — em
+    /// falha, o estado não é tocado.
     /// </summary>
     public Result Atualizar(
-        Guid estadoId,
-        string uf,
-        string nome,
-        string? nomeNormalizado,
+        EstadoDaCidade estado,
+        NomeComFormaDeBusca nome,
         string? ddd,
-        decimal? latitude,
-        decimal? longitude,
-        Point? coordenada,
-        string? mesorregiaoCodigo,
-        string? mesorregiaoNome,
-        string? microrregiaoCodigo,
-        string? microrregiaoNome,
-        string? regiaoIntermediariaCodigo,
-        string? regiaoIntermediariaNome,
-        string? regiaoImediataCodigo,
-        string? regiaoImediataNome,
-        string versaoDataset,
-        bool vigente = true)
+        PosicaoGeografica posicao,
+        DivisaoRegionalDaCidade divisao,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(uf);
-        ArgumentNullException.ThrowIfNull(nome);
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (estadoId == Guid.Empty)
+        DomainError? erro = Validar(estado.EstadoId, CodigoIbge, nome.Nome, proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeEstadoObrigatorio,
-                "Estado da Cidade é obrigatório."));
+            return Result.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(nome))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeNomeObrigatorio,
-                "Nome da Cidade é obrigatório."));
-        }
-
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) da Cidade é obrigatória."));
-        }
-
-        EstadoId = estadoId;
-        Uf = GeoTexto.NormalizarChaveMaiuscula(uf);
-        Nome = nome.Trim();
-        NomeNormalizado = GeoTexto.NormalizarBuscaOpcional(nomeNormalizado);
-        Ddd = GeoTexto.NormalizarOpcional(ddd);
-        Latitude = latitude;
-        Longitude = longitude;
-        Coordenada = coordenada;
-        MesorregiaoCodigo = GeoTexto.NormalizarOpcional(mesorregiaoCodigo);
-        MesorregiaoNome = GeoTexto.NormalizarOpcional(mesorregiaoNome);
-        MicrorregiaoCodigo = GeoTexto.NormalizarOpcional(microrregiaoCodigo);
-        MicrorregiaoNome = GeoTexto.NormalizarOpcional(microrregiaoNome);
-        RegiaoIntermediariaCodigo = GeoTexto.NormalizarOpcional(regiaoIntermediariaCodigo);
-        RegiaoIntermediariaNome = GeoTexto.NormalizarOpcional(regiaoIntermediariaNome);
-        RegiaoImediataCodigo = GeoTexto.NormalizarOpcional(regiaoImediataCodigo);
-        RegiaoImediataNome = GeoTexto.NormalizarOpcional(regiaoImediataNome);
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(estado, nome, ddd, posicao, divisao, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(Guid estadoId, string codigoIbge, string nome, ProvenienciaDaCarga proveniencia) =>
+        estadoId == Guid.Empty
+            ? new DomainError(GeoReferenceDataErrorCodes.CidadeEstadoObrigatorio, "Estado da Cidade é obrigatório.")
+            : string.IsNullOrWhiteSpace(codigoIbge)
+                ? new DomainError(GeoReferenceDataErrorCodes.CidadeCodigoIbgeObrigatorio, "Código IBGE da Cidade é obrigatório.")
+                : string.IsNullOrWhiteSpace(nome)
+                    ? new DomainError(GeoReferenceDataErrorCodes.CidadeNomeObrigatorio, "Nome da Cidade é obrigatório.")
+                    : proveniencia.TemVersao
+                        ? null
+                        : new DomainError(
+                            GeoReferenceDataErrorCodes.CidadeVersaoDatasetObrigatoria,
+                            "Versão do dataset (proveniência) da Cidade é obrigatória.");
+
+    private void Aplicar(
+        EstadoDaCidade estado,
+        NomeComFormaDeBusca nome,
+        string? ddd,
+        PosicaoGeografica posicao,
+        DivisaoRegionalDaCidade divisao,
+        ProvenienciaDaCarga proveniencia)
+    {
+        (EstadoId, Uf) = estado;
+        (Nome, NomeNormalizado) = nome;
+        Ddd = GeoTexto.NormalizarOpcional(ddd);
+        (Latitude, Longitude, Coordenada) = posicao;
+        (MesorregiaoCodigo, MesorregiaoNome) = divisao.Mesorregiao;
+        (MicrorregiaoCodigo, MicrorregiaoNome) = divisao.Microrregiao;
+        (RegiaoIntermediariaCodigo, RegiaoIntermediariaNome) = divisao.RegiaoIntermediaria;
+        (RegiaoImediataCodigo, RegiaoImediataNome) = divisao.RegiaoImediata;
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }

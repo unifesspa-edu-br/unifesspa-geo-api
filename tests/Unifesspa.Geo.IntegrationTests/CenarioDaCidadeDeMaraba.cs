@@ -21,15 +21,17 @@ internal sealed record CenarioDaCidadeDeMaraba(Cidade Maraba, CidadeIndicador In
 
     private static Cidade NovaCidade(Guid estadoId) =>
         GeoTestKeys.Ok(Cidade.Importar(
-            estadoId: estadoId, uf: "PA", codigoIbge: GeoTestKeys.CodigoIbge(), nome: "Marabá",
-            nomeNormalizado: "maraba", ddd: "94",
-            latitude: -5.36867m, longitude: -49.11731m,
-            coordenada: new Point(-49.11731, -5.36867) { SRID = 4326 },
-            mesorregiaoCodigo: "1503", mesorregiaoNome: "Sudeste Paraense",
-            microrregiaoCodigo: "15009", microrregiaoNome: "Marabá",
-            regiaoIntermediariaCodigo: "1503", regiaoIntermediariaNome: "Marabá",
-            regiaoImediataCodigo: "150009", regiaoImediataNome: "Marabá",
-            versaoDataset: VersaoDataset));
+            codigoIbge: GeoTestKeys.CodigoIbge(),
+            estado: new EstadoDaCidade(estadoId, "PA"),
+            nome: new NomeComFormaDeBusca("Marabá", "maraba"),
+            ddd: "94",
+            posicao: new PosicaoGeografica(-5.36867m, -49.11731m, new Point(-49.11731, -5.36867) { SRID = 4326 }),
+            divisao: new DivisaoRegionalDaCidade(
+                new RegiaoGeografica("1503", "Sudeste Paraense"),
+                new RegiaoGeografica("15009", "Marabá"),
+                new RegiaoGeografica("1503", "Marabá"),
+                new RegiaoGeografica("150009", "Marabá")),
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 
     private static CidadeIndicador NovoIndicador(Cidade maraba) =>
         GeoTestKeys.Ok(CidadeIndicador.Importar(
