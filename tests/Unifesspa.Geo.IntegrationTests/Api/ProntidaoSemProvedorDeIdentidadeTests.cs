@@ -104,17 +104,10 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
         _factory.ProvedorDeIdentidade.Pendurado = true;
         try
         {
-            HealthCheckService servico = _factory.Services.GetRequiredService<HealthCheckService>();
-            Stopwatch cronometro = Stopwatch.StartNew();
-
-            using CancellationTokenSource prazoExterno = new(TimeSpan.FromSeconds(10));
-
-            HealthReport relatorio = await servico.CheckHealthAsync(
-                r => string.Equals(r.Name, VerificacaoDoProvedor, StringComparison.Ordinal),
-                prazoExterno.Token);
+            (HealthReport relatorio, TimeSpan duracao) = await VerificarOProvedorComPrazoExternoAsync();
 
             relatorio.Entries[VerificacaoDoProvedor].Status.Should().Be(HealthStatus.Degraded);
-            cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(6));
+            duracao.Should().BeLessThan(TimeSpan.FromSeconds(6));
         }
         finally
         {
@@ -137,25 +130,14 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
         HealthCheckServiceOptions opcoes = _factory.Services
             .GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
 
-        opcoes.Registrations
-            .Where(r => r.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag))
-            .Select(r => r.Name)
-            .Should().BeEquivalentTo([GeoProntidaoApiFactory.VerificacaoDeProntidao]);
+        NomesNaProntidao(opcoes).Should().BeEquivalentTo([GeoProntidaoApiFactory.VerificacaoDeProntidao]);
         opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
     }
 
     [Fact(DisplayName = "Postgres e Redis seguem na prontidão e o OIDC fica de fora quando todas as dependências estão configuradas")]
     public void Prontidao_RegistrosProdutivos_MantemPostgresERedisSemOProvedor()
     {
-        IConfiguration configuracao = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
-            {
-                ["ConnectionStrings:GeoDb"] = "Host=localhost;Database=geo",
-                ["Redis:ConnectionString"] = "localhost:6379",
-                ["Auth:Authority"] = "http://provedor.invalido/test-realm",
-                ["Auth:Audience"] = "uniplus",
-            })
-            .Build();
+        IConfiguration configuracao = ConfiguracaoComTodasAsDependencias();
         ServiceCollection servicos = new();
         servicos.AddSingleton(Substitute.For<IConnectionMultiplexer>());
         servicos.AddOidcAuthentication(configuracao, Substitute.For<IHostEnvironment>());
@@ -164,10 +146,36 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
 
         HealthCheckServiceOptions opcoes = provedor.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
 
+        NomesNaProntidao(opcoes).Should().BeEquivalentTo(["postgres", "redis"]);
+        opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
+    }
+
+    private static IEnumerable<string> NomesNaProntidao(HealthCheckServiceOptions opcoes) =>
         opcoes.Registrations
             .Where(r => r.Tags.Contains(HealthChecksServiceCollectionExtensions.ReadyTag))
-            .Select(r => r.Name)
-            .Should().BeEquivalentTo(["postgres", "redis"]);
-        opcoes.Registrations.Select(r => r.Name).Should().Contain(VerificacaoDoProvedor);
+            .Select(r => r.Name);
+
+    private static IConfiguration ConfiguracaoComTodasAsDependencias() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["ConnectionStrings:GeoDb"] = "Host=localhost;Database=geo",
+                ["Redis:ConnectionString"] = "localhost:6379",
+                ["Auth:Authority"] = "http://provedor.invalido/test-realm",
+                ["Auth:Audience"] = "uniplus",
+            })
+            .Build();
+
+    private async Task<(HealthReport Relatorio, TimeSpan Duracao)> VerificarOProvedorComPrazoExternoAsync()
+    {
+        HealthCheckService servico = _factory.Services.GetRequiredService<HealthCheckService>();
+        Stopwatch cronometro = Stopwatch.StartNew();
+        using CancellationTokenSource prazoExterno = new(TimeSpan.FromSeconds(10));
+
+        HealthReport relatorio = await servico.CheckHealthAsync(
+            r => string.Equals(r.Name, VerificacaoDoProvedor, StringComparison.Ordinal),
+            prazoExterno.Token);
+
+        return (relatorio, cronometro.Elapsed);
     }
 }
