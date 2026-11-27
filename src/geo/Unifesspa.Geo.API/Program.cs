@@ -125,16 +125,16 @@ builder.Services.Configure<GeoCepLookupOptions>(
     builder.Configuration.GetSection(GeoCepLookupOptions.SectionName));
 
 // Migrations EF Core aplicadas no host StartAsync via IHostedService.
-// Registrado ANTES de UseWolverineOutboxCascading + AddWolverineMessaging
-// (invariante de ordem) — fitness MigrationBeforeWolverineRuntimeOrderTests cobre
-// os entry points com a regra.
+// Registrado ANTES de UseWolverineOutboxCascading + AddWolverineMessaging: o Wolverine
+// cria as tabelas dele e lê o banco ao iniciar. O teste OrdemDaInicializacaoDaApiTests
+// confere a ordem de partida.
 builder.Services.AddDbContextMigrationsOnStartup<GeoDbContext>();
 
 // Gatilhos hospedados do ETL periódico: worker que executa as cargas
 // enfileiradas + seed de dev. Registrado APÓS as migrations de propósito — seed e
 // reconciliação do worker tocam o banco, que precisa já ter a tabela
 // geo_importacao_execucao (ServicesStartConcurrently=false ⇒ ordem de start = ordem
-// de registro). Mantém-se antes do Wolverine, coerente com o invariante de ordem.
+// de registro). Mantém-se antes do Wolverine; OrdemDaInicializacaoDaApiTests cobre a ordem.
 builder.Services.AddGeoEtlGatilhos(builder.Configuration);
 
 // Wolverine como backbone CQRS/messaging (ADR-0003/0004/0005). Sem roteamento

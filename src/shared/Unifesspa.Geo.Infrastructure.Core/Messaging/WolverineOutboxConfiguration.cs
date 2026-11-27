@@ -143,8 +143,8 @@ public static class WolverineOutboxConfiguration
     // simultaneamente são coordenadas pelo lock interno do framework. Em ambientes Uni+ não
     // há orquestração de schema externa ao host (sem step de "dotnet ef database update" no
     // Helm chart), então delegar a criação ao próprio host é o caminho mais simples para
-    // subir pods com banco vazio. As migrations do EF Core dos módulos são aplicadas em
-    // paralelo por ApplyMigrationsAsync<TContext> no Program.cs.
+    // subir pods com banco vazio. As migrations do EF Core são aplicadas por um serviço
+    // hospedado registrado no Program.cs antes do Wolverine (OrdemDaInicializacaoDaApiTests).
     private static void CriarArmazenamentoNaPartida(WolverineOptions opts)
     {
         opts.AutoBuildMessageStorageOnStartup = JasperFx.AutoCreate.CreateOrUpdate;
