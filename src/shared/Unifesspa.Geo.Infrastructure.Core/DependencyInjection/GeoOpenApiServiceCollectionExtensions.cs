@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Core.DependencyInjection;
 
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -26,6 +27,7 @@ public static class GeoOpenApiServiceCollectionExtensions
         return services
             .AddOpcoesDoOpenApi(configuration)
             .AddTransformersDoOpenApi()
+            .AddRestricaoDoNomeDoDocumentoNaRota()
             .AddOpenApi(documentName, ConfigurarDocumento);
     }
 
@@ -55,6 +57,10 @@ public static class GeoOpenApiServiceCollectionExtensions
 
         return services;
     }
+
+    private static IServiceCollection AddRestricaoDoNomeDoDocumentoNaRota(this IServiceCollection services) =>
+        services.Configure<RouteOptions>(static opcoes =>
+            opcoes.SetParameterPolicy<DocumentoDoContratoPublicado>(DocumentoDoContratoPublicado.Restricao));
 
     private static void ConfigurarDocumento(OpenApiOptions options)
     {

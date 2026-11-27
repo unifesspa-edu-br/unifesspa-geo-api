@@ -21,6 +21,7 @@ using Unifesspa.Geo.Infrastructure.Core.Logging;
 using Unifesspa.Geo.Infrastructure.Core.Messaging;
 using Unifesspa.Geo.Infrastructure.Core.Middleware;
 using Unifesspa.Geo.Infrastructure.Core.Observability;
+using Unifesspa.Geo.Infrastructure.Core.OpenApi;
 using Unifesspa.Geo.Infrastructure.Core.Profile;
 using Unifesspa.Geo.Infrastructure.Core.Smoke;
 using Unifesspa.Geo.Infrastructure.Persistence;
@@ -161,7 +162,7 @@ app.MapSharedAuthEndpoints();
 app.MapSharedProfileEndpoints();
 app.MapGeoSmokeEndpoints();
 app.MapControllers();
-app.MapOpenApi("/openapi/{documentName}.json");
+app.MapOpenApi(DocumentoDoContratoPublicado.Rota);
 
 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
