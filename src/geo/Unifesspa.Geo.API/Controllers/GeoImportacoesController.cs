@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
+using Unifesspa.Geo.API.Errors;
 using Unifesspa.Geo.API.Filters;
 using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Application.Abstractions.Authentication;
@@ -86,15 +87,16 @@ public sealed class GeoImportacoesController : ControllerBase
     [HttpGet("admin/geo/importacoes/{id:guid}")]
     [Authorize(Roles = "plataforma-admin")]
     [ProducesResponseType(typeof(ImportacaoGeoDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Obter(Guid id, CancellationToken cancellationToken)
     {
         ImportacaoGeoDto? dto = await _servico.ObterAsync(id, cancellationToken).ConfigureAwait(false);
         if (dto is null)
         {
-            return NotFound();
+            return Result.Failure(ErrosDasConsultas.ErroImportacaoNaoEncontrada()).ToActionResult(_mapper);
         }
 
         ImportacaoGeoDto comLinks = dto with { Links = _linksBuilder.Build(dto) };

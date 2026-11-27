@@ -24,7 +24,7 @@ internal sealed class GeoDomainErrorRegistration : IDomainErrorRegistration
             new DomainErrorMapping(
                 StatusCodes.Status422UnprocessableEntity,
                 "uniplus.geo.importacao.versao_formato_invalido",
-                "Versão do dataset deve estar no formato AAAAMM")),
+                "Versão da base fora do formato AAAAMM")),
 
         new(GeoImportacaoErrorCodes.DisparadoPorObrigatorio,
             new DomainErrorMapping(
@@ -42,19 +42,13 @@ internal sealed class GeoDomainErrorRegistration : IDomainErrorRegistration
             new DomainErrorMapping(
                 StatusCodes.Status503ServiceUnavailable,
                 "uniplus.geo.importacao.nao_enfileirada",
-                "Não foi possível enfileirar a importação (serviço em desligamento)")),
+                "Não foi possível colocar a carga na fila porque o serviço está sendo encerrado")),
 
         new(GeoImportacaoErrorCodes.VersaoNaoProgressiva,
             new DomainErrorMapping(
                 StatusCodes.Status409Conflict,
                 "uniplus.geo.importacao.versao_nao_progressiva",
-                "A versão informada é anterior à última release já aplicada")),
-
-        new(GeoImportacaoErrorCodes.TransicaoInvalida,
-            new DomainErrorMapping(
-                StatusCodes.Status409Conflict,
-                "uniplus.geo.importacao.transicao_invalida",
-                "Transição de estado da importação inválida")),
+                "A versão do pacote é anterior à última versão aplicada")),
 
         new(GeoImportacaoErrorCodes.PacoteInvalido,
             new DomainErrorMapping(
