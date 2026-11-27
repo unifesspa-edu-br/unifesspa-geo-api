@@ -124,6 +124,6 @@ internal static partial class GeoReferenceSeed
             CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)]);
     }
 
-    [GeneratedRegex("<(?<url>[^>]+)>;\\s*rel=\"(?<rel>[^\"]+)\"")]
+    [GeneratedRegex("<(?<url>[^>]+)>;\\s*rel=\"(?<rel>[^\"]+)\"", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex LinkHeaderRegex();
 }

@@ -43,6 +43,6 @@ internal static partial class CepValido
     // [0-9] e não \d: em .NET \d casa dígitos Unicode (ex.: árabe-índicos); o CEP é
     // ASCII. Aceita 8 dígitos OU NNNNN-NNN OU NNNNN␠NNN — o separador só na posição
     // 5→3, nunca interno.
-    [GeneratedRegex(@"^[0-9]{8}$|^[0-9]{5}[- ][0-9]{3}$")]
+    [GeneratedRegex(@"^[0-9]{8}$|^[0-9]{5}[- ][0-9]{3}$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CepRegex();
 }

@@ -171,6 +171,6 @@ public sealed partial class PiiMaskingEnricher : ILogEventEnricher
     // Word boundaries ((?<!\d) / (?!\d)) impedem casar sub-sequências de 11 dígitos
     // dentro de números maiores (timestamps, IDs), evitando tanto falsos positivos
     // (log corruption) quanto falsos negativos onde dígitos do CPF vazariam fora do match.
-    [GeneratedRegex(@"(?<![0-9])[0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2}(?![0-9])")]
+    [GeneratedRegex(@"(?<![0-9])[0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2}(?![0-9])", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CpfPattern();
 }

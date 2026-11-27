@@ -13,6 +13,6 @@ internal static partial class FormatoDaUf
             ? null
             : ErrosDasConsultas.ErroUfInvalida();
 
-    [GeneratedRegex(@"^[A-Za-z]{2}$")]
+    [GeneratedRegex(@"^[A-Za-z]{2}$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex UfRegex();
 }

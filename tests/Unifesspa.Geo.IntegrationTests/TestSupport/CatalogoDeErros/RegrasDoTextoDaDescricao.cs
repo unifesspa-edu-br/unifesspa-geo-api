@@ -26,21 +26,21 @@ internal static partial class RegrasDoTextoDaDescricao
         }
     }
 
-    [GeneratedRegex(@"\AUNI-REQ-[0-9]{4}\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\AUNI-REQ-[0-9]{4}\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     internal static partial Regex Requisito();
 
-    [GeneratedRegex(@"\Auniplus(?:\.[a-z0-9_]+)+\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\Auniplus(?:\.[a-z0-9_]+)+\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     internal static partial Regex CodigoPublico();
 
-    [GeneratedRegex(@"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CpfFormatado();
 
-    [GeneratedRegex(@"(?<!\d)\d{11}(?!\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<!\d)\d{11}(?!\d)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CpfSemPontuacao();
 
-    [GeneratedRegex(@"\d{11,}", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\d{11,}", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex DigitosConsecutivos();
 
-    [GeneratedRegex(@"[\w.!#$%&'*+/=?^\x60{|}~-]+@(?:[\w-]+(?:\.[\w-]+)+|\[[^\]\s]+\])", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"[\w.!#$%&'*+/=?^\x60{|}~-]+@(?:[\w-]+(?:\.[\w-]+)+|\[[^\]\s]+\])", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Email();
 }

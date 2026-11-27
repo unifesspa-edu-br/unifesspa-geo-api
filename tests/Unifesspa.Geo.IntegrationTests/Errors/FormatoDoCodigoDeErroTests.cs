@@ -23,7 +23,7 @@ public sealed class FormatoDoCodigoDeErroTests : IClassFixture<GeoOpenApiFactory
     [Fact(DisplayName = "Todos os códigos dos registros do Geo casam com o padrão do campo code do contrato")]
     public void CodigosRegistrados_CasamComOPadraoDoContrato()
     {
-        Regex padrao = new(ProblemDetailsExtensionsDocumentTransformer.PadraoDoCodigo, RegexOptions.None, TimeSpan.FromSeconds(1));
+        Regex padrao = new(ProblemDetailsExtensionsDocumentTransformer.PadraoDoCodigo, RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
         string[] codigos =
         [
             .. _fabrica.Services.GetServices<IDomainErrorRegistration>()
@@ -43,7 +43,7 @@ public sealed class FormatoDoCodigoDeErroTests : IClassFixture<GeoOpenApiFactory
     [InlineData("uniplus..cep")]
     public void PadraoDoContrato_RecusaFormatoInvalido(string codigo)
     {
-        Regex.IsMatch(codigo, ProblemDetailsExtensionsDocumentTransformer.PadraoDoCodigo, RegexOptions.None, TimeSpan.FromSeconds(1))
+        Regex.IsMatch(codigo, ProblemDetailsExtensionsDocumentTransformer.PadraoDoCodigo, RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1))
             .Should().BeFalse();
     }
 }
