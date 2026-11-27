@@ -86,4 +86,12 @@ Esclarece dois itens do resultado da decisão, sem mudá-la.
 
 ## Emenda de 27/11/2026 — execução abandonada
 
-A trava livre prova, em qualquer momento e não só na partida, que nenhuma instância executa a carga. Antes de ler o corpo, o envio só é recusado com 409 se houver execução em andamento e a trava estiver ocupada. Com a trava livre, os esquemas temporários que sobraram são descartados e então as execuções em andamento são encerradas como falha, a trava é solta e o envio segue. Se o descarte falhar, as execuções seguem em andamento, o envio recebe o erro do servidor e o encerramento é tentado de novo no envio seguinte ou na partida. Isso substitui, na ordem do pedido da emenda anterior, a recusa por qualquer execução em andamento registrada. Consequência: uma falha ao registrar o fim de uma carga não bloqueia o envio seguinte até um reinício.
+A trava livre autoriza, em qualquer momento e não só na partida, a tratar a execução em andamento como abandonada (a emenda seguinte protege o desfecho quando a trava é solta com a carga ainda viva). Antes de ler o corpo, o envio só é recusado com 409 se houver execução em andamento e a trava estiver ocupada. Com a trava livre, os esquemas temporários que sobraram são descartados e então as execuções em andamento são encerradas como falha, a trava é solta e o envio segue. Se o descarte falhar, as execuções seguem em andamento, o envio recebe o erro do servidor e o encerramento é tentado de novo no envio seguinte ou na partida. Isso substitui, na ordem do pedido da emenda anterior, a recusa por qualquer execução em andamento registrada. Consequência: uma falha ao registrar o fim de uma carga não bloqueia o envio seguinte até um reinício.
+
+## Emenda de 27/11/2026 — conclusão condicional
+
+O banco pode soltar a trava com a carga ainda executando, quando cai a conexão parada que a segura. Nesse caso um envio seguinte, ou a partida do serviço, encerra a execução como falha, e a carga antiga ainda termina o seu trabalho.
+
+A conclusão só é gravada se a execução ainda está em andamento, na mesma transação da publicação. Se a execução já foi encerrada como falha, a conclusão é recusada, a transação inteira é desfeita e a base anterior continua publicada; a versão da carga antiga não conta como aplicada e o mesmo pacote pode ser reenviado. O encerramento, por sua vez, não grava falha sobre uma carga que acabou de concluir: nesse caso nada é encerrado e o envio segue.
+
+Consequências: o histórico nunca conta uma carga concluída que não vale, e depois de uma queda da trava com a carga viva o pacote precisa ser reenviado. A decisão anterior não é reaberta.
