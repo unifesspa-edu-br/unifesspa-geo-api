@@ -39,11 +39,17 @@ internal sealed record CenarioDoEstadoDoPara(Pais Brasil, Estado Para, EstadoInd
     private static EstadoIndicador NovoIndicador(Estado para) =>
         GeoTestKeys.Ok(EstadoIndicador.Importar(
             estadoId: para.Id, gentilico: "paraense", governador: null,
-            areaKm2: 1245870.704m, populacaoResidente2022: 8121025, densidadeDemografica: 6.52m,
-            matriculasEnsinoFundamental2023: null, idh: 0.690m,
-            receitasBrutas: 30_500_000_000.55m, despesasBrutas: 28_000_000_000.42m,
-            rendimentoMensalPerCapita: null, totalVeiculos2023: 1_900_000,
-            versaoDataset: VersaoDataset));
+            metricas: new MetricasDoEstado
+            {
+                AreaKm2 = 1245870.704m,
+                PopulacaoResidente2022 = 8121025,
+                DensidadeDemografica = 6.52m,
+                Idh = 0.690m,
+                ReceitasBrutas = 30_500_000_000.55m,
+                DespesasBrutas = 28_000_000_000.42m,
+                TotalVeiculos2023 = 1_900_000,
+            },
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 
     private static EstadoFaixaCep NovaFaixa(Estado para) =>
         GeoTestKeys.Ok(EstadoFaixaCep.Importar(

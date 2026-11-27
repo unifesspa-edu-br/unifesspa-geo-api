@@ -45,7 +45,7 @@ internal sealed class GeoImportadorEstados
         ProvenienciaDaCarga proveniencia = new(fonte.Versao);
         Dictionary<string, Guid> estadosPorUf = await ImportarEstadosAsync(
             fonte, brasilId, indicadores, proveniencia, relatorio.Tabela("estado"), cancellationToken).ConfigureAwait(false);
-        await ImportarIndicadoresAsync(estadosPorUf, indicadores, fonte.Versao, contadorIndicadores, cancellationToken).ConfigureAwait(false);
+        await ImportarIndicadoresAsync(estadosPorUf, indicadores, proveniencia, contadorIndicadores, cancellationToken).ConfigureAwait(false);
         await ImportarFaixasAsync(fonte, estadosPorUf, relatorio.Tabela("estado_faixa"), cancellationToken).ConfigureAwait(false);
         return estadosPorUf;
     }
@@ -129,23 +129,23 @@ internal sealed class GeoImportadorEstados
     private async Task ImportarIndicadoresAsync(
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, EstadoIndicadorCru> indicadores,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
         Dictionary<Guid, EstadoIndicador> existentes =
             await _contexto.EstadoIndicadores.ToDictionaryAsync(i => i.EstadoId, cancellationToken).ConfigureAwait(false);
-        UpsertarIndicadores(estadosPorUf, indicadores, versao, existentes, contador);
+        UpsertarIndicadores(estadosPorUf, indicadores, proveniencia, existentes, contador);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
 
     // Lidos, sem chave e duplicados já foram contados na agregação; aqui só resta
-    // resolver o órfão (UF sem estado carregado) e fazer o upsert.
+    // resolver o órfão (UF sem estado carregado) e gravar pela chave natural.
     private void UpsertarIndicadores(
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, EstadoIndicadorCru> indicadores,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<Guid, EstadoIndicador> existentes,
         ContadorTabela contador)
     {
@@ -157,39 +157,49 @@ internal sealed class GeoImportadorEstados
                 continue;
             }
 
-            UpsertarIndicador(estadoId, cru, versao, existentes, contador);
+            UpsertarIndicador(estadoId, cru, proveniencia, existentes, contador);
         }
     }
 
     private void UpsertarIndicador(
         Guid estadoId,
         EstadoIndicadorCru cru,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<Guid, EstadoIndicador> existentes,
         ContadorTabela contador)
     {
-        MetricasDoEstado m = MetricasDoEstado.De(cru, contador);
+        MetricasDoEstado metricas = MetricasDe(cru, contador);
 
         if (existentes.TryGetValue(estadoId, out EstadoIndicador? existente))
         {
-            AtualizarIndicador(existente, cru, m, versao, contador);
+            AtualizarIndicador(existente, cru, metricas, proveniencia, contador);
         }
         else
         {
-            CriarIndicador(estadoId, cru, m, versao, contador);
+            CriarIndicador(estadoId, cru, metricas, proveniencia, contador);
         }
     }
 
-    private void AtualizarIndicador(EstadoIndicador existente, EstadoIndicadorCru cru, MetricasDoEstado m, string versao, ContadorTabela contador)
+    private void AtualizarIndicador(
+        EstadoIndicador existente,
+        EstadoIndicadorCru cru,
+        MetricasDoEstado metricas,
+        ProvenienciaDaCarga proveniencia,
+        ContadorTabela contador)
     {
-        existente.Atualizar(cru.Gentilico, cru.Governador, m.Area, m.Populacao, m.Densidade, m.Matriculas, m.Idh, m.Receitas, m.Despesas, m.Rendimento, m.Veiculos, versao);
+        existente.Atualizar(cru.Gentilico, cru.Governador, metricas, proveniencia);
         Tocar(_contexto, existente);
         contador.ContarAtualizado();
     }
 
-    private void CriarIndicador(Guid estadoId, EstadoIndicadorCru cru, MetricasDoEstado m, string versao, ContadorTabela contador)
+    private void CriarIndicador(
+        Guid estadoId,
+        EstadoIndicadorCru cru,
+        MetricasDoEstado metricas,
+        ProvenienciaDaCarga proveniencia,
+        ContadorTabela contador)
     {
-        Result<EstadoIndicador> criado = EstadoIndicador.Importar(estadoId, cru.Gentilico, cru.Governador, m.Area, m.Populacao, m.Densidade, m.Matriculas, m.Idh, m.Receitas, m.Despesas, m.Rendimento, m.Veiculos, versao);
+        Result<EstadoIndicador> criado = EstadoIndicador.Importar(estadoId, cru.Gentilico, cru.Governador, metricas, proveniencia);
         if (criado.IsFailure)
         {
             contador.ContarIgnoradoSemChave();
@@ -199,6 +209,19 @@ internal sealed class GeoImportadorEstados
         _contexto.EstadoIndicadores.Add(criado.Value!);
         contador.ContarInserido();
     }
+
+    private static MetricasDoEstado MetricasDe(EstadoIndicadorCru cru, ContadorTabela contador) => new()
+    {
+        AreaKm2 = MetricaIbge.Decimal(cru.AreaTerritorialKm2, "area_territorial_km2", contador),
+        PopulacaoResidente2022 = MetricaIbge.Inteira(cru.PopulacaoResidente2022, "populacao_residente_2022", contador),
+        DensidadeDemografica = MetricaIbge.Decimal(cru.DensidadeDemografica, "densidade_demografica_hab_km2", contador),
+        MatriculasEnsinoFundamental2023 = MetricaIbge.Inteira(cru.MatriculasEnsinoFundamental2023, "matriculas_ensino_fundamental_2023", contador),
+        Idh = MetricaIbge.Decimal(cru.Idh, "idh_indice_desenv_humano", contador),
+        ReceitasBrutas = MetricaIbge.Decimal(cru.ReceitasBrutas, "total_receitas_brutas_realizadas", contador),
+        DespesasBrutas = MetricaIbge.Decimal(cru.DespesasBrutas, "total_despesas_brutas_empenhadas", contador),
+        RendimentoMensalPerCapita = MetricaIbge.Inteira(cru.RendimentoMensalPerCapita, "rendimento_mensal_per_capita", contador),
+        TotalVeiculos2023 = MetricaIbge.Inteira(cru.TotalVeiculos2023, "total_veiculos_2023", contador),
+    };
 
     private async Task ImportarFaixasAsync(
         IGeoFonteDados fonte,
@@ -271,39 +294,5 @@ internal sealed class GeoImportadorEstados
             () => EstadoFaixaCep.Importar(estadoId, cepInicial, cepFinal, cru.Descricao, versao),
             existente => existente.Atualizar(cru.Descricao, versao),
             _contexto.EstadoFaixasCep, contador);
-    }
-
-    private readonly record struct MetricasDoEstado
-    {
-        public decimal? Area { get; init; }
-
-        public int? Populacao { get; init; }
-
-        public decimal? Densidade { get; init; }
-
-        public int? Matriculas { get; init; }
-
-        public decimal? Idh { get; init; }
-
-        public decimal? Receitas { get; init; }
-
-        public decimal? Despesas { get; init; }
-
-        public int? Rendimento { get; init; }
-
-        public int? Veiculos { get; init; }
-
-        public static MetricasDoEstado De(EstadoIndicadorCru cru, ContadorTabela contador) => new()
-        {
-            Area = MetricaIbge.Decimal(cru.AreaTerritorialKm2, "area_territorial_km2", contador),
-            Populacao = MetricaIbge.Inteira(cru.PopulacaoResidente2022, "populacao_residente_2022", contador),
-            Densidade = MetricaIbge.Decimal(cru.DensidadeDemografica, "densidade_demografica_hab_km2", contador),
-            Matriculas = MetricaIbge.Inteira(cru.MatriculasEnsinoFundamental2023, "matriculas_ensino_fundamental_2023", contador),
-            Idh = MetricaIbge.Decimal(cru.Idh, "idh_indice_desenv_humano", contador),
-            Receitas = MetricaIbge.Decimal(cru.ReceitasBrutas, "total_receitas_brutas_realizadas", contador),
-            Despesas = MetricaIbge.Decimal(cru.DespesasBrutas, "total_despesas_brutas_empenhadas", contador),
-            Rendimento = MetricaIbge.Inteira(cru.RendimentoMensalPerCapita, "rendimento_mensal_per_capita", contador),
-            Veiculos = MetricaIbge.Inteira(cru.TotalVeiculos2023, "total_veiculos_2023", contador),
-        };
     }
 }
