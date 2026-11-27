@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -20,32 +16,21 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via AddSingleton<IResourceLinksBuilder<CidadeResumoDto>, CidadeResumoLinksBuilder>().")]
 internal sealed class CidadeResumoLinksBuilder : IResourceLinksBuilder<CidadeResumoDto>
 {
-    private static readonly string CidadesControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CidadesController));
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public CidadeResumoLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public CidadeResumoLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(CidadeResumoDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-
-        string self = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.ObterPorCodigoIbge),
-            CidadesControllerNome, new { codigoIbge = dto.CodigoIbge });
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["self"] = self,
+            ["self"] = _caminhos.DaCidade(dto.CodigoIbge),
         };
     }
 }

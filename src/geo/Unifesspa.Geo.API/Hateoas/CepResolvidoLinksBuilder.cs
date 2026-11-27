@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -22,37 +18,22 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via AddSingleton<IResourceLinksBuilder<CepResolvidoDto>, CepResolvidoLinksBuilder>().")]
 internal sealed class CepResolvidoLinksBuilder : IResourceLinksBuilder<CepResolvidoDto>
 {
-    private static readonly string CidadesControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CidadesController));
-    private static readonly string EstadosControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.EstadosController));
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public CepResolvidoLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public CepResolvidoLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(CepResolvidoDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-
-        string cidade = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.ObterPorCodigoIbge),
-            CidadesControllerNome, new { codigoIbge = dto.CodigoIbge });
-        string estado = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.EstadosController.ObterPorUf),
-            EstadosControllerNome, new { uf = dto.Uf });
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["cidade"] = cidade,
-            ["estado"] = estado,
+            ["cidade"] = _caminhos.DaCidade(dto.CodigoIbge),
+            ["estado"] = _caminhos.DoEstado(dto.Uf),
         };
     }
 }

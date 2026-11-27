@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -20,41 +16,21 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via IServiceProvider.AddSingleton<IResourceLinksBuilder<ImportacaoGeoDto>, ImportacaoGeoLinksBuilder>().")]
 internal sealed class ImportacaoGeoLinksBuilder : IResourceLinksBuilder<ImportacaoGeoDto>
 {
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    public ImportacaoGeoLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public ImportacaoGeoLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(ImportacaoGeoDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-        const string controller = "GeoImportacoes";
-
-        string self = ResolverPath(httpContext, nameof(GeoImportacoesController.Obter), controller, new { id = dto.Id });
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["self"] = self,
+            ["self"] = _caminhos.DaImportacao(dto.Id),
         };
-    }
-
-    private string ResolverPath(HttpContext? httpContext, string action, string controller, object? values)
-    {
-        string? path = httpContext is not null
-            ? _linkGenerator.GetPathByAction(httpContext, action: action, controller: controller, values: values)
-            : _linkGenerator.GetPathByAction(action: action, controller: controller, values: values);
-
-        return path
-            ?? throw new InvalidOperationException(
-                $"LinkGenerator não conseguiu resolver a rota para {action}. " +
-                "Verifique o registro do controller e o template de rota.");
     }
 }

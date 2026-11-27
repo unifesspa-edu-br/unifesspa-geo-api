@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -22,37 +18,22 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via AddSingleton<IResourceLinksBuilder<LogradouroProximoDto>, LogradouroProximoLinksBuilder>().")]
 internal sealed class LogradouroProximoLinksBuilder : IResourceLinksBuilder<LogradouroProximoDto>
 {
-    private static readonly string CidadesControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CidadesController));
-    private static readonly string CepControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CepController));
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public LogradouroProximoLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public LogradouroProximoLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(LogradouroProximoDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-
-        string cidade = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.ObterPorCodigoIbge),
-            CidadesControllerNome, new { codigoIbge = dto.CidadeCodigoIbge });
-        string cep = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CepController.Resolver),
-            CepControllerNome, new { cep = dto.Cep });
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["cidade"] = cidade,
-            ["cep"] = cep,
+            ["cidade"] = _caminhos.DaCidade(dto.CidadeCodigoIbge),
+            ["cep"] = _caminhos.DaConsultaDoCep(dto.Cep),
         };
     }
 }

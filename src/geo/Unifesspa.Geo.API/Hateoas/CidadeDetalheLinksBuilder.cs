@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -22,54 +18,26 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via AddSingleton<IResourceLinksBuilder<CidadeDetalheDto>, CidadeDetalheLinksBuilder>().")]
 internal sealed class CidadeDetalheLinksBuilder : IResourceLinksBuilder<CidadeDetalheDto>
 {
-    private static readonly string CidadesControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CidadesController));
-    private static readonly string HierarquiaControllerNome = GeoLinkPathResolver.ControllerName(nameof(CidadeHierarquiaController));
-    private static readonly string EstadosControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.EstadosController));
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public CidadeDetalheLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public CidadeDetalheLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(CidadeDetalheDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-
-        string self = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.ObterPorCodigoIbge),
-            CidadesControllerNome, new { codigoIbge = dto.CodigoIbge });
-        string estado = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.EstadosController.ObterPorUf),
-            EstadosControllerNome, new { uf = dto.Uf });
-        string collection = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.Listar),
-            CidadesControllerNome, values: null);
-        string distritos = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(CidadeHierarquiaController.ListarDistritos),
-            HierarquiaControllerNome, new { codigoIbge = dto.CodigoIbge });
-        string bairros = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(CidadeHierarquiaController.ListarBairros),
-            HierarquiaControllerNome, new { codigoIbge = dto.CodigoIbge });
-        string logradouros = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(CidadeHierarquiaController.ListarLogradouros),
-            HierarquiaControllerNome, new { codigoIbge = dto.CodigoIbge });
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["self"] = self,
-            ["estado"] = estado,
-            ["collection"] = collection,
-            ["distritos"] = distritos,
-            ["bairros"] = bairros,
-            ["logradouros"] = logradouros,
+            ["self"] = _caminhos.DaCidade(dto.CodigoIbge),
+            ["estado"] = _caminhos.DoEstado(dto.Uf),
+            ["collection"] = _caminhos.DaListaDeCidades(),
+            ["distritos"] = _caminhos.DosDistritosDaCidade(dto.CodigoIbge),
+            ["bairros"] = _caminhos.DosBairrosDaCidade(dto.CodigoIbge),
+            ["logradouros"] = _caminhos.DosLogradourosDaCidade(dto.CodigoIbge),
         };
     }
 }

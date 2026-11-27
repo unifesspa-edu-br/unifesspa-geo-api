@@ -2,10 +2,6 @@ namespace Unifesspa.Geo.API.Hateoas;
 
 using System.Diagnostics.CodeAnalysis;
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-
-using Unifesspa.Geo.API.Controllers;
 using Unifesspa.Geo.Application.DTOs;
 using Unifesspa.Geo.Infrastructure.Core.Hateoas;
 
@@ -19,37 +15,22 @@ using Unifesspa.Geo.Infrastructure.Core.Hateoas;
     Justification = "Instanciada via AddSingleton<IResourceLinksBuilder<BairroDto>, BairroLinksBuilder>().")]
 internal sealed class BairroLinksBuilder : IResourceLinksBuilder<BairroDto>
 {
-    private static readonly string CidadesControllerNome = GeoLinkPathResolver.ControllerName(nameof(Controllers.CidadesController));
-    private static readonly string HierarquiaControllerNome = GeoLinkPathResolver.ControllerName(nameof(CidadeHierarquiaController));
+    private readonly CaminhosDosRecursosDoGeo _caminhos;
 
-    private readonly LinkGenerator _linkGenerator;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public BairroLinksBuilder(LinkGenerator linkGenerator, IHttpContextAccessor httpContextAccessor)
+    public BairroLinksBuilder(CaminhosDosRecursosDoGeo caminhos)
     {
-        ArgumentNullException.ThrowIfNull(linkGenerator);
-        ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        _linkGenerator = linkGenerator;
-        _httpContextAccessor = httpContextAccessor;
+        ArgumentNullException.ThrowIfNull(caminhos);
+        _caminhos = caminhos;
     }
 
     public IReadOnlyDictionary<string, string> Build(BairroDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        HttpContext? httpContext = _httpContextAccessor.HttpContext;
-
-        string cidade = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(Controllers.CidadesController.ObterPorCodigoIbge),
-            CidadesControllerNome, new { codigoIbge = dto.CidadeCodigoIbge });
-        string collection = GeoLinkPathResolver.Resolver(
-            _linkGenerator, httpContext, nameof(CidadeHierarquiaController.ListarBairros),
-            HierarquiaControllerNome, new { codigoIbge = dto.CidadeCodigoIbge });
-
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["cidade"] = cidade,
-            ["collection"] = collection,
+            ["cidade"] = _caminhos.DaCidade(dto.CidadeCodigoIbge),
+            ["collection"] = _caminhos.DosBairrosDaCidade(dto.CidadeCodigoIbge),
         };
     }
 }
