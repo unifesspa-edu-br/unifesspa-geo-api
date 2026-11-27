@@ -48,29 +48,33 @@ public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
         if (authorizeData.Length == 0)
             return;
 
-        operation.Security ??= [];
-        if (!operation.Security.Any(ContainsBearerRequirement))
-        {
-            operation.Security.Add(new OpenApiSecurityRequirement
-            {
-                [
-                    new OpenApiSecuritySchemeReference(
-                        GeoInfoTransformer.BearerSecuritySchemeName,
-                        context.Document,
-                        externalResource: null)
-                ] = [],
-            });
-        }
-
+        ExigirBearer(operation, context);
         AddProblemResponseIfMissing(operation, context, UnauthorizedStatus, "Unauthorized");
 
-        bool hasAuthorizationConstraint = authorizeData.Any(static data =>
+        if (RestringeOAcesso(authorizeData))
+            AddProblemResponseIfMissing(operation, context, ForbiddenStatus, "Forbidden");
+    }
+
+    private static bool RestringeOAcesso(IAuthorizeData[] authorizeData) =>
+        authorizeData.Any(static data =>
             !string.IsNullOrWhiteSpace(data.Roles) ||
             !string.IsNullOrWhiteSpace(data.Policy));
-        if (hasAuthorizationConstraint)
+
+    private static void ExigirBearer(OpenApiOperation operation, OpenApiOperationTransformerContext context)
+    {
+        operation.Security ??= [];
+        if (operation.Security.Any(ContainsBearerRequirement))
+            return;
+
+        operation.Security.Add(new OpenApiSecurityRequirement
         {
-            AddProblemResponseIfMissing(operation, context, ForbiddenStatus, "Forbidden");
-        }
+            [
+                new OpenApiSecuritySchemeReference(
+                    GeoInfoTransformer.BearerSecuritySchemeName,
+                    context.Document,
+                    externalResource: null)
+            ] = [],
+        });
     }
 
     private static bool ContainsBearerRequirement(OpenApiSecurityRequirement requirement) =>
@@ -87,24 +91,24 @@ public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
         string description)
     {
         operation.Responses ??= new OpenApiResponses();
-        if (operation.Responses.ContainsKey(statusCode))
-            return;
-
-        operation.Responses[statusCode] = new OpenApiResponse
-        {
-            Description = description,
-            Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
-            {
-                [ProblemJsonMediaType] = new()
-                {
-                    Schema = new OpenApiSchemaReference(
-                        ProblemDetailsSchemaName,
-                        context.Document,
-                        externalResource: null),
-                },
-            },
-        };
+        if (!operation.Responses.ContainsKey(statusCode))
+            operation.Responses[statusCode] = RespostaDeProblema(description, context.Document);
     }
+
+    private static OpenApiResponse RespostaDeProblema(string descricao, OpenApiDocument? documento) => new()
+    {
+        Description = descricao,
+        Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
+        {
+            [ProblemJsonMediaType] = new()
+            {
+                Schema = new OpenApiSchemaReference(
+                    ProblemDetailsSchemaName,
+                    documento,
+                    externalResource: null),
+            },
+        },
+    };
 
     private static void CoerceErrorResponsesToProblemJson(OpenApiOperation operation)
     {
@@ -113,39 +117,43 @@ public sealed class GeoOperationTransformer : IOpenApiOperationTransformer
 
         foreach (KeyValuePair<string, IOpenApiResponse> kvp in operation.Responses)
         {
-            if (!IsErrorStatusKey(kvp.Key))
-                continue;
-
-            if (kvp.Value is not OpenApiResponse response)
-                continue;
-
-            // Sem content declarado (raro hoje — JwtBearerProblemDetailsEvents
-            // já emite problem+json em 401/403, e endpoints expressam isso via
-            // .ProducesProblem). Quando ainda assim acontecer, não inventamos
-            // body: escrever `application/problem+json` sobre uma resposta que
-            // o runtime emite vazia geraria contrato falso e clientes
-            // gerados rejeitariam o 401 real.
-            if (response.Content is null || response.Content.Count == 0)
-                continue;
-
-            if (response.Content.ContainsKey(ProblemJsonMediaType))
-                continue;
-
-            // Espelha o conteúdo declarado (ex.: "application/json" com schema
-            // ProblemDetails) para a media type RFC 9457. Mantém o schema
-            // declarado e descarta os outros media types — endpoints de erro
-            // só falam problem+json no contrato canônico. Prefere
-            // application/json explicitamente; sem ele, cai para o primeiro
-            // média type (Dictionary não garante ordem de enumeração).
-            OpenApiMediaType source = response.Content.TryGetValue("application/json", out OpenApiMediaType? jsonMediaType)
-                ? jsonMediaType
-                : response.Content.Values.First();
-            response.Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
-            {
-                [ProblemJsonMediaType] = source,
-            };
+            if (IsErrorStatusKey(kvp.Key) && kvp.Value is OpenApiResponse response)
+                CoagirParaProblemJson(response);
         }
     }
+
+    private static void CoagirParaProblemJson(OpenApiResponse response)
+    {
+        if (ConteudoAindaNaoProblemJson(response) is not { } conteudo)
+            return;
+
+        // Espelha o conteúdo declarado (ex.: "application/json" com schema
+        // ProblemDetails) para a media type RFC 9457. Mantém o schema
+        // declarado e descarta os outros media types — endpoints de erro
+        // só falam problem+json no contrato canônico.
+        response.Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
+        {
+            [ProblemJsonMediaType] = OrigemDoConteudo(conteudo),
+        };
+    }
+
+    // Sem content declarado (raro hoje — JwtBearerProblemDetailsEvents
+    // já emite problem+json em 401/403, e endpoints expressam isso via
+    // .ProducesProblem). Quando ainda assim acontecer, não inventamos
+    // body: escrever `application/problem+json` sobre uma resposta que
+    // o runtime emite vazia geraria contrato falso e clientes
+    // gerados rejeitariam o 401 real.
+    private static IDictionary<string, OpenApiMediaType>? ConteudoAindaNaoProblemJson(OpenApiResponse response) =>
+        response.Content is { Count: > 0 } conteudo && !conteudo.ContainsKey(ProblemJsonMediaType)
+            ? conteudo
+            : null;
+
+    // Prefere application/json explicitamente; sem ele, cai para o primeiro média type
+    // (Dictionary não garante ordem de enumeração).
+    private static OpenApiMediaType OrigemDoConteudo(IDictionary<string, OpenApiMediaType> conteudo) =>
+        conteudo.TryGetValue("application/json", out OpenApiMediaType? jsonMediaType)
+            ? jsonMediaType
+            : conteudo.Values.First();
 
     private static bool IsErrorStatusKey(string key)
     {

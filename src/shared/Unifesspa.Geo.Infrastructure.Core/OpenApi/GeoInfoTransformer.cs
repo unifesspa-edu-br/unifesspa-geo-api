@@ -30,36 +30,50 @@ public sealed class GeoInfoTransformer : IOpenApiDocumentTransformer
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(context);
 
-        string moduleTitle = string.Equals(context.DocumentName, "geo", StringComparison.OrdinalIgnoreCase)
+        document.Info = InformacoesDoModulo(context.DocumentName);
+        document.Servers = ServidoresPublicados();
+        RegistrarEsquemaBearer(document);
+
+        return Task.CompletedTask;
+    }
+
+    private OpenApiInfo InformacoesDoModulo(string nomeDoDocumento) => new()
+    {
+        Title = TituloDoModulo(nomeDoDocumento),
+        Version = _options.ContractVersion,
+        Description = "API REST do Sistema Unificado Unifesspa (Uni+). Contrato canônico V1 — "
+            + "ProblemDetails RFC 9457, paginação cursor opaco, vendor MIME versioning. "
+            + "Toda string user-facing em pt-BR (ADR-0022).",
+        Contact = ContatoInstitucional(),
+        License = LicencaDoContrato(),
+    };
+
+    private static string TituloDoModulo(string nomeDoDocumento) =>
+        string.Equals(nomeDoDocumento, "geo", StringComparison.OrdinalIgnoreCase)
             ? "Uni+ — Módulo Geo"
-            : $"UNIFESSPA — {context.DocumentName}";
+            : $"UNIFESSPA — {nomeDoDocumento}";
 
-        document.Info = new OpenApiInfo
-        {
-            Title = moduleTitle,
-            Version = _options.ContractVersion,
-            Description = "API REST do Sistema Unificado Unifesspa (Uni+). Contrato canônico V1 — "
-                + "ProblemDetails RFC 9457, paginação cursor opaco, vendor MIME versioning. "
-                + "Toda string user-facing em pt-BR (ADR-0022).",
-            Contact = new OpenApiContact
-            {
-                Name = _options.ContactName,
-                Email = _options.ContactEmail,
-                Url = new Uri(_options.ContactUrl),
-            },
-            License = new OpenApiLicense
-            {
-                Name = "MIT",
-                Url = new Uri("https://opensource.org/licenses/MIT"),
-            },
-        };
+    private OpenApiContact ContatoInstitucional() => new()
+    {
+        Name = _options.ContactName,
+        Email = _options.ContactEmail,
+        Url = new Uri(_options.ContactUrl),
+    };
 
-        document.Servers =
-        [
-            new OpenApiServer { Url = _options.ProductionServerUrl, Description = "Produção" },
-            new OpenApiServer { Url = _options.StagingServerUrl, Description = "Homologação" },
-        ];
+    private static OpenApiLicense LicencaDoContrato() => new()
+    {
+        Name = "MIT",
+        Url = new Uri("https://opensource.org/licenses/MIT"),
+    };
 
+    private IList<OpenApiServer> ServidoresPublicados() =>
+    [
+        new OpenApiServer { Url = _options.ProductionServerUrl, Description = "Produção" },
+        new OpenApiServer { Url = _options.StagingServerUrl, Description = "Homologação" },
+    ];
+
+    private static void RegistrarEsquemaBearer(OpenApiDocument document)
+    {
         document.Components ??= new OpenApiComponents();
         document.Components.SecuritySchemes ??=
             new Dictionary<string, IOpenApiSecurityScheme>(StringComparer.Ordinal);
@@ -70,7 +84,5 @@ public sealed class GeoInfoTransformer : IOpenApiDocumentTransformer
             BearerFormat = "JWT",
             Description = "Token JWT emitido pelo issuer/realm OIDC configurado para a Geo API.",
         };
-
-        return Task.CompletedTask;
     }
 }
