@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -29,6 +30,7 @@ internal sealed record ResolucaoLocalidades(
 /// pertence. O logradouro só adota a FK de distrito/bairro se a cidade resolvida bater
 /// com a sua — garantindo a coerência hierárquica que o domínio delega à carga.
 /// </summary>
+[StructLayout(LayoutKind.Auto)]
 internal readonly record struct LocalidadeResolvida(Guid Id, Guid CidadeId);
 
 /// <summary>
