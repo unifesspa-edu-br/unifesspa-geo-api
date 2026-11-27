@@ -24,6 +24,16 @@ public static class ErrosDoPacoteDne
             GeoImportacaoErrorCodes.PacoteAcimaDoLimite,
             $"O pacote ultrapassa o tamanho máximo de {Formatar(limiteEmBytes)}.");
 
+    public static DomainError NaoEnfileirada() =>
+        new(
+            GeoImportacaoErrorCodes.NaoEnfileirada,
+            "Não foi possível colocar a carga na fila porque o serviço está sendo encerrado.");
+
+    public static DomainError VersaoNaoProgressiva(string versao, string ultimaAplicada) =>
+        new(
+            GeoImportacaoErrorCodes.VersaoNaoProgressiva,
+            $"A versão {versao} é anterior à última aplicada ({ultimaAplicada}).");
+
     private static string Formatar(long bytes)
     {
         if (bytes % BytesPorMiB == 0)
