@@ -43,67 +43,52 @@ public sealed partial class RequestLoggingMiddleware
             .ToImmutableArray();
     }
 
+    // A falha que escapa do pipeline é registrada como Error e relançada (`throw;` preserva a
+    // pilha para o GlobalExceptionMiddleware). Sem isso, ela apareceria como Information 200
+    // no log (código de status padrão).
     public async Task InvokeAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        long startTimestamp = Stopwatch.GetTimestamp();
-        Exception? falha = null;
-
-        // Capturamos para elevar o log a Error; `throw;` preserva stack para o
-        // GlobalExceptionMiddleware. Sem isso, exception que escapa o pipeline
-        // aparece como Information 200 no log (default do status code).
+        long inicio = Stopwatch.GetTimestamp();
         try
         {
             await _next(context).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            falha = ex;
+            RegistrarConcluida(context, inicio, ex);
             throw;
         }
-        finally
-        {
-            double elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-            string method = context.Request.Method;
-            string path = context.Request.Path.HasValue ? context.Request.Path.Value! : "/";
-            string query = _masker.Mascarar(context.Request.QueryString);
-            int statusCode = context.Response.StatusCode;
 
-            if (falha is not null || statusCode >= 500)
-            {
-                LogRequestServerError(_logger, method, path, query, statusCode, elapsedMs, falha);
-            }
-            else if (statusCode >= 400)
-            {
-                LogRequestClientError(_logger, method, path, query, statusCode, elapsedMs);
-            }
-            else if (!DeveSilenciar(path))
-            {
-                LogRequestSucesso(_logger, method, path, query, statusCode, elapsedMs);
-            }
+        RegistrarConcluida(context, inicio, null);
+    }
+
+    private void RegistrarConcluida(HttpContext context, long inicio, Exception? falha) =>
+        Registrar(RequisicaoConcluida.De(context, _masker, inicio), falha);
+
+    private void Registrar(RequisicaoConcluida r, Exception? falha)
+    {
+        if (falha is not null || r.Status >= 500)
+        {
+            LogRequestServerError(_logger, r.Metodo, r.Caminho, r.Consulta, r.Status, r.DuracaoMs, falha);
+        }
+        else if (r.Status >= 400)
+        {
+            LogRequestClientError(_logger, r.Metodo, r.Caminho, r.Consulta, r.Status, r.DuracaoMs);
+        }
+        else if (!DeveSilenciar(r.Caminho))
+        {
+            LogRequestSucesso(_logger, r.Metodo, r.Caminho, r.Consulta, r.Status, r.DuracaoMs);
         }
     }
 
-    // Span evita alocação no hot path em requests com trailing slash.
     private bool DeveSilenciar(string path)
     {
-        ReadOnlySpan<char> pathSpan = path.AsSpan();
-        if (pathSpan.Length > 1 && pathSpan[^1] == '/')
-        {
-            pathSpan = pathSpan.TrimEnd('/');
-        }
-
+        ReadOnlySpan<char> caminho = SemBarraFinal(path);
         foreach (string prefixo in _prefixosSilenciados)
         {
-            if (pathSpan.Equals(prefixo, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (pathSpan.Length > prefixo.Length &&
-                pathSpan.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase) &&
-                pathSpan[prefixo.Length] == '/')
+            if (CasaComPrefixo(caminho, prefixo))
             {
                 return true;
             }
@@ -111,6 +96,19 @@ public sealed partial class RequestLoggingMiddleware
 
         return false;
     }
+
+    // Span evita alocação no hot path em requests com trailing slash.
+    private static ReadOnlySpan<char> SemBarraFinal(string caminho)
+    {
+        ReadOnlySpan<char> span = caminho.AsSpan();
+        return span.Length > 1 && span[^1] == '/' ? span.TrimEnd('/') : span;
+    }
+
+    private static bool CasaComPrefixo(ReadOnlySpan<char> caminho, string prefixo) =>
+        caminho.Equals(prefixo, StringComparison.OrdinalIgnoreCase)
+        || (caminho.Length > prefixo.Length
+            && caminho.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase)
+            && caminho[prefixo.Length] == '/');
 
     private static string NormalizarPrefixo(string valor) =>
         valor.Length > 1 && valor.EndsWith('/') ? valor.TrimEnd('/') : valor;
@@ -125,4 +123,18 @@ public sealed partial class RequestLoggingMiddleware
     // vai para LogEvent.Exception (stack estruturada nos sinks), não para o template.
     [LoggerMessage(Level = LogLevel.Error, Message = "HTTP {Method} {Path}{Query} respondeu {StatusCode} em {ElapsedMs}ms")]
     private static partial void LogRequestServerError(ILogger logger, string method, string path, string query, int statusCode, double elapsedMs, Exception? ex);
+
+    private readonly record struct RequisicaoConcluida(string Metodo, string Caminho, string Consulta, int Status, double DuracaoMs)
+    {
+        internal static RequisicaoConcluida De(HttpContext context, QueryStringMasker masker, long inicio)
+        {
+            double duracaoMs = Stopwatch.GetElapsedTime(inicio).TotalMilliseconds;
+            return new(
+                context.Request.Method,
+                context.Request.Path.HasValue ? context.Request.Path.Value! : "/",
+                masker.Mascarar(context.Request.QueryString),
+                context.Response.StatusCode,
+                duracaoMs);
+        }
+    }
 }

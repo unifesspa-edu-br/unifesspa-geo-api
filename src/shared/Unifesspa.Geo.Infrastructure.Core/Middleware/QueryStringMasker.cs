@@ -1,7 +1,6 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Middleware;
 
 using System.Collections.Frozen;
-using System.Text;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -28,49 +27,23 @@ public sealed class QueryStringMasker
             return queryString.Value ?? string.Empty;
         }
 
-        string raw = queryString.Value![1..];
-        StringBuilder sb = new(queryString.Value.Length);
-        sb.Append('?');
+        string[] parametros = queryString.Value![1..].Split('&', StringSplitOptions.RemoveEmptyEntries);
+        return "?" + string.Join('&', parametros.Select(MascararParametro));
+    }
 
-        bool primeiro = true;
-        foreach (string pedaco in raw.Split('&'))
+    private string MascararParametro(string parametro)
+    {
+        int igual = parametro.IndexOf('=', StringComparison.Ordinal);
+        if (igual < 0)
         {
-            if (pedaco.Length == 0)
-            {
-                continue;
-            }
-
-            if (!primeiro)
-            {
-                sb.Append('&');
-            }
-
-            primeiro = false;
-
-            int eqIdx = pedaco.IndexOf('=', StringComparison.Ordinal);
-            if (eqIdx < 0)
-            {
-                sb.Append(pedaco);
-                continue;
-            }
-
-            string keyEncoded = pedaco[..eqIdx];
-            // Segurança: compara a chave decodificada para não deixar bypass via
-            // percent-encoding (ex.: `?%63%70%66=123` equivale a `?cpf=123`).
-            string keyDecoded = Uri.UnescapeDataString(keyEncoded);
-
-            sb.Append(keyEncoded);
-            sb.Append('=');
-            if (_nomesSensiveis.Contains(keyDecoded))
-            {
-                sb.Append(_valorMascarado);
-            }
-            else
-            {
-                sb.Append(pedaco.AsSpan(eqIdx + 1));
-            }
+            return parametro;
         }
 
-        return sb.ToString();
+        string chaveCodificada = parametro[..igual];
+        // Segurança: compara a chave decodificada para não deixar bypass via
+        // percent-encoding (ex.: `?%63%70%66=123` equivale a `?cpf=123`).
+        string chave = Uri.UnescapeDataString(chaveCodificada);
+        string valor = _nomesSensiveis.Contains(chave) ? _valorMascarado : parametro[(igual + 1)..];
+        return $"{chaveCodificada}={valor}";
     }
 }
