@@ -39,6 +39,7 @@ public static class GeoOpenApiServiceCollectionExtensions
         services.TryAddSingleton<CursorPaginationOperationTransformer>();
         services.TryAddSingleton<PaginationOrphanSchemaDocumentTransformer>();
         services.TryAddSingleton<GeoSchemaTransformer>();
+        services.TryAddSingleton<ProblemDetailsExtensionsDocumentTransformer>();
 
         services.AddOpenApi(documentName, options =>
         {
@@ -47,6 +48,7 @@ public static class GeoOpenApiServiceCollectionExtensions
             options.AddOperationTransformer<CursorPaginationOperationTransformer>();
             options.AddDocumentTransformer<PaginationOrphanSchemaDocumentTransformer>();
             options.AddSchemaTransformer<GeoSchemaTransformer>();
+            options.AddDocumentTransformer<ProblemDetailsExtensionsDocumentTransformer>();
         });
 
         return services;

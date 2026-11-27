@@ -123,7 +123,7 @@ public sealed class CursorPaginationOperationTransformer : IOpenApiOperationTran
             Required = false,
             Description = "Tamanho máximo da janela de resultados. Limites configurados em "
                 + "CursorPaginationOptions; valores fora do range retornam 422 com "
-                + "code uniplus.pagination.limit_invalido (ADR-0026).",
+                + "code uniplus.cursor.limit_invalido (ADR-0026).",
             Schema = new OpenApiSchema
             {
                 Type = JsonSchemaType.Integer,
