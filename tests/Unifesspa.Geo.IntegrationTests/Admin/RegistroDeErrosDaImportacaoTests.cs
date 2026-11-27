@@ -14,23 +14,28 @@ public sealed class RegistroDeErrosDaImportacaoTests
     private static readonly Dictionary<string, DomainErrorMapping> Mapeamentos =
         new GeoDomainErrorRegistration().GetMappings().ToDictionary(m => m.Key, m => m.Value);
 
-    [Theory(DisplayName = "Código de erro do pacote é registrado com o status e o endereço de erro esperados")]
-    [InlineData(GeoImportacaoErrorCodes.PacoteInvalido, StatusCodes.Status422UnprocessableEntity, "uniplus.geo.importacao.pacote_invalido")]
-    [InlineData(GeoImportacaoErrorCodes.PacoteAcimaDoLimite, StatusCodes.Status413PayloadTooLarge, "uniplus.geo.importacao.pacote_acima_do_limite")]
-    [InlineData(GeoImportacaoErrorCodes.TipoDeConteudoNaoSuportado, StatusCodes.Status415UnsupportedMediaType, "uniplus.geo.importacao.tipo_de_conteudo_nao_suportado")]
-    public void CodigoDoPacote_TemStatusEEnderecoEsperados(string codigo, int status, string endereco)
+    [Theory(DisplayName = "Código de erro da importação é registrado com o status, o código e o título esperados")]
+    [InlineData(GeoImportacaoErrorCodes.VersaoFormatoInvalido, StatusCodes.Status422UnprocessableEntity, "uniplus.geo.importacao.versao_formato_invalido", "Versão do dataset deve estar no formato AAAAMM")]
+    [InlineData(GeoImportacaoErrorCodes.DisparadoPorObrigatorio, StatusCodes.Status422UnprocessableEntity, "uniplus.geo.importacao.disparado_por_obrigatorio", "A identificação de quem disparou a carga é obrigatória")]
+    [InlineData(GeoImportacaoErrorCodes.ImportacaoEmAndamento, StatusCodes.Status409Conflict, "uniplus.geo.importacao.em_andamento", "Já existe uma importação do Geo em andamento")]
+    [InlineData(GeoImportacaoErrorCodes.NaoEnfileirada, StatusCodes.Status503ServiceUnavailable, "uniplus.geo.importacao.nao_enfileirada", "Não foi possível enfileirar a importação (serviço em desligamento)")]
+    [InlineData(GeoImportacaoErrorCodes.VersaoNaoProgressiva, StatusCodes.Status409Conflict, "uniplus.geo.importacao.versao_nao_progressiva", "A versão informada é anterior à última release já aplicada")]
+    [InlineData(GeoImportacaoErrorCodes.TransicaoInvalida, StatusCodes.Status409Conflict, "uniplus.geo.importacao.transicao_invalida", "Transição de estado da importação inválida")]
+    [InlineData(GeoImportacaoErrorCodes.PacoteInvalido, StatusCodes.Status422UnprocessableEntity, "uniplus.geo.importacao.pacote_invalido", "O pacote enviado não é válido")]
+    [InlineData(GeoImportacaoErrorCodes.PacoteAcimaDoLimite, StatusCodes.Status413PayloadTooLarge, "uniplus.geo.importacao.pacote_acima_do_limite", "O pacote enviado é maior que o limite permitido")]
+    [InlineData(GeoImportacaoErrorCodes.TipoDeConteudoNaoSuportado, StatusCodes.Status415UnsupportedMediaType, "uniplus.geo.importacao.tipo_de_conteudo_nao_suportado", "O envio deve ser um arquivo zip (application/zip)")]
+    public void CodigoDaImportacao_TemStatusCodigoETituloEsperados(string codigo, int status, string endereco, string titulo)
     {
         Mapeamentos.Should().ContainKey(codigo);
         Mapeamentos[codigo].Status.Should().Be(status);
         Mapeamentos[codigo].Code.Should().Be(endereco);
-        Mapeamentos[codigo].Title.Should().NotBeNullOrWhiteSpace();
+        Mapeamentos[codigo].Title.Should().Be(titulo);
     }
 
-    [Fact(DisplayName = "Todos os códigos registrados têm endereço de erro único no padrão uniplus.geo.importacao")]
-    public void CodigosRegistrados_TemEnderecosUnicosNoPadrao()
+    [Fact(DisplayName = "O registro mapeia exatamente os nove códigos conferidos acima")]
+    public void Registro_MapeiaExatamenteOsCodigosConferidos()
     {
-        Mapeamentos.Values.Select(m => m.Code).Should().OnlyHaveUniqueItems();
-        Mapeamentos.Values.Select(m => m.Code).Should().OnlyContain(c => c.StartsWith("uniplus.geo.importacao.", StringComparison.Ordinal));
+        Mapeamentos.Should().HaveCount(9);
     }
 
     [Theory(DisplayName = "O erro de pacote acima do limite cita o limite formatado, não em bytes")]

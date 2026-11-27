@@ -34,27 +34,39 @@ public static class ResultExtensions
 
     private static ObjectResult BuildProblemDetailsResult(DomainError error, IDomainErrorMapper mapper)
     {
-        bool found = mapper.TryGetMapping(error.Code, out DomainErrorMapping? mapping);
+        DomainErrorMapping mapping = MapeamentoOuFalha(error, mapper);
+        ProblemDetails problem = CriarProblema(error, mapping, mapper.GetProblemTypeUri(mapping.Code));
 
-        int status = found ? mapping!.Status : StatusCodes.Status400BadRequest;
-        string code = found ? mapping!.Code : "uniplus.erro_nao_mapeado";
-        string title = found ? mapping!.Title : "Erro de domínio";
+        return new ObjectResult(problem) { StatusCode = mapping.Status };
+    }
 
+    private static DomainErrorMapping MapeamentoOuFalha(DomainError error, IDomainErrorMapper mapper)
+    {
+        if (mapper.TryGetMapping(error.Code, out DomainErrorMapping? mapping))
+        {
+            return mapping;
+        }
+
+        throw new InvalidOperationException(
+            $"O erro de domínio '{error.Code}' não tem mapeamento HTTP registrado; todo erro devolvido por uma ação precisa estar em um IDomainErrorRegistration.");
+    }
+
+    private static ProblemDetails CriarProblema(DomainError error, DomainErrorMapping mapping, Uri type)
+    {
         ProblemDetails problem = new()
         {
-            Status = status,
-            Type = mapper.GetProblemTypeUri(code).AbsoluteUri,
-            Title = title,
+            Status = mapping.Status,
+            Type = type.AbsoluteUri,
+            Title = mapping.Title,
             // Invariante: error.Message não deve conter PII (CPF, e-mail, nome).
             // O linter AssertNoPiiAsync detecta violações nos testes de integração.
             Detail = error.Message,
             Instance = $"urn:uuid:{Guid.CreateVersion7()}",
         };
 
-        problem.Extensions["code"] = code;
+        problem.Extensions["code"] = mapping.Code;
         problem.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString()
             ?? Guid.CreateVersion7().ToString("N");
-
-        return new ObjectResult(problem) { StatusCode = status };
+        return problem;
     }
 }
