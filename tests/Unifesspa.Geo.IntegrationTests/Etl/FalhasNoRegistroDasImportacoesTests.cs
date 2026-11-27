@@ -35,14 +35,18 @@ public sealed class FalhasNoRegistroDasImportacoesTests : IDisposable
 
     public void Dispose() => _envio.Dispose();
 
-    [Fact(DisplayName = "Com carga em andamento, o pedido é recusado sem ler o corpo e sem deixar arquivo")]
+    [Fact(DisplayName = "Com carga em andamento e a trava ocupada, o pedido é recusado sem ler o corpo e sem deixar arquivo")]
     public async Task ComCargaEmAndamento_RecusaSemLerOCorpo()
     {
         await _banco.LimparAsync();
         await new ExecucoesSemeadasParaOEnvio(_fixture).EmAndamentoAsync("202610", _envio.Receber("202610").Bytes);
         using FluxoComGancho corpo = new(_envio.Receber("202611").Bytes, () => throw new InvalidOperationException("o corpo foi lido"));
 
-        Result<EnvioDoPacoteRegistrado> resultado = await IniciarAsync(corpo, TimeProvider.System);
+        Result<EnvioDoPacoteRegistrado> resultado;
+        await using (await TravaDaCargaParaTeste.AdquirirAsync(_fixture.ConnectionString))
+        {
+            resultado = await IniciarAsync(corpo, TimeProvider.System);
+        }
 
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.ImportacaoEmAndamento);
         _envio.NomesDosArquivos().Should().BeEmpty();

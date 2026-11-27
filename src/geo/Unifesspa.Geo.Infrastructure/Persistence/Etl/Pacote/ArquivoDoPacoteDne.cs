@@ -21,12 +21,18 @@ internal sealed class ArquivoDoPacoteDne
 
     private readonly string _diretorio;
     private readonly int _quantidadeMaximaDeEntradas;
+    private readonly long _tamanhoMaximoEmBytes;
 
-    public ArquivoDoPacoteDne(string diretorio, int quantidadeMaximaDeEntradas = EtlOpcoes.QuantidadePadraoDeEntradasDoPacote)
+    public ArquivoDoPacoteDne(
+        string diretorio,
+        int quantidadeMaximaDeEntradas = EtlOpcoes.QuantidadePadraoDeEntradasDoPacote,
+        long tamanhoMaximoEmBytes = EtlOpcoes.TamanhoPadraoDoPacote)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(diretorio);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tamanhoMaximoEmBytes);
         _diretorio = diretorio;
         _quantidadeMaximaDeEntradas = quantidadeMaximaDeEntradas;
+        _tamanhoMaximoEmBytes = tamanhoMaximoEmBytes;
     }
 
     /// <summary>
@@ -35,14 +41,13 @@ internal sealed class ArquivoDoPacoteDne
     public async Task<Result<PacoteDneRecebido>> ReceberAsync(
         Stream corpo,
         Guid execucaoId,
-        long limiteDeBytes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(corpo);
         string caminho = CaminhoDe(execucaoId);
         try
         {
-            return await GravarEConferirAsync(corpo, caminho, limiteDeBytes, cancellationToken).ConfigureAwait(false);
+            return await GravarEConferirAsync(corpo, caminho, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -132,7 +137,6 @@ internal sealed class ArquivoDoPacoteDne
     private async Task<ResumoDoCorpo?> GravarAsync(
         Stream corpo,
         string caminho,
-        long limiteDeBytes,
         CancellationToken cancellationToken)
     {
         FileStreamOptions opcoes = PrepararDiretorioEOpcoes();
@@ -140,7 +144,7 @@ internal sealed class ArquivoDoPacoteDne
         FileStream destino = new(caminho, opcoes);
         await using (destino.ConfigureAwait(false))
         {
-            return await CopiarComResumoAsync(corpo, destino, limiteDeBytes, cancellationToken).ConfigureAwait(false);
+            return await CopiarComResumoAsync(corpo, destino, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -165,12 +169,11 @@ internal sealed class ArquivoDoPacoteDne
     private async Task<Result<PacoteDneRecebido>> GravarEConferirAsync(
         Stream corpo,
         string caminho,
-        long limiteDeBytes,
         CancellationToken cancellationToken)
     {
-        ResumoDoCorpo? resumo = await GravarAsync(corpo, caminho, limiteDeBytes, cancellationToken).ConfigureAwait(false);
+        ResumoDoCorpo? resumo = await GravarAsync(corpo, caminho, cancellationToken).ConfigureAwait(false);
         Result<PacoteDneRecebido> resultado = resumo is null
-            ? Result<PacoteDneRecebido>.Failure(ErrosDoPacoteDne.PacoteAcimaDoLimite(limiteDeBytes))
+            ? Result<PacoteDneRecebido>.Failure(ErrosDoPacoteDne.PacoteAcimaDoLimite(_tamanhoMaximoEmBytes))
             : Conferir(caminho, resumo);
         if (resultado.IsFailure)
         {
@@ -180,17 +183,16 @@ internal sealed class ArquivoDoPacoteDne
         return resultado;
     }
 
-    private static async Task<ResumoDoCorpo?> CopiarComResumoAsync(
+    private async Task<ResumoDoCorpo?> CopiarComResumoAsync(
         Stream origem,
         Stream destino,
-        long limiteDeBytes,
         CancellationToken cancellationToken)
     {
         using IncrementalHash resumo = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         byte[] bloco = ArrayPool<byte>.Shared.Rent(TamanhoDoBloco);
         try
         {
-            long? total = await CopiarBlocosAsync(origem, destino, resumo, bloco, limiteDeBytes, cancellationToken).ConfigureAwait(false);
+            long? total = await CopiarBlocosAsync(origem, destino, resumo, bloco, cancellationToken).ConfigureAwait(false);
             return total is null ? null : new ResumoDoCorpo(Convert.ToHexStringLower(resumo.GetHashAndReset()), total.Value);
         }
         finally
@@ -199,12 +201,11 @@ internal sealed class ArquivoDoPacoteDne
         }
     }
 
-    private static async Task<long?> CopiarBlocosAsync(
+    private async Task<long?> CopiarBlocosAsync(
         Stream origem,
         Stream destino,
         IncrementalHash resumo,
         byte[] bloco,
-        long limiteDeBytes,
         CancellationToken cancellationToken)
     {
         long total = 0;
@@ -212,7 +213,7 @@ internal sealed class ArquivoDoPacoteDne
         while ((lidos = await origem.ReadAsync(bloco, cancellationToken).ConfigureAwait(false)) > 0)
         {
             total += lidos;
-            if (total > limiteDeBytes)
+            if (total > _tamanhoMaximoEmBytes)
             {
                 return null;
             }

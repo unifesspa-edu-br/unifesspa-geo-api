@@ -177,6 +177,6 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
     [LoggerMessage(Level = LogLevel.Error, Message = "Geo: não foi possível apagar o arquivo do pacote da execução {ExecucaoId}. Diagnóstico: {Diagnostico}")]
     private static partial void LogErroApagarArquivo(ILogger logger, Guid execucaoId, string diagnostico);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao drenar a fila no desligamento do processo em segundo plano. Diagnóstico: {Diagnostico}")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao drenar a fila no desligamento do processo em segundo plano; a execução que ficou em andamento será encerrada no próximo envio ou na próxima partida. Diagnóstico: {Diagnostico}")]
     private static partial void LogErroDrenarFila(ILogger logger, string diagnostico);
 }

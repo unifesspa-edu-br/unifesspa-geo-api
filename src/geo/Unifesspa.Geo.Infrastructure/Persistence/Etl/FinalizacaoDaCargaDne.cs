@@ -185,7 +185,7 @@ internal sealed partial class FinalizacaoDaCargaDne
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: falha ao selar a versão vigente {Versao} no cache (sem garantia de sucesso; a carga já foi concluída). Diagnóstico: {Diagnostico}")]
     private static partial void LogFalhaSeloCache(ILogger logger, string versao, string diagnostico);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao persistir o estado de falha da execução {ExecucaoId}. Diagnóstico: {Diagnostico}")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao persistir o estado de falha da execução {ExecucaoId}; ela será encerrada no próximo envio ou na próxima partida. Diagnóstico: {Diagnostico}")]
     private static partial void LogFalhaPersistir(ILogger logger, Guid execucaoId, string diagnostico);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: erro ao confirmar transação da carga {ExecucaoId} (versão {Versao}), mas a execução já consta concluída no banco. Diagnóstico: {Diagnostico}")]

@@ -149,8 +149,8 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         byte[] zip = MontarZip(EntradasNaPasta("202610", "postgresql", comEntradaDePasta: true));
         using MemoryStream fluxo = new(zip);
 
-        Result<PacoteDneRecebido> resultado = await new ArquivoDoPacoteDne(_diretorio, quantidadeMaximaDeEntradas: 16)
-            .ReceberAsync(fluxo, Guid.NewGuid(), zip.Length, CancellationToken.None);
+        Result<PacoteDneRecebido> resultado = await new ArquivoDoPacoteDne(_diretorio, quantidadeMaximaDeEntradas: 16, tamanhoMaximoEmBytes: zip.Length)
+            .ReceberAsync(fluxo, Guid.NewGuid(), CancellationToken.None);
 
         resultado.Error!.Message.Should().Contain("mais de 16 entradas");
     }
@@ -189,7 +189,7 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         Func<Task> recebimento = async () =>
         {
             using MemoryStream corpo = new([1, 2, 3]);
-            await new ArquivoDoPacoteDne(diretorioQueEUmArquivo).ReceberAsync(corpo, Guid.NewGuid(), 1024, CancellationToken.None);
+            await new ArquivoDoPacoteDne(diretorioQueEUmArquivo, tamanhoMaximoEmBytes: 1024).ReceberAsync(corpo, Guid.NewGuid(), CancellationToken.None);
         };
 
         (await recebimento.Should().ThrowAsync<IOException>()).Which.Should().NotBeOfType<DirectoryNotFoundException>();
@@ -217,12 +217,12 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
         Guid execucao = Guid.NewGuid();
         using CancellationTokenSource cancelada = new();
         await cancelada.CancelAsync();
-        ArquivoDoPacoteDne arquivo = new(_diretorio);
+        ArquivoDoPacoteDne arquivo = new(_diretorio, tamanhoMaximoEmBytes: 1024);
 
         Func<Task> acao = async () =>
         {
             using MemoryStream corpo = new([1, 2, 3]);
-            await arquivo.ReceberAsync(corpo, execucao, 1024, cancelada.Token);
+            await arquivo.ReceberAsync(corpo, execucao, cancelada.Token);
         };
 
         await acao.Should().ThrowAsync<OperationCanceledException>();
@@ -285,7 +285,7 @@ public sealed class ArquivoDoPacoteDneTests : IDisposable
     private async Task<Result<PacoteDneRecebido>> ReceberAsync(byte[] corpo, Guid execucao, long limite)
     {
         using MemoryStream fluxo = new(corpo);
-        return await new ArquivoDoPacoteDne(_diretorio).ReceberAsync(fluxo, execucao, limite, CancellationToken.None);
+        return await new ArquivoDoPacoteDne(_diretorio, tamanhoMaximoEmBytes: limite).ReceberAsync(fluxo, execucao, CancellationToken.None);
     }
 
     private async Task<PacoteDneRecebido> ReceberComSucessoAsync(byte[] corpo, Guid execucao, long limite)
