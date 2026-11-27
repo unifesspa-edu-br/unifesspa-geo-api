@@ -44,18 +44,20 @@ public sealed class GeoProntidaoApiFactory : ApiFactoryBase<Program>
 
         base.ConfigureWebHost(builder);
 
-        builder.ConfigureTestServices(services =>
-        {
-            services.AddHttpClient(nameof(OidcDiscoveryHealthCheck))
-                .ConfigurePrimaryHttpMessageHandler(() => new RespostaDoProvedorHandler(ProvedorDeIdentidade));
+        builder.ConfigureTestServices(RegistrarProvedorEProntidaoSimulados);
+    }
 
-            // Verificação de prontidão controlável, no lugar de Postgres e Redis: prova que a sonda segue
-            // avaliando o que integra a prontidão, e não apenas devolvendo 200.
-            services.AddHealthChecks().AddCheck(
-                VerificacaoDeProntidao,
-                new DependenciaDeProntidaoVerificacao(DependenciaDeProntidao),
-                tags: [HealthChecksServiceCollectionExtensions.ReadyTag]);
-        });
+    private void RegistrarProvedorEProntidaoSimulados(IServiceCollection services)
+    {
+        services.AddHttpClient(nameof(OidcDiscoveryHealthCheck))
+            .ConfigurePrimaryHttpMessageHandler(() => new RespostaDoProvedorHandler(ProvedorDeIdentidade));
+
+        // Verificação de prontidão controlável, no lugar de Postgres e Redis: prova que a sonda segue
+        // avaliando o que integra a prontidão, e não apenas devolvendo 200.
+        services.AddHealthChecks().AddCheck(
+            VerificacaoDeProntidao,
+            new DependenciaDeProntidaoVerificacao(DependenciaDeProntidao),
+            tags: [HealthChecksServiceCollectionExtensions.ReadyTag]);
     }
 
     private sealed class RespostaDoProvedorHandler(ProvedorDeIdentidadeSimulado provedor) : HttpMessageHandler
