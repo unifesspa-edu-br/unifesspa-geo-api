@@ -55,15 +55,20 @@ internal sealed partial class GeoImportacaoBackgroundService : BackgroundService
         }
         catch (Exception excecao) when (excecao is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {
-            LogErroProcessando(_logger, carga.ExecucaoId, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
-            await TentarMarcarFalhaInesperadaAsync(carga.ExecucaoId).ConfigureAwait(false);
-            ApagarArquivoTolerandoFalha(carga.ExecucaoId);
+            await TratarFalhaDoItemAsync(carga.ExecucaoId, excecao).ConfigureAwait(false);
             return true;
         }
         finally
         {
             await carga.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    private async Task TratarFalhaDoItemAsync(Guid execucaoId, Exception excecao)
+    {
+        LogErroProcessando(_logger, execucaoId, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
+        await TentarMarcarFalhaInesperadaAsync(execucaoId).ConfigureAwait(false);
+        ApagarArquivoTolerandoFalha(execucaoId);
     }
 
     private async Task TentarMarcarFalhaInesperadaAsync(Guid execucaoId)
