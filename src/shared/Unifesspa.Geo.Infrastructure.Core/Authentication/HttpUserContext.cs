@@ -48,10 +48,6 @@ public sealed partial class HttpUserContext : IUserContext
 
     public string? Email => GetFirstClaimValue(EmailClaimCandidates);
 
-    public string? Cpf => GetSingleClaimValue(UnifesspaClaims.Cpf);
-
-    public string? NomeSocial => GetSingleClaimValue(UnifesspaClaims.NomeSocial);
-
     public IReadOnlyList<string> Roles => _roles.Value;
 
     public bool IsPlataformaAdmin => HasRole(PlataformaAdminRole);
@@ -84,12 +80,6 @@ public sealed partial class HttpUserContext : IUserContext
             : claimTypes
                 .Select(claimType => _user.FindFirst(claimType)?.Value)
                 .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
-
-    private string? GetSingleClaimValue(string claimType)
-    {
-        string? value = _user?.FindFirst(claimType)?.Value;
-        return string.IsNullOrWhiteSpace(value) ? null : value;
-    }
 
     private string[] ResolveRoles() =>
         EnumerateDirectRoleClaims()
