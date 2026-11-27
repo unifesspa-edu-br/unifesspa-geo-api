@@ -27,7 +27,9 @@ internal sealed class GeoImportacaoExecucaoConfiguration : IEntityTypeConfigurat
         builder.HasKey(e => e.Id);
 
         builder.Property(e => e.VersaoDataset).HasMaxLength(20).IsRequired();
-        builder.Property(e => e.Status).IsRequired();
+        // Marcador de concorrência: toda gravação da execução confere a situação lida. Quem tenta
+        // concluir uma execução que já foi encerrada como falha é recusado pelo banco.
+        builder.Property(e => e.Status).IsRequired().IsConcurrencyToken();
         builder.Property(e => e.IniciadoEm).IsRequired();
         builder.Property(e => e.PacoteSha256).HasMaxLength(64);
         builder.Property(e => e.DisparadoPor).HasMaxLength(200).IsRequired();
