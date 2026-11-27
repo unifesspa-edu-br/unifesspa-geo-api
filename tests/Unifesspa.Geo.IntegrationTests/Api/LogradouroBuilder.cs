@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests.Api;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
@@ -71,6 +72,10 @@ internal sealed class LogradouroBuilder
 
     public Logradouro Construir() =>
         GeoTestKeys.Ok(Logradouro.Importar(
-            _cep, _tipo, _nome, _nomeCompleto, GeoReferenceSeed.Normalizar(_nomeCompleto ?? _nome), _cidadeId,
-            null, _bairroId, _uf, _latitude, _longitude, _coordenada, true, GeoReferenceSeed.Versao, _vigente));
+            _cep,
+            new NomeDoLogradouro(_tipo, _nome, _nomeCompleto, GeoReferenceSeed.Normalizar(_nomeCompleto ?? _nome)),
+            new LocalidadeDoLogradouro(_cidadeId, null, _bairroId, _uf),
+            new PosicaoGeografica(_latitude, _longitude, _coordenada),
+            true,
+            GeoReferenceSeed.Proveniencia(_vigente)));
 }
