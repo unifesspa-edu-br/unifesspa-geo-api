@@ -64,41 +64,11 @@ public static class GeoDbContextOptionsExtensions
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionStringName);
 
-        IConfiguration configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        string? connectionString = configuration.GetConnectionString(connectionStringName);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException(
-                $"ConnectionStrings:{connectionStringName} não configurada — defina via appsettings ou env var "
-                + $"`ConnectionStrings__{connectionStringName}`. Valores vazios/whitespace também são rejeitados.");
-        }
+        options.UseNpgsql(
+            ConnectionStringObrigatoria(serviceProvider, connectionStringName),
+            npgsqlOptions => ConvencoesDasMigracoes<TContext>(npgsqlOptions, configurarNpgsql));
 
-        options.UseNpgsql(connectionString, npgsqlOptions =>
-        {
-            npgsqlOptions.MigrationsAssembly(typeof(TContext).Assembly.FullName);
-
-            // EFCore.NamingConventions aplica snake_case também na tabela
-            // system `__EFMigrationsHistory` (issue efcore/EFCore.NamingConventions#108).
-            // Sem pin do nome, a convention pode renomear a tabela para
-            // `__ef_migrations_history`, criando drift quando outro pod
-            // (sem a convention) já criou com o nome PascalCase default
-            // do EF Core. Pin garante que todos os pods do rollout enxerguem
-            // a mesma tabela. As COLUNAS continuam sendo processadas pela
-            // convention — em rollouts mistos com pods sem convention, o
-            // drift de colunas ainda exige drop+recreate; este pin estabiliza
-            // apenas o nome da tabela.
-            npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory");
-
-            // Composição opcional do provider (ex.: UseNetTopologySuite no Geo).
-            configurarNpgsql?.Invoke(npgsqlOptions);
-        });
-
-        // snake_case automático em tabelas, colunas, índices e FKs (ADR-0054).
-        // Alinhado com as migrations regeneradas via `dotnet ef migrations add`
-        // usando `--startup-project = .API`.
-        options.UseSnakeCaseNamingConvention();
-
-        options.AddInterceptors(serviceProvider.GetRequiredService<AuditableInterceptor>());
+        AplicarNomesEAuditoria(options, serviceProvider);
 
         return options;
     }
@@ -136,14 +106,63 @@ public static class GeoDbContextOptionsExtensions
         return new DbContextOptionsBuilder<TContext>()
             .UseNpgsql(
                 "Host=design-time-stub;Database=design_time_stub;Username=stub;Password=stub",
-                npgsqlOptions =>
-                {
-                    npgsqlOptions.MigrationsAssembly(typeof(TContext).Assembly.FullName);
-                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory");
-                    configurarNpgsql?.Invoke(npgsqlOptions);
-                })
+                npgsqlOptions => ConvencoesDasMigracoes<TContext>(npgsqlOptions, configurarNpgsql))
             .UseSnakeCaseNamingConvention()
             .Options;
+    }
+
+    private static string ConnectionStringObrigatoria(IServiceProvider serviceProvider, string connectionStringName)
+    {
+        IConfiguration configuration = serviceProvider.GetRequiredService<IConfiguration>();
+        string? connectionString = configuration.GetConnectionString(connectionStringName);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                $"ConnectionStrings:{connectionStringName} não configurada — defina via appsettings ou env var "
+                + $"`ConnectionStrings__{connectionStringName}`. Valores vazios/whitespace também são rejeitados.");
+        }
+
+        return connectionString;
+    }
+
+    // Execução e desenho (dotnet ef) usam as mesmas convenções de migração, para que o SQL gerado
+    // e a tabela de histórico sejam os mesmos nos dois caminhos.
+    private static void ConvencoesDasMigracoes<TContext>(
+        NpgsqlDbContextOptionsBuilder npgsqlOptions,
+        Action<NpgsqlDbContextOptionsBuilder>? configurarNpgsql)
+        where TContext : DbContext
+    {
+        npgsqlOptions.MigrationsAssembly(typeof(TContext).Assembly.FullName);
+
+        FixarTabelaDeHistorico(npgsqlOptions);
+
+        // Composição opcional do provider (ex.: UseNetTopologySuite no Geo).
+        configurarNpgsql?.Invoke(npgsqlOptions);
+    }
+
+    private static void FixarTabelaDeHistorico(NpgsqlDbContextOptionsBuilder npgsqlOptions)
+    {
+        // EFCore.NamingConventions aplica snake_case também na tabela
+        // system `__EFMigrationsHistory` (issue efcore/EFCore.NamingConventions#108).
+        // Sem pin do nome, a convention pode renomear a tabela para
+        // `__ef_migrations_history`, criando drift quando outro pod
+        // (sem a convention) já criou com o nome PascalCase default
+        // do EF Core. Pin garante que todos os pods do rollout enxerguem
+        // a mesma tabela. As COLUNAS continuam sendo processadas pela
+        // convention — em rollouts mistos com pods sem convention, o
+        // drift de colunas ainda exige drop+recreate; este pin estabiliza
+        // apenas o nome da tabela.
+        npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory");
+    }
+
+    private static void AplicarNomesEAuditoria(DbContextOptionsBuilder options, IServiceProvider serviceProvider)
+    {
+        // snake_case automático em tabelas, colunas, índices e FKs (ADR-0054).
+        // Alinhado com as migrations regeneradas via `dotnet ef migrations add`
+        // usando `--startup-project = .API`.
+        options.UseSnakeCaseNamingConvention();
+
+        options.AddInterceptors(serviceProvider.GetRequiredService<AuditableInterceptor>());
     }
 
     /// <summary>
