@@ -125,9 +125,12 @@ test). As migrations tocam o banco e precisam acontecer antes do runtime de mens
   (gate `forbidden-deps`, ADR-0021).
 - Versões de pacote centralizadas em `Directory.Packages.props` (CPM); lockfiles (`packages.lock.json`)
   são commitados — `restore --locked-mode` falha se ficarem dessincronizados.
-- **Drift de OpenAPI é gate**: o runtime gera o spec e o CI compara com o baseline
-  `contracts/openapi.geo.json` + lint Spectral (`tools/spectral/.spectral.yaml`). Ao mudar contrato,
-  regenerar o baseline conscientemente. CodeQL e Trivy (bloqueante para `HIGH`/`CRITICAL`) também rodam.
+- **Drift de OpenAPI é gate**: o runtime gera o spec e o teste `SpecRuntime` compara com
+  `contracts/openapi.geo.json`, além do lint Spectral (`tools/spectral/.spectral.yaml`). Se divergir, o teste
+  **não** altera o arquivo: grava o resultado obtido em pasta temporária própria de cada execução (`unifesspa-geo-resultados/`
+  sob o diretório temporário) e a falha mostra o comando `cp` para aprovar. Rode-o na raiz do repositório,
+  depois de revisar a diferença. Não há variável de ambiente que regere o contrato. CodeQL e Trivy
+  (bloqueante para `HIGH`/`CRITICAL`) também rodam.
 
 ## Commits
 
