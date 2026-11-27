@@ -9,7 +9,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>
 /// Importa Estado, indicadores do Estado e faixas de CEP do Estado (ADR-0092) dentro da
@@ -183,7 +183,7 @@ internal sealed class GeoImportadorEstados
         ContadorTabela contador)
     {
         existente.Atualizar(cru.Gentilico, cru.Governador, metricas, proveniencia);
-        Tocar(_contexto, existente);
+        MarcarComoRevista(_contexto, existente);
         contador.ContarAtualizado();
     }
 

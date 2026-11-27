@@ -12,7 +12,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>
 /// Mapas de resolução de FK construídos pela carga de Distrito/Bairro: traduzem os ids
@@ -158,9 +158,9 @@ internal sealed class GeoImportadorDistritoBairro
             cancellationToken).ConfigureAwait(false);
     }
 
-    // {id_cidade(int4) → Cidade.Id} via JOIN staging (id_cidade→cidade_ibge) × domínio
-    // (codigo_ibge→Id). A Cidade não guarda o id4 da DNE (chave natural = codigo_ibge),
-    // então a ponte é o código IBGE. Cidades não carregadas no domínio são ignoradas.
+    // {id_cidade (inteiro da fonte) → Cidade.Id} pela junção da tabela de carga
+    // (id_cidade→cidade_ibge) com o domínio (codigo_ibge→Id). A Cidade não guarda o
+    // identificador inteiro da DNE (chave natural = codigo_ibge), então a ponte é o código IBGE. Cidades não carregadas no domínio são ignoradas.
     private async Task<Dictionary<int, Guid>> ResolverCidadesPorIdDneAsync(
         IGeoFonteDados fonte,
         CancellationToken cancellationToken)

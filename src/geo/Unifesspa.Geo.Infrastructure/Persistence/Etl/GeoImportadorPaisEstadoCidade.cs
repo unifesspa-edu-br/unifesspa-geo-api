@@ -8,7 +8,7 @@ using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.NomesOficiais;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>
 /// Importa o topo da hierarquia do Geo — País (só Brasil), Estado (+indicador

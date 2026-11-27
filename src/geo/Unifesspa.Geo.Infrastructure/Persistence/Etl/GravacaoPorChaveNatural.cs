@@ -72,7 +72,7 @@ internal sealed class GravacaoPorChaveNatural<T>
         Result reatualizacao = atualizar(jaVisto);
         if (reatualizacao.IsSuccess)
         {
-            GeoEtlUpsert.Tocar(_tabela, jaVisto);
+            RegrasDaCargaPorChaveNatural.MarcarComoRevista(_tabela, jaVisto);
         }
 
         return reatualizacao.IsSuccess ? jaVisto : null;
@@ -87,7 +87,7 @@ internal sealed class GravacaoPorChaveNatural<T>
             return null;
         }
 
-        GeoEtlUpsert.Tocar(_tabela, existente);
+        RegrasDaCargaPorChaveNatural.MarcarComoRevista(_tabela, existente);
         _jaVistos[chave] = existente;
         Contador.ContarAtualizado();
         return existente;

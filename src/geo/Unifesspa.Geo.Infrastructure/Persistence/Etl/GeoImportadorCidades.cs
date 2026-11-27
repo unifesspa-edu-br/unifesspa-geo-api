@@ -10,7 +10,7 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.NomesOficiais;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>
 /// Importa Cidade (com o recorte territorial embutido), indicadores da Cidade e faixas
@@ -216,7 +216,7 @@ internal sealed class GeoImportadorCidades
         ContadorTabela contador)
     {
         existente.Atualizar(cru.Gentilico, cru.Prefeito, cru.Aniversario, metricas, proveniencia);
-        Tocar(_contexto, existente);
+        MarcarComoRevista(_contexto, existente);
         contador.ContarAtualizado();
     }
 

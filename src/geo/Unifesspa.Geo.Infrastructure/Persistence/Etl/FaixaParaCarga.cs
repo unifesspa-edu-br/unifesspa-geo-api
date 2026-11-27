@@ -5,7 +5,7 @@ using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>Faixa de CEP de distrito ou bairro com a localidade resolvida, pronta para ser criada ou atualizada.</summary>
 internal readonly record struct FaixaParaCarga(

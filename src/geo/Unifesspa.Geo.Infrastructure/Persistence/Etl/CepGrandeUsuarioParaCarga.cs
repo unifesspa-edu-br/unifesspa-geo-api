@@ -5,7 +5,7 @@ using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Kernel.Results;
 
-using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
+using static Unifesspa.Geo.Infrastructure.Persistence.Etl.RegrasDaCargaPorChaveNatural;
 
 /// <summary>CEP exclusivo de grande usuário já validado; a chave natural é o próprio CEP.</summary>
 internal readonly record struct CepGrandeUsuarioParaCarga(
