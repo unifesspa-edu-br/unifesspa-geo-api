@@ -24,19 +24,24 @@ public static class AuthEndpointsExtensions
             .WithTags("Auth")
             .RequireAuthorization();
 
-        authGroup.MapGet("/me", (IUserContext userContext, TimeProvider clock) =>
-                Results.Ok(new AuthenticatedUserResponse(
-                    userContext.UserId,
-                    userContext.Name,
-                    userContext.Email,
-                    userContext.Roles,
-                    clock.GetUtcNow())))
+        MapearUsuarioAutenticado(authGroup);
+
+        return endpoints;
+    }
+
+    private static void MapearUsuarioAutenticado(RouteGroupBuilder grupo) =>
+        grupo.MapGet("/me", UsuarioAutenticado)
             .WithName("GetAuthenticatedUser")
             .WithSummary("Retorna o usuário autenticado")
             .WithDescription("Retorna informações do usuário extraídas do access token. Requer autenticação.")
             .Produces<AuthenticatedUserResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
-        return endpoints;
-    }
+    private static IResult UsuarioAutenticado(IUserContext userContext, TimeProvider clock) =>
+        Results.Ok(new AuthenticatedUserResponse(
+            userContext.UserId,
+            userContext.Name,
+            userContext.Email,
+            userContext.Roles,
+            clock.GetUtcNow()));
 }

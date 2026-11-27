@@ -25,19 +25,24 @@ public static class ProfileEndpointsExtensions
             .WithTags("Profile")
             .RequireAuthorization();
 
-        profileGroup.MapGet("/me", (IUserContext userContext, TimeProvider clock) =>
-                Results.Ok(new UserProfileResponse(
-                    userContext.UserId,
-                    userContext.Name,
-                    userContext.Email,
-                    userContext.Roles,
-                    clock.GetUtcNow())))
+        MapearPerfilDoUsuario(profileGroup);
+
+        return endpoints;
+    }
+
+    private static void MapearPerfilDoUsuario(RouteGroupBuilder grupo) =>
+        grupo.MapGet("/me", PerfilDoUsuario)
             .WithName("GetAuthenticatedUserProfile")
             .WithSummary("Retorna o perfil do usuário autenticado")
             .WithDescription("Retorna identificador, nome, e-mail e papéis do usuário, extraídos do access token. Requer autenticação.")
             .Produces<UserProfileResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
-        return endpoints;
-    }
+    private static IResult PerfilDoUsuario(IUserContext userContext, TimeProvider clock) =>
+        Results.Ok(new UserProfileResponse(
+            userContext.UserId,
+            userContext.Name,
+            userContext.Email,
+            userContext.Roles,
+            clock.GetUtcNow()));
 }
