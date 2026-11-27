@@ -173,8 +173,32 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
             LogTransicaoInesperada(_logger, execucao.Id, conclusao.Error!.Code);
         }
 
-        await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await ConfirmarTransacaoAsync(transacao, execucao.Id, execucao.VersaoDataset, inicio, relatorio).ConfigureAwait(false);
+        if (await GravarConclusaoAsync(transacao, execucao, inicio, cancellationToken).ConfigureAwait(false))
+        {
+            await ConfirmarTransacaoAsync(transacao, execucao.Id, execucao.VersaoDataset, inicio, relatorio).ConfigureAwait(false);
+        }
+    }
+
+    // A conclusão só vale se a execução ainda está em andamento. Se outro encerramento já a marcou
+    // como falha, a publicação inteira, que está na mesma transação, é desfeita e a falha é mantida.
+    private async Task<bool> GravarConclusaoAsync(
+        IDbContextTransaction transacao,
+        GeoImportacaoExecucao execucao,
+        long inicio,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transacao.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            _finalizacao.RegistrarMetricaFalha(execucao.VersaoDataset, inicio);
+            LogConclusaoRecusada(_logger, execucao.Id, execucao.VersaoDataset);
+            return false;
+        }
     }
 
     private async Task ConfirmarTransacaoAsync(
@@ -302,4 +326,7 @@ internal sealed partial class CargaDaImportacao : IGeoImportacaoExecutor
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: transição inesperada na execução {ExecucaoId} ({Codigo}).")]
     private static partial void LogTransicaoInesperada(ILogger logger, Guid execucaoId, string codigo);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: conclusão da carga {ExecucaoId} (versão {Versao}) recusada: a execução já foi encerrada como falha e a publicação foi desfeita.")]
+    private static partial void LogConclusaoRecusada(ILogger logger, Guid execucaoId, string versao);
 }

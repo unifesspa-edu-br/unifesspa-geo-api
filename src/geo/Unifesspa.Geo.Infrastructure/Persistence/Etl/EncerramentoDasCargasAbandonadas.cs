@@ -8,9 +8,10 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 
 /// <summary>
 /// Encerra como falha as cargas que ficaram registradas como em andamento sem que nenhuma instância
-/// as execute. A trava consultiva da carga é a prova de que há alguém executando: com a trava livre,
-/// toda execução em andamento está abandonada, sem critério de tempo. Antes de encerrá-las, descarta
-/// os esquemas temporários de carga que sobraram.
+/// as execute. A trava consultiva da carga indica que há alguém executando: com a trava livre, toda
+/// execução em andamento é tratada como abandonada, sem critério de tempo. Se o banco soltou a trava com
+/// a carga ainda viva, a conclusão dela é recusada. Antes de encerrá-las, descarta os esquemas
+/// temporários de carga que sobraram.
 /// </summary>
 internal sealed partial class EncerramentoDasCargasAbandonadas
 {
@@ -56,7 +57,8 @@ internal sealed partial class EncerramentoDasCargasAbandonadas
     /// Descarta os esquemas de carga que sobraram e, só depois, marca como falha toda execução em
     /// andamento: se o descarte falhar ou for cancelado, a exceção sobe e as execuções seguem em
     /// andamento, para nova tentativa no próximo envio ou na próxima partida. Quem chama já segura
-    /// a trava consultiva da carga. Devolve quantas execuções encerrou.
+    /// a trava consultiva da carga. Devolve quantas execuções encerrou; se a carga terminar antes da
+    /// gravação, a execução já não está em andamento, não recebe falha e não entra na conta.
     /// </summary>
     public async Task<int> EncerrarAsync(CancellationToken cancellationToken)
     {
@@ -92,15 +94,12 @@ internal sealed partial class EncerramentoDasCargasAbandonadas
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        if (abandonadas.Count > 0)
-        {
-            await GravarFalhaAsync(abandonadas, cancellationToken).ConfigureAwait(false);
-        }
-
-        return abandonadas.Count;
+        return abandonadas.Count == 0
+            ? 0
+            : await GravarFalhaAsync(abandonadas, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task GravarFalhaAsync(List<GeoImportacaoExecucao> abandonadas, CancellationToken cancellationToken)
+    private async Task<int> GravarFalhaAsync(List<GeoImportacaoExecucao> abandonadas, CancellationToken cancellationToken)
     {
         DateTimeOffset agora = _relogio.GetUtcNow();
         foreach (GeoImportacaoExecucao execucao in abandonadas)
@@ -108,8 +107,30 @@ internal sealed partial class EncerramentoDasCargasAbandonadas
             execucao.Falhar(agora, MensagemDaCargaAbandonada);
         }
 
-        await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (!await TentarGravarAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return 0;
+        }
+
         LogCargasAbandonadasEncerradas(_logger, abandonadas.Count);
+        return abandonadas.Count;
+    }
+
+    // Se a carga gravou a conclusão entre a leitura e esta gravação, a situação lida já não vale: a
+    // execução terminou e não recebe falha.
+    private async Task<bool> TentarGravarAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _contexto.ChangeTracker.Clear();
+            LogCargaTerminouAntesDoEncerramento(_logger);
+            return false;
+        }
     }
 
     private async Task DescartarSobrasAsync(CancellationToken cancellationToken)
@@ -123,6 +144,9 @@ internal sealed partial class EncerramentoDasCargasAbandonadas
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: {Encerradas} carga(s) abandonada(s) em andamento encerrada(s) como falha.")]
     private static partial void LogCargasAbandonadasEncerradas(ILogger logger, int encerradas);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Geo: a carga em andamento terminou antes do encerramento; nenhuma falha foi gravada.")]
+    private static partial void LogCargaTerminouAntesDoEncerramento(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: {Descartados} esquema(s) de carga que sobrou(aram) descartado(s).")]
     private static partial void LogEsquemasDescartados(ILogger logger, int descartados);
