@@ -87,17 +87,17 @@ public static partial class HttpResponsePiiAssertions
         return null;
     }
 
-    [GeneratedRegex(@"\d{3}\.\d{3}\.\d{3}-\d{2}")]
+    [GeneratedRegex(@"\d{3}\.\d{3}\.\d{3}-\d{2}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CpfRegex();
 
     // CPF cru: 11 dígitos não adjacentes a qualquer char hex (0-9 a-f A-F),
     // evitando falsos positivos em traceId e segmentos de UUID.
-    [GeneratedRegex(@"(?<![0-9a-fA-F])\d{11}(?![0-9a-fA-F])")]
+    [GeneratedRegex(@"(?<![0-9a-fA-F])\d{11}(?![0-9a-fA-F])", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CpfCruRegex();
 
-    [GeneratedRegex(@"\S+@\S+\.\S+")]
+    [GeneratedRegex(@"\S+@\S+\.\S+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex EmailRegex();
 
-    [GeneratedRegex(@"(?:[A-Za-zÀ-ÿ]{2,} ){2,}\d{3}\.\d{3}\.\d{3}-\d{2}")]
+    [GeneratedRegex(@"(?:[A-Za-zÀ-ÿ]{2,} ){2,}\d{3}\.\d{3}\.\d{3}-\d{2}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex NomeCpfRegex();
 }

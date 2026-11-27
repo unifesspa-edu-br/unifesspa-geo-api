@@ -184,6 +184,6 @@ public static partial class CorrelationIdEnvelopeMiddleware
     // CorrelationIdMiddleware.FormatoValidoPattern — single source of truth garante
     // que ambos os boundaries (HTTP e mensageria) validem com a MESMA regra. Sem isto,
     // refactor em um lado deixaria drift silencioso no wire format do uniplus.correlation-id.
-    [GeneratedRegex(CorrelationIdMiddleware.FormatoValidoPattern)]
+    [GeneratedRegex(CorrelationIdMiddleware.FormatoValidoPattern, RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FormatoValido();
 }

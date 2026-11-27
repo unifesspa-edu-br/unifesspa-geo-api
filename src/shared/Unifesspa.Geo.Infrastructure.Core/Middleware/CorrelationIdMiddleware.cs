@@ -86,6 +86,6 @@ public sealed partial class CorrelationIdMiddleware
     // format uniforme quebra silenciosamente em refactors.
     internal const string FormatoValidoPattern = @"^[A-Za-z0-9\-_.]{1,128}$";
 
-    [GeneratedRegex(FormatoValidoPattern)]
+    [GeneratedRegex(FormatoValidoPattern, RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FormatoValido();
 }

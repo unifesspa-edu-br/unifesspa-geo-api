@@ -240,6 +240,6 @@ public partial class VendorMediaTypeAttribute : ActionFilterAttribute
         return problem;
     }
 
-    [GeneratedRegex(@"^(?<resource>[a-z][a-z0-9_-]*)\.v(?<version>\d+)$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^(?<resource>[a-z][a-z0-9_-]*)\.v(?<version>\d+)$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
     private static partial Regex VendorMimeRegex();
 }

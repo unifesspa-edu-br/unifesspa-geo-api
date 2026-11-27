@@ -15,6 +15,6 @@ internal static partial class FormatoDoCodigoIbge
 
     // [0-9] e não \d: em .NET \d casa dígitos Unicode (ex.: árabe-índicos); a chave
     // IBGE é ASCII — um "7 dígitos" não-ASCII deve ser 400 (formato), não 404.
-    [GeneratedRegex(@"^[0-9]{7}$")]
+    [GeneratedRegex(@"^[0-9]{7}$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CodigoIbgeRegex();
 }
