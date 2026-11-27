@@ -62,31 +62,17 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDispos
     {
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601"); // EmAndamento, nunca processada pelo processo
-
-        GeoImportacaoFila fila = NovaFila();
-        await fila.EnfileirarAsync(await _cenario.ReservarAsync(id), CancellationToken.None);
-
+        GeoImportacaoFila fila = await FilaComExecucaoEnfileiradaAsync(id);
         await using GeoDbContext ctx = _cenario.CriarContexto();
         using GeoEtlMetrics metricas = new();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal));
-        Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
-        CargaDaImportacao executor = _cenario.CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
-
+        CargaDaImportacao executor = CriarExecutor(ctx, metricas, new FabricaDeFonteFixa());
         using GeoImportacaoBackgroundService processo = CriarProcessoEmSegundoPlano(fila, executor);
 
         // Sem StartAsync: base.StopAsync retorna cedo (executeTask null) e o dreno roda —
         // simula o item enfileirado no instante imediatamente anterior ao desligamento.
         await processo.StopAsync(CancellationToken.None);
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
-        execucao.Status.Should().Be(StatusImportacao.Falhou, "a execução enfileirada e não processada é falhada no desligamento");
-        execucao.Mensagem.Should().Contain("desligamento");
-
-        // Índice único parcial liberado: um novo disparo (mesma versão) não colide na UNIQUE.
-        Guid novo = await _cenario.CriarExecucaoAsync("202601");
-        novo.Should().NotBeEmpty();
-
+        await ConferirFalhaNoDesligamentoENovoDisparoLivreAsync(id);
         await ConferirTravaLivreAsync("a drenagem do desligamento solta a trava de cada carga");
     }
 
@@ -94,30 +80,14 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDispos
     public async Task Disparo_ComFilaFechada_RetornaNaoEnfileirada_E_MarcaFalhou()
     {
         await _cenario.LimparAsync();
+        GeoImportacaoFila fila = NovaFilaFechada();
 
-        // Writer completado: o próximo EnfileirarAsync lança ChannelClosedException — o caminho
-        // que o endpoint admin mapeia para 503 (serviço em desligamento).
-        GeoImportacaoFila fila = NovaFila();
-        fila.Completar();
-
-        await using GeoDbContext ctx = _cenario.CriarContexto();
-        RegistroDasImportacoes registro = _envio.CriarRegistro(
-            ctx,
-            fila,
-            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
-            _cenario.Relogio,
-            NullLogger<RegistroDasImportacoes>.Instance);
-
-        Result<EnvioDoPacoteRegistrado> resultado = await registro.IniciarAsync(_envio.Receber("202601").Abrir(), "teste", CancellationToken.None);
+        Result<EnvioDoPacoteRegistrado> resultado = await IniciarPedidoAsync(fila);
 
         resultado.IsFailure.Should().BeTrue();
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.NaoEnfileirada);
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.VersaoDataset == "202601");
-        execucao.Status.Should().Be(StatusImportacao.Falhou, "registrada mas não enfileirada: marcada Falhou para não bloquear o índice único parcial");
-        execucao.Mensagem.Should().Contain("desligamento");
-
+        await ConferirExecucaoDoPedidoFalhouPorFilaFechadaAsync();
         _envio.NomesDosArquivos().Should().BeEmpty("o pacote não enfileirado é apagado");
         await ConferirTravaLivreAsync("canal fechado marca Falhou e solta a trava obtida no pedido");
     }
@@ -127,37 +97,16 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDispos
     {
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601");
-
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-        });
-
         GeoImportacaoFila fila = NovaFila();
         await using GeoDbContext ctx = _cenario.CriarContexto();
         using GeoEtlMetrics metricas = new();
-        Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
-        CargaDaImportacao carga = _cenario.CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
-
-        // O processo resolve IGeoImportacaoExecutor de um escopo novo por item; aqui o scope
-        // factory devolve este decorator, que sinaliza quando a carga termina.
+        CargaDaImportacao carga = CriarExecutor(ctx, metricas, new FabricaDeFonteFixa(FonteCompleta("202601")));
         ExecutorComSinal executor = new(carga);
         using GeoImportacaoBackgroundService processo = CriarProcessoEmSegundoPlano(fila, executor);
 
-        await fila.EnfileirarAsync(await _cenario.ReservarAsync(id), CancellationToken.None);
-        await processo.StartAsync(CancellationToken.None);
+        await ProcessarItemAteOFimAsync(processo, executor, fila, id);
 
-        // Espera determinística (sem Sleep): o sinal dispara no finally do ExecutarAsync, após
-        // a carga concluir. WaitAsync limita o tempo para não pendurar o CI se o wiring quebrar.
-        await executor.Concluido.WaitAsync(TimeSpan.FromSeconds(30));
-
-        await processo.StopAsync(CancellationToken.None);
-
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
-        execucao.Status.Should().Be(StatusImportacao.Concluida, "o processo consumiu a fila e o executor rodou a carga até concluir");
-        execucao.ConcluidoEm.Should().NotBeNull();
-
+        await ConferirExecucaoConcluidaAsync(id);
         await ConferirTravaLivreAsync("o item da fila solta a trava ao fim da carga");
     }
 
@@ -169,20 +118,13 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDispos
         GeoImportacaoFila fila = NovaFila();
         await using GeoDbContext ctx = _cenario.CriarContexto();
         using GeoEtlMetrics metricas = new();
-        Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
-        CargaDaImportacao real = _cenario.CriarExecutor(
-            ctx, new FonteFactoryFake(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)), cacheLazy, metricas);
+        CargaDaImportacao real = CriarExecutor(ctx, metricas, new FabricaDeFonteFixa());
         ExecutorComSinal executor = new(new ExecutorQueFalha(real));
         using GeoImportacaoBackgroundService processo = CriarProcessoEmSegundoPlano(fila, executor);
 
-        await fila.EnfileirarAsync(await _cenario.ReservarAsync(id), CancellationToken.None);
-        await processo.StartAsync(CancellationToken.None);
-        await executor.Concluido.WaitAsync(TimeSpan.FromSeconds(30));
-        await processo.StopAsync(CancellationToken.None);
+        await ProcessarItemAteOFimAsync(processo, executor, fila, id);
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
-        execucao.Status.Should().Be(StatusImportacao.Falhou, "a execução não pode ficar EmAndamento sem trava");
+        await ConferirExecucaoFalhouSemTravaAsync(id);
         await ConferirTravaLivreAsync("a falha do executor não pode manter a trava");
     }
 
@@ -200,11 +142,94 @@ public sealed class ExecucaoEmSegundoPlanoDaCargaTests : IAsyncLifetime, IDispos
         await trava!.DisposeAsync();
     }
 
+    // Writer completado: o próximo EnfileirarAsync lança ChannelClosedException — o caminho
+    // que o endpoint admin mapeia para 503 (serviço em desligamento).
+    private GeoImportacaoFila NovaFilaFechada()
+    {
+        GeoImportacaoFila fila = NovaFila();
+        fila.Completar();
+        return fila;
+    }
+
+    private async Task<GeoImportacaoFila> FilaComExecucaoEnfileiradaAsync(Guid execucaoId)
+    {
+        GeoImportacaoFila fila = NovaFila();
+        await fila.EnfileirarAsync(await _cenario.ReservarAsync(execucaoId), CancellationToken.None);
+        return fila;
+    }
+
+    private CargaDaImportacao CriarExecutor(GeoDbContext ctx, GeoEtlMetrics metricas, FabricaDeFonteFixa fonteFactory)
+    {
+        Lazy<IGeoCepCacheInvalidador> cacheLazy = new(() => Substitute.For<IGeoCepCacheInvalidador>());
+        return _cenario.CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
+    }
+
+    private async Task<Result<EnvioDoPacoteRegistrado>> IniciarPedidoAsync(GeoImportacaoFila fila)
+    {
+        await using GeoDbContext ctx = _cenario.CriarContexto();
+        RegistroDasImportacoes registro = _envio.CriarRegistro(
+            ctx,
+            fila,
+            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
+            _cenario.Relogio,
+            NullLogger<RegistroDasImportacoes>.Instance);
+
+        return await registro.IniciarAsync(_envio.Receber("202601").Abrir(), "teste", CancellationToken.None);
+    }
+
+    private async Task ProcessarItemAteOFimAsync(GeoImportacaoBackgroundService processo, ExecutorComSinal executor, GeoImportacaoFila fila, Guid execucaoId)
+    {
+        await fila.EnfileirarAsync(await _cenario.ReservarAsync(execucaoId), CancellationToken.None);
+        await processo.StartAsync(CancellationToken.None);
+
+        // Espera determinística (sem Sleep): o sinal dispara no finally do ExecutarAsync, após
+        // a carga concluir. WaitAsync limita o tempo para não pendurar o CI se o wiring quebrar.
+        await executor.Concluido.WaitAsync(TimeSpan.FromSeconds(30));
+
+        await processo.StopAsync(CancellationToken.None);
+    }
+
+    private async Task ConferirFalhaNoDesligamentoENovoDisparoLivreAsync(Guid id)
+    {
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
+        execucao.Status.Should().Be(StatusImportacao.Falhou, "a execução enfileirada e não processada é falhada no desligamento");
+        execucao.Mensagem.Should().Contain("desligamento");
+
+        // Índice único parcial liberado: um novo disparo (mesma versão) não colide na UNIQUE.
+        Guid novo = await _cenario.CriarExecucaoAsync("202601");
+        novo.Should().NotBeEmpty();
+    }
+
+    private async Task ConferirExecucaoDoPedidoFalhouPorFilaFechadaAsync()
+    {
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.VersaoDataset == "202601");
+        execucao.Status.Should().Be(StatusImportacao.Falhou, "registrada mas não enfileirada: marcada Falhou para não bloquear o índice único parcial");
+        execucao.Mensagem.Should().Contain("desligamento");
+    }
+
+    private async Task ConferirExecucaoConcluidaAsync(Guid id)
+    {
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
+        execucao.Status.Should().Be(StatusImportacao.Concluida, "o processo consumiu a fila e o executor rodou a carga até concluir");
+        execucao.ConcluidoEm.Should().NotBeNull();
+    }
+
+    private async Task ConferirExecucaoFalhouSemTravaAsync(Guid id)
+    {
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
+        execucao.Status.Should().Be(StatusImportacao.Falhou, "a execução não pode ficar EmAndamento sem trava");
+    }
+
     private GeoImportacaoBackgroundService CriarProcessoEmSegundoPlano(IGeoImportacaoFila fila, IGeoImportacaoExecutor executor) =>
         ProcessoEmSegundoPlanoParaTeste.Criar(fila, executor, _envio.Arquivos);
 
     // Decora o executor sinalizando o fim de ExecutarAsync — permite ao teste do wiring
-    // (#692) aguardar a execução em segundo plano de forma determinística, sem Sleep.
+    // aguardar a execução em segundo plano de forma determinística, sem Sleep. O processo
+    // resolve o executor de um escopo novo por item; aqui o scope factory devolve este decorator.
     private sealed class ExecutorComSinal : IGeoImportacaoExecutor
     {
         private readonly IGeoImportacaoExecutor _interno;

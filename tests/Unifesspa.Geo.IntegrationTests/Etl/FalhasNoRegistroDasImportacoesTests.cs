@@ -78,23 +78,9 @@ public sealed class FalhasNoRegistroDasImportacoesTests : IDisposable
         }
 
         await _banco.LimparAsync();
-        byte[] outroPacote = _envio.Receber("202610").Bytes;
-        Func<Task> pedido = async () =>
-        {
-            using FluxoComGancho corpo = new(
-                _envio.Receber("202611").Bytes,
-                () => new ExecucoesSemeadasParaOEnvio(_fixture).EmAndamentoAsync("202610", outroPacote));
-            await IniciarAsync(corpo, TimeProvider.System, new ProibeEscritaNoDiretorioAoSalvar(_envio.Diretorio));
-        };
+        Func<Task> pedido = PedidoQueFalhaAoApagarOArquivo();
 
-        try
-        {
-            await pedido.Should().ThrowAsync<UnauthorizedAccessException>();
-        }
-        finally
-        {
-            ProibeEscritaNoDiretorioAoSalvar.Restaurar(_envio.Diretorio);
-        }
+        await ConferirRecusaPorFaltaDePermissaoNoDiretorioAsync(pedido);
 
         await ConferirTravaLivreAsync();
     }
@@ -115,6 +101,32 @@ public sealed class FalhasNoRegistroDasImportacoesTests : IDisposable
         (await _banco.ExecucaoAsync(resultado.Value.ExecucaoId)).Status.Should().Be(StatusImportacao.EmAndamento);
         await enfileiradas[0].DisposeAsync();
         await ConferirTravaLivreAsync();
+    }
+
+    [UnsupportedOSPlatform("windows")]
+    private Func<Task> PedidoQueFalhaAoApagarOArquivo()
+    {
+        byte[] outroPacote = _envio.Receber("202610").Bytes;
+        return async () =>
+        {
+            using FluxoComGancho corpo = new(
+                _envio.Receber("202611").Bytes,
+                () => new ExecucoesSemeadasParaOEnvio(_fixture).EmAndamentoAsync("202610", outroPacote));
+            await IniciarAsync(corpo, TimeProvider.System, new ProibeEscritaNoDiretorioAoSalvar(_envio.Diretorio));
+        };
+    }
+
+    [UnsupportedOSPlatform("windows")]
+    private async Task ConferirRecusaPorFaltaDePermissaoNoDiretorioAsync(Func<Task> pedido)
+    {
+        try
+        {
+            await pedido.Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+        finally
+        {
+            ProibeEscritaNoDiretorioAoSalvar.Restaurar(_envio.Diretorio);
+        }
     }
 
     private async Task<Result<EnvioDoPacoteRegistrado>> IniciarAsync(
