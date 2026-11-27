@@ -94,6 +94,11 @@ public sealed class EstadosController : ControllerBase
             return Result.Failure(recusa).ToActionResult(_mapper);
         }
 
+        return await ConsultarEstadoAsync(uf, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> ConsultarEstadoAsync(string uf, CancellationToken cancellationToken)
+    {
         EstadoDto? estado = await _queryBus
             .Send(new ObterEstadoPorUfQuery(uf), cancellationToken)
             .ConfigureAwait(false);
