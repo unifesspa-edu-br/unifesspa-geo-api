@@ -41,16 +41,21 @@ public sealed class OidcDiscoveryHealthCheck : IHealthCheck
 
         try
         {
-            using HttpClient client = _httpClientFactory.CreateClient(nameof(OidcDiscoveryHealthCheck));
-            using HttpResponseMessage response = await client.GetAsync(discoveryUri, cancellationToken).ConfigureAwait(false);
-
-            return response.IsSuccessStatusCode
-                ? HealthCheckResult.Healthy($"OIDC discovery respondeu {(int)response.StatusCode}.")
-                : HealthCheckResult.Degraded($"OIDC discovery respondeu {(int)response.StatusCode}.");
+            return await ConsultarDescobertaAsync(discoveryUri, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             return HealthCheckResult.Degraded("OIDC discovery inacessível.", ex);
         }
+    }
+
+    private async Task<HealthCheckResult> ConsultarDescobertaAsync(Uri discoveryUri, CancellationToken cancellationToken)
+    {
+        using HttpClient client = _httpClientFactory.CreateClient(nameof(OidcDiscoveryHealthCheck));
+        using HttpResponseMessage response = await client.GetAsync(discoveryUri, cancellationToken).ConfigureAwait(false);
+
+        return response.IsSuccessStatusCode
+            ? HealthCheckResult.Healthy($"OIDC discovery respondeu {(int)response.StatusCode}.")
+            : HealthCheckResult.Degraded($"OIDC discovery respondeu {(int)response.StatusCode}.");
     }
 }

@@ -62,22 +62,32 @@ end";
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Token único do caller — usado no compare-and-delete do release.
-        string token = Guid.NewGuid().ToString("N");
-
-        bool acquired = await _database.StringSetAsync(
-            chave,
-            token,
-            ttl,
-            When.NotExists)
-            .ConfigureAwait(false);
-
-        return acquired ? new RedisLeaseHandle(_database, chave, token) : null;
+        return await RedisLeaseHandle.TentarAdquirirAsync(_database, chave, ttl).ConfigureAwait(false);
     }
 
-    private sealed class RedisLeaseHandle(IDatabase database, string chave, string token) : IAsyncDisposable
+    private sealed class RedisLeaseHandle : IAsyncDisposable
     {
+        private readonly IDatabase _database;
+        private readonly string _chave;
+        private readonly string _token;
         private int _released;
+
+        private RedisLeaseHandle(IDatabase database, string chave, string token)
+        {
+            _database = database;
+            _chave = chave;
+            _token = token;
+        }
+
+        public static async Task<RedisLeaseHandle?> TentarAdquirirAsync(IDatabase database, string chave, TimeSpan ttl)
+        {
+            // Token único do caller — usado no compare-and-delete do release.
+            string token = Guid.NewGuid().ToString("N");
+
+            bool acquired = await database.StringSetAsync(chave, token, ttl, When.NotExists).ConfigureAwait(false);
+
+            return acquired ? new RedisLeaseHandle(database, chave, token) : null;
+        }
 
         public async ValueTask DisposeAsync()
         {
@@ -86,12 +96,17 @@ end";
                 return;
             }
 
+            await LiberarAsync().ConfigureAwait(false);
+        }
+
+        private async Task LiberarAsync()
+        {
             try
             {
-                await database.ScriptEvaluateAsync(
+                await _database.ScriptEvaluateAsync(
                     ReleaseLeaseLuaScript,
-                    [chave],
-                    [token])
+                    [_chave],
+                    [_token])
                     .ConfigureAwait(false);
             }
             catch (RedisException)
