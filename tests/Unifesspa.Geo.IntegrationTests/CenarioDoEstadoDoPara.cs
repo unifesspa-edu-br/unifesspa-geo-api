@@ -53,6 +53,6 @@ internal sealed record CenarioDoEstadoDoPara(Pais Brasil, Estado Para, EstadoInd
 
     private static EstadoFaixaCep NovaFaixa(Estado para) =>
         GeoTestKeys.Ok(EstadoFaixaCep.Importar(
-            estadoId: para.Id, cepInicial: "66000000", cepFinal: "66999999",
-            descricao: "Capital: Belém", versaoDataset: VersaoDataset));
+            estadoId: para.Id, faixa: new FaixaDeCep("66000000", "66999999"),
+            descricao: "Capital: Belém", proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 }

@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>Cidade, indicador e faixa de CEP completos, para provar a gravação e a releitura.</summary>
@@ -40,6 +41,6 @@ internal sealed record CenarioDaCidadeDeMaraba(Cidade Maraba, CidadeIndicador In
 
     private static CidadeFaixaCep NovaFaixa(Cidade maraba) =>
         GeoTestKeys.Ok(CidadeFaixaCep.Importar(
-            cidadeId: maraba.Id, cepInicial: "68500000", cepFinal: "68519999",
-            versaoDataset: VersaoDataset));
+            cidadeId: maraba.Id, faixa: new FaixaDeCep("68500000", "68519999"),
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 }

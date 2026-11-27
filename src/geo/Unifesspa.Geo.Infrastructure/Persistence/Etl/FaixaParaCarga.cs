@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -9,16 +10,15 @@ using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
 /// <summary>Faixa de CEP de distrito ou bairro com a localidade resolvida, pronta para ser criada ou atualizada.</summary>
 internal readonly record struct FaixaParaCarga(
     Guid LocalidadeId,
-    string CepInicial,
-    string CepFinal,
-    string Versao)
+    FaixaDeCep Faixa,
+    ProvenienciaDaCarga Proveniencia)
 {
-    public string Chave => ChaveFaixa(LocalidadeId, CepInicial, CepFinal);
+    public string Chave => ChaveFaixa(LocalidadeId, Faixa.CepInicial!, Faixa.CepFinal!);
 
     public static FaixaParaCarga? De(
         FaixaLocalidadeCru linha,
         Dictionary<int, LocalidadeResolvida> localidadesPorIdDne,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador)
     {
         if (linha.IdPaiDne is not int idPai || !localidadesPorIdDne.TryGetValue(idPai, out LocalidadeResolvida localidade))
@@ -26,23 +26,22 @@ internal readonly record struct FaixaParaCarga(
             contador.ContarOrfao(IdDaFonteParaRelatorio(linha.IdPaiDne));
             return null;
         }
-        string? cepInicial = ChaveCodigo(linha.FaixaIni);
-        string? cepFinal = ChaveCodigo(linha.FaixaFim);
-        if (cepInicial is null || cepFinal is null)
+        FaixaDeCep faixa = new(linha.FaixaIni, linha.FaixaFim);
+        if (!faixa.TemCepInicial || !faixa.TemCepFinal)
         {
             contador.ContarIgnoradoSemChave();
             return null;
         }
-        return new FaixaParaCarga(localidade.Id, cepInicial, cepFinal, versao);
+        return new FaixaParaCarga(localidade.Id, faixa, proveniencia);
     }
 
     public Result<DistritoFaixaCep> CriarFaixaDeDistrito() =>
-        DistritoFaixaCep.Importar(LocalidadeId, CepInicial, CepFinal, Versao);
+        DistritoFaixaCep.Importar(LocalidadeId, Faixa, Proveniencia);
 
-    public Result Atualizar(DistritoFaixaCep faixa) => faixa.Atualizar(Versao);
+    public Result Atualizar(DistritoFaixaCep existente) => existente.Atualizar(Proveniencia);
 
     public Result<BairroFaixaCep> CriarFaixaDeBairro() =>
-        BairroFaixaCep.Importar(LocalidadeId, CepInicial, CepFinal, Versao);
+        BairroFaixaCep.Importar(LocalidadeId, Faixa, Proveniencia);
 
-    public Result Atualizar(BairroFaixaCep faixa) => faixa.Atualizar(Versao);
+    public Result Atualizar(BairroFaixaCep existente) => existente.Atualizar(Proveniencia);
 }

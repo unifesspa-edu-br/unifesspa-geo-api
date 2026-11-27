@@ -46,7 +46,7 @@ internal sealed class GeoImportadorEstados
         Dictionary<string, Guid> estadosPorUf = await ImportarEstadosAsync(
             fonte, brasilId, indicadores, proveniencia, relatorio.Tabela("estado"), cancellationToken).ConfigureAwait(false);
         await ImportarIndicadoresAsync(estadosPorUf, indicadores, proveniencia, contadorIndicadores, cancellationToken).ConfigureAwait(false);
-        await ImportarFaixasAsync(fonte, estadosPorUf, relatorio.Tabela("estado_faixa"), cancellationToken).ConfigureAwait(false);
+        await ImportarFaixasAsync(fonte, estadosPorUf, proveniencia, relatorio.Tabela("estado_faixa"), cancellationToken).ConfigureAwait(false);
         return estadosPorUf;
     }
 
@@ -226,10 +226,11 @@ internal sealed class GeoImportadorEstados
     private async Task ImportarFaixasAsync(
         IGeoFonteDados fonte,
         Dictionary<string, Guid> estadosPorUf,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
-        // Upsert por chave natural (estado, CEP inicial, CEP final), em vez de apagar e
+        // Gravação por chave natural (estado, CEP inicial, CEP final), em vez de apagar e
         // inserir: preserva o Id da faixa entre cargas, e a repetição na própria fonte
         // não estoura a restrição de unicidade. Faixa que some numa versão nova é
         // tratada pela política de vigência da atualização periódica.
@@ -237,7 +238,7 @@ internal sealed class GeoImportadorEstados
         Dictionary<string, EstadoFaixaCep> existentes =
             (await _contexto.EstadoFaixasCep.Where(f => estadoIds.Contains(f.EstadoId)).ToListAsync(cancellationToken).ConfigureAwait(false))
             .ToDictionary(f => ChaveFaixa(f.EstadoId, f.CepInicial, f.CepFinal), StringComparer.Ordinal);
-        await UpsertarFaixasAsync(fonte, estadosPorUf, existentes, contador, cancellationToken).ConfigureAwait(false);
+        await UpsertarFaixasAsync(fonte, estadosPorUf, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
@@ -245,6 +246,7 @@ internal sealed class GeoImportadorEstados
     private async Task UpsertarFaixasAsync(
         IGeoFonteDados fonte,
         Dictionary<string, Guid> estadosPorUf,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, EstadoFaixaCep> existentes,
         ContadorTabela contador,
         CancellationToken cancellationToken)
@@ -256,7 +258,7 @@ internal sealed class GeoImportadorEstados
             contador.ContarLido();
             if (ResolverEstado(cru.Uf, estadosPorUf, contador) is { } estadoId)
             {
-                UpsertarFaixa(cru, estadoId, fonte.Versao, existentes, jaVistas, contador);
+                UpsertarFaixa(cru, estadoId, proveniencia, existentes, jaVistas, contador);
             }
         }
     }
@@ -276,23 +278,22 @@ internal sealed class GeoImportadorEstados
     private void UpsertarFaixa(
         EstadoFaixaCru cru,
         Guid estadoId,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, EstadoFaixaCep> existentes,
         Dictionary<string, EstadoFaixaCep> jaVistas,
         ContadorTabela contador)
     {
-        string? cepInicial = ChaveCodigo(cru.FaixaIni);
-        string? cepFinal = ChaveCodigo(cru.FaixaFim);
-        if (cepInicial is null || cepFinal is null)
+        FaixaDeCep faixa = new(cru.FaixaIni, cru.FaixaFim);
+        if (!faixa.TemCepInicial || !faixa.TemCepFinal)
         {
             contador.ContarIgnoradoSemChave();
             return;
         }
 
         Upsert(
-            ChaveFaixa(estadoId, cepInicial, cepFinal), jaVistas, existentes,
-            () => EstadoFaixaCep.Importar(estadoId, cepInicial, cepFinal, cru.Descricao, versao),
-            existente => existente.Atualizar(cru.Descricao, versao),
+            ChaveFaixa(estadoId, faixa.CepInicial!, faixa.CepFinal!), jaVistas, existentes,
+            () => EstadoFaixaCep.Importar(estadoId, faixa, cru.Descricao, proveniencia),
+            existente => existente.Atualizar(cru.Descricao, proveniencia),
             _contexto.EstadoFaixasCep, contador);
     }
 }

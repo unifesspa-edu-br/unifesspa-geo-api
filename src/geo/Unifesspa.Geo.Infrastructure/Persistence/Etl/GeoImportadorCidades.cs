@@ -42,13 +42,14 @@ internal sealed class GeoImportadorCidades
         RelatorioImportacao relatorio,
         CancellationToken cancellationToken)
     {
+        ProvenienciaDaCarga proveniencia = new(fonte.Versao);
         Dictionary<string, CidadeTerritorioCru> territorios = await AgregarPorChaveAsync(
             fonte.LerCidadeTerritoriosAsync(cancellationToken), t => ChaveCodigo(t.CodigoIbge)).ConfigureAwait(false);
 
         Dictionary<string, Guid> cidadesPorCodigo = await ImportarCidadesAsync(
             fonte, estadosPorUf, territorios, relatorio.Tabela("cidade"), cancellationToken).ConfigureAwait(false);
         await ImportarIndicadoresAsync(fonte, cidadesPorCodigo, relatorio.Tabela("cidade_indicador"), cancellationToken).ConfigureAwait(false);
-        await ImportarFaixasAsync(fonte, cidadesPorCodigo, relatorio.Tabela("cidade_faixa"), cancellationToken).ConfigureAwait(false);
+        await ImportarFaixasAsync(fonte, cidadesPorCodigo, proveniencia, relatorio.Tabela("cidade_faixa"), cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<Dictionary<string, Guid>> ImportarCidadesAsync(
@@ -219,12 +220,13 @@ internal sealed class GeoImportadorCidades
     private async Task ImportarFaixasAsync(
         IGeoFonteDados fonte,
         Dictionary<string, Guid> cidadesPorCodigo,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
         // A fonte de faixa só expõe o id interno da cidade na DNE, não o código IBGE: a
         // chave estrangeira se resolve contra as cidades já carregadas, sem nova consulta
-        // ao banco. O upsert é por chave natural (cidade, CEP inicial, CEP final), que
+        // ao banco. A gravação é por chave natural (cidade, CEP inicial, CEP final), que
         // preserva o Id da faixa e não estoura a restrição de unicidade.
         Dictionary<int, Guid> cidadesPorIdDne = await ResolverIdsDneParaGuidAsync(
             fonte.LerCidadeIdsAsync(cancellationToken), cru => cru.IdCidade, cru => cru.CodigoIbge, cidadesPorCodigo).ConfigureAwait(false);
@@ -232,7 +234,7 @@ internal sealed class GeoImportadorCidades
         Dictionary<string, CidadeFaixaCep> existentes =
             (await _contexto.CidadeFaixasCep.Where(f => cidadeIds.Contains(f.CidadeId)).ToListAsync(cancellationToken).ConfigureAwait(false))
             .ToDictionary(f => ChaveFaixa(f.CidadeId, f.CepInicial, f.CepFinal), StringComparer.Ordinal);
-        await UpsertarFaixasAsync(fonte, cidadesPorIdDne, existentes, contador, cancellationToken).ConfigureAwait(false);
+        await UpsertarFaixasAsync(fonte, cidadesPorIdDne, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
@@ -240,6 +242,7 @@ internal sealed class GeoImportadorCidades
     private async Task UpsertarFaixasAsync(
         IGeoFonteDados fonte,
         Dictionary<int, Guid> cidadesPorIdDne,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, CidadeFaixaCep> existentes,
         ContadorTabela contador,
         CancellationToken cancellationToken)
@@ -251,7 +254,7 @@ internal sealed class GeoImportadorCidades
             contador.ContarLido();
             if (ResolverCidade(cru.IdCidade, cidadesPorIdDne, contador) is { } cidadeId)
             {
-                UpsertarFaixa(cru, cidadeId, fonte.Versao, existentes, jaVistas, contador);
+                UpsertarFaixa(cru, cidadeId, proveniencia, existentes, jaVistas, contador);
             }
         }
     }
@@ -270,23 +273,22 @@ internal sealed class GeoImportadorCidades
     private void UpsertarFaixa(
         CidadeFaixaCru cru,
         Guid cidadeId,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, CidadeFaixaCep> existentes,
         Dictionary<string, CidadeFaixaCep> jaVistas,
         ContadorTabela contador)
     {
-        string? cepInicial = ChaveCodigo(cru.FaixaIni);
-        string? cepFinal = ChaveCodigo(cru.FaixaFim);
-        if (cepInicial is null || cepFinal is null)
+        FaixaDeCep faixa = new(cru.FaixaIni, cru.FaixaFim);
+        if (!faixa.TemCepInicial || !faixa.TemCepFinal)
         {
             contador.ContarIgnoradoSemChave();
             return;
         }
 
         Upsert(
-            ChaveFaixa(cidadeId, cepInicial, cepFinal), jaVistas, existentes,
-            () => CidadeFaixaCep.Importar(cidadeId, cepInicial, cepFinal, versao),
-            existente => existente.Atualizar(versao),
+            ChaveFaixa(cidadeId, faixa.CepInicial!, faixa.CepFinal!), jaVistas, existentes,
+            () => CidadeFaixaCep.Importar(cidadeId, faixa, proveniencia),
+            existente => existente.Atualizar(proveniencia),
             _contexto.CidadeFaixasCep, contador);
     }
 
