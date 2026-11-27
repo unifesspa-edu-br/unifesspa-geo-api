@@ -47,14 +47,19 @@ internal sealed class EnvioDoPacoteParaTeste : IDisposable
     {
         if (!_zips.TryGetValue((versao, variante), out ZipDeTeste? zip))
         {
-            byte[] bytes = PacoteSinteticoDne.Completo(versao)
-                .Com("paises_ibge", ("sigla_iso", variante.ToString()), ("sigla", "XX"), ("nome_pt", "Variante"))
-                .MontarZip();
-            zip = new ZipDeTeste(bytes, Convert.ToHexStringLower(SHA256.HashData(bytes)), versao);
+            zip = MontarZip(versao, variante);
             _zips[(versao, variante)] = zip;
         }
 
         return zip;
+    }
+
+    private static ZipDeTeste MontarZip(string versao, char variante)
+    {
+        byte[] bytes = PacoteSinteticoDne.Completo(versao)
+            .Com("paises_ibge", ("sigla_iso", variante.ToString()), ("sigla", "XX"), ("nome_pt", "Variante"))
+            .MontarZip();
+        return new ZipDeTeste(bytes, Convert.ToHexStringLower(SHA256.HashData(bytes)), versao);
     }
 
     /// <summary>Valor do pacote como o registro da execução o guarda, com o resumo real do zip.</summary>
@@ -80,12 +85,19 @@ internal sealed class EnvioDoPacoteParaTeste : IDisposable
             NullLogger<RegistroDasImportacoes>.Instance);
 
         Result<EnvioDoPacoteRegistrado> resultado = await registro.IniciarAsync(pacote.Abrir(), "teste", CancellationToken.None);
+        await DescartarCargasEnfileiradasAsync(fila);
+
+        return resultado;
+    }
+
+    /// <summary>Solta a trava das cargas que ficaram na fila.</summary>
+    public static async Task DescartarCargasEnfileiradasAsync(GeoImportacaoFila fila)
+    {
+        ArgumentNullException.ThrowIfNull(fila);
         foreach (CargaReservada enfileirada in fila.DrenarRestante())
         {
             await enfileirada.DisposeAsync();
         }
-
-        return resultado;
     }
 
     public RegistroDasImportacoes CriarRegistro(

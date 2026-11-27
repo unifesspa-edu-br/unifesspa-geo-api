@@ -60,6 +60,14 @@ internal sealed class CenarioDaCargaPeriodica
         return execucao.Id;
     }
 
+    /// <summary>Cria a execução da versão e a executa em seguida; devolve o identificador da execução.</summary>
+    public async Task<Guid> ExecutarVersaoAsync(string versao, IFonteDaExecucaoDne fonteFactory, IGeoCepCacheInvalidador cache)
+    {
+        Guid id = await CriarExecucaoAsync(versao);
+        await ExecutarAsync(id, fonteFactory, cache);
+        return id;
+    }
+
     public Task ExecutarAsync(Guid execucaoId, IFonteDaExecucaoDne fonteFactory, IGeoCepCacheInvalidador cache) =>
         ExecutarComLazyAsync(execucaoId, fonteFactory, new Lazy<IGeoCepCacheInvalidador>(() => cache));
 
@@ -73,6 +81,12 @@ internal sealed class CenarioDaCargaPeriodica
         CargaDaImportacao executor = CriarExecutor(ctx, fonteFactory, cacheLazy, metricas);
         CargaReservada carga = await ReservarAsync(execucaoId);
         await executor.ExecutarAsync(carga, CancellationToken.None);
+    }
+
+    public async Task<GeoImportacaoExecucao> LerExecucaoAsync(Guid execucaoId)
+    {
+        await using GeoDbContext ctx = CriarContexto();
+        return await ctx.ImportacaoExecucoes.AsNoTracking().SingleAsync(e => e.Id == execucaoId);
     }
 
     public Task<CargaReservada> ReservarAsync(Guid execucaoId) =>
@@ -106,23 +120,8 @@ internal sealed class CenarioDaCargaPeriodica
 
     public static FonteEmMemoria FonteCompleta(string versao)
     {
-        FonteEmMemoria fonte = new() { Versao = versao };
-
-        fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
-        fonte.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
-        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
-        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
-        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
-        fonte.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
-        fonte.Cidades.Add(DadosDne.Cidade(SaoPaulo, "São Paulo", "SP", ddd: "11"));
-        fonte.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
-        fonte.CidadeIds.Add(DadosDne.CidadeId(2, SaoPaulo));
-
-        fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
-        fonte.Distritos.Add(DadosDne.Distrito(20, "Centro", 2));
-        fonte.Logradouros.Add(DadosDne.Logradouro(CepMaraba, "Rua A", 1, distritoIdDne: 10));
-        fonte.Logradouros.Add(DadosDne.Logradouro(CepSaoPaulo, "Av Paulista", 2, distritoIdDne: 20));
-
+        FonteEmMemoria fonte = FonteSomenteMaraba(versao);
+        AdicionarSaoPaulo(fonte);
         return fonte;
     }
 
@@ -136,11 +135,20 @@ internal sealed class CenarioDaCargaPeriodica
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         fonte.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
         fonte.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
-
         fonte.Distritos.Add(DadosDne.Distrito(10, "Cidade Nova", 1));
         fonte.Logradouros.Add(DadosDne.Logradouro(CepMaraba, "Rua A", 1, distritoIdDne: 10));
 
         return fonte;
+    }
+
+    private static void AdicionarSaoPaulo(FonteEmMemoria fonte)
+    {
+        fonte.Estados.Add(DadosDne.Estado("SP", "São Paulo", regiao: "Sudeste", capital: "São Paulo", faixaIni: "01000000", faixaFim: "19999999"));
+        fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("SP", "35"));
+        fonte.Cidades.Add(DadosDne.Cidade(SaoPaulo, "São Paulo", "SP", ddd: "11"));
+        fonte.CidadeIds.Add(DadosDne.CidadeId(2, SaoPaulo));
+        fonte.Distritos.Add(DadosDne.Distrito(20, "Centro", 2));
+        fonte.Logradouros.Add(DadosDne.Logradouro(CepSaoPaulo, "Av Paulista", 2, distritoIdDne: 20));
     }
 
     private ImportadorDaVersaoDne CriarImportadorVersao(
