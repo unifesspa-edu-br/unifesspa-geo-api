@@ -18,6 +18,10 @@ using Unifesspa.Geo.IntegrationTests.Infrastructure;
 [Collection(GeoPostgisCollection.Name)]
 public sealed class GeoProximidadeReaderSqlTests
 {
+    private const double RaioDeConsultaEmMetros = 100 * 1000.0;
+
+    private static readonly Point PontoDeConsulta = new(-49.13, -5.35) { SRID = 4326 };
+
     private readonly GeoPostgisFixture _fixture;
 
     public GeoProximidadeReaderSqlTests(GeoPostgisFixture fixture)
@@ -30,9 +34,13 @@ public sealed class GeoProximidadeReaderSqlTests
     {
         await using GeoDbContext ctx = _fixture.CreateDbContext();
 
-        Point ponto = new(-49.13, -5.35) { SRID = 4326 };
-        const double raioMetros = 100 * 1000.0;
+        string sql = SqlDaConsultaDeCidadesProximas(ctx);
 
+        AssertFiltroUsaStDWithinEOrdenacaoUsaStDistance(sql);
+    }
+
+    private static string SqlDaConsultaDeCidadesProximas(GeoDbContext ctx)
+    {
         // Espelha GeoProximidadeReader.BuscarCidadesProximasAsync.
         var consulta = ctx.Cidades
             .AsNoTracking()
@@ -40,13 +48,16 @@ public sealed class GeoProximidadeReaderSqlTests
                      && c.Coordenada != null
                      && c.Latitude != null
                      && c.Longitude != null
-                     && c.Coordenada.IsWithinDistance(ponto, raioMetros))
-            .OrderBy(c => c.Coordenada!.Distance(ponto))
+                     && c.Coordenada.IsWithinDistance(PontoDeConsulta, RaioDeConsultaEmMetros))
+            .OrderBy(c => c.Coordenada!.Distance(PontoDeConsulta))
             .ThenBy(c => c.Id)
-            .Select(c => new { c.Id, Distancia = c.Coordenada!.Distance(ponto) });
+            .Select(c => new { c.Id, Distancia = c.Coordenada!.Distance(PontoDeConsulta) });
 
-        string sql = consulta.ToQueryString();
+        return consulta.ToQueryString();
+    }
 
+    private static void AssertFiltroUsaStDWithinEOrdenacaoUsaStDistance(string sql)
+    {
         // Isola o predicado de filtragem (WHERE … ORDER BY): deve usar ST_DWithin
         // (index-friendly, GIST) e NÃO ST_Distance (a projeção/ordenação é que usa
         // ST_Distance, não o filtro de raio).
