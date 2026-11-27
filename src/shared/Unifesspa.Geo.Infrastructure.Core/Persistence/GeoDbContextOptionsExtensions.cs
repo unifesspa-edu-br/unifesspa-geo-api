@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 /// Helpers de configuração de <see cref="DbContext"/> consumidos pelos 3
 /// módulos (Selecao, Ingresso, Portal). Centraliza invariantes da camada de
 /// persistência declaradas no ADR-0054 — naming convention global
-/// (snake_case automático), interceptors transversais (soft delete + audit)
+/// (snake_case automático), interceptor transversal de auditoria
 /// e leitura lazy da connection string. Substitui código duplicado nos
 /// <c>Add{Module}Infrastructure</c>.
 /// </summary>
@@ -25,9 +25,8 @@ public static class GeoDbContextOptionsExtensions
     ///   <item><c>UseNpgsql</c> com a connection string lida do
     ///   <see cref="IConfiguration"/> + <c>MigrationsAssembly</c> apontando para
     ///   o assembly do <typeparamref name="TContext"/>;</item>
-    ///   <item><see cref="SoftDeleteInterceptor"/> + <see cref="AuditableInterceptor"/>
-    ///   adicionados via <c>AddInterceptors</c> (resolvidos do
-    ///   <paramref name="serviceProvider"/> Scoped).</item>
+    ///   <item><see cref="AuditableInterceptor"/> adicionado via <c>AddInterceptors</c>
+    ///   (resolvido do <paramref name="serviceProvider"/> Scoped).</item>
     /// </list>
     /// </summary>
     /// <remarks>
@@ -99,9 +98,7 @@ public static class GeoDbContextOptionsExtensions
         // usando `--startup-project = .API`.
         options.UseSnakeCaseNamingConvention();
 
-        options.AddInterceptors(
-            serviceProvider.GetRequiredService<SoftDeleteInterceptor>(),
-            serviceProvider.GetRequiredService<AuditableInterceptor>());
+        options.AddInterceptors(serviceProvider.GetRequiredService<AuditableInterceptor>());
 
         return options;
     }
@@ -150,23 +147,20 @@ public static class GeoDbContextOptionsExtensions
     }
 
     /// <summary>
-    /// Registra os interceptors transversais consumidos pelo
-    /// <see cref="UseGeoNpgsqlConventions{TContext}"/> — Scoped por
-    /// ciclo de request, pois ambos dependem de <c>IUserContext</c> scoped
-    /// (HttpUserContext) para preencher <c>DeletedBy</c> / <c>CreatedBy</c> /
-    /// <c>UpdatedBy</c>. Singleton aqui causaria captive dependency.
+    /// Registra o interceptor de auditoria consumido pelo
+    /// <see cref="UseGeoNpgsqlConventions{TContext}"/>, com a mesma vida do
+    /// <c>DbContext</c> que o usa (Scoped).
     /// </summary>
     public static IServiceCollection AddGeoEfInterceptors(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Relógio canônico (ADR de convenção de TimeProvider): os interceptors
-        // dependem dele para CreatedAt/UpdatedAt/DeletedAt. TryAdd preserva
+        // Relógio canônico (ADR de convenção de TimeProvider): o interceptor
+        // depende dele para CreatedAt/UpdatedAt. TryAdd preserva
         // overrides de teste (TimeProvider fixo) e é idempotente com os demais
         // pontos que já registram TimeProvider.System (paginação).
         services.TryAddSingleton(TimeProvider.System);
 
-        services.AddScoped<SoftDeleteInterceptor>();
         services.AddScoped<AuditableInterceptor>();
 
         return services;

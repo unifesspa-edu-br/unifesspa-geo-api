@@ -23,9 +23,7 @@ public abstract class EntityBase
     // tem CreatedAt default; o AuditableInterceptor o carimba em Added. O fitness
     // test RelogioViaTimeProviderTests bane leituras diretas de relógio em src/.
     //
-    // Soft-delete NÃO vive aqui (issue #629): é capability opt-in via
-    // SoftDeletableEntity : EntityBase, ISoftDeletable — só entidades que
-    // derivam dela carregam IsDeleted/DeletedAt/DeletedBy e as colunas no banco.
+    // Exclusão lógica não existe no Geo: nenhuma entidade guarda marca de exclusão.
     public DateTimeOffset CreatedAt { get; protected set; }
     public DateTimeOffset? UpdatedAt { get; protected set; }
 

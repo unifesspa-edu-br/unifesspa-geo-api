@@ -129,9 +129,7 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
             new DbContextOptionsBuilder<GeoDbContext>()
                 .UseNpgsql(ConnectionString, ConfigurarNpgsql)
                 .UseSnakeCaseNamingConvention()
-                .AddInterceptors(
-                    new SoftDeleteInterceptor(relogio, userContext: null),
-                    new AuditableInterceptor(relogio, userContext: null))
+                .AddInterceptors(new AuditableInterceptor(relogio))
                 .AddInterceptors([.. interceptadoresAdicionais])
                 .Options;
 

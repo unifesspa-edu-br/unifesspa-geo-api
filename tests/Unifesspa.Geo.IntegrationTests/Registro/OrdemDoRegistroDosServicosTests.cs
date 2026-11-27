@@ -30,7 +30,6 @@ public sealed class OrdemDoRegistroDosServicosTests
 {
     private static readonly (Type Servico, ServiceLifetime Vida)[] ServicosDaInfraestrutura =
     [
-        (typeof(SoftDeleteInterceptor), ServiceLifetime.Scoped),
         (typeof(AuditableInterceptor), ServiceLifetime.Scoped),
         (typeof(GeoDbContext), ServiceLifetime.Scoped),
         (typeof(IUnitOfWork), ServiceLifetime.Scoped),
