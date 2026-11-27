@@ -42,7 +42,7 @@ public sealed class MetricasDaCargaTests
     {
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601");
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = FonteCompleta("202601"),
         });
@@ -84,7 +84,7 @@ public sealed class MetricasDaCargaTests
     {
         await _cenario.LimparAsync();
         Guid id = await _cenario.CriarExecucaoAsync("202601");
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IGeoFonteDados>(StringComparer.Ordinal)
+        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
         {
             ["202601"] = new FonteComFalhaNasCidades(FonteCompleta("202601")),
         });

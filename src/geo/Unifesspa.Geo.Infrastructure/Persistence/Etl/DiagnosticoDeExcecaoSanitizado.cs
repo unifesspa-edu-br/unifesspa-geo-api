@@ -2,6 +2,8 @@ namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using Npgsql;
 
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
+
 /// <summary>
 /// Extrai metadados seguros de uma exceção para registro em log, omitindo
 /// <see cref="Exception.Message"/>, detalhes livres do provedor e rastreamento
@@ -19,8 +21,14 @@ internal static class DiagnosticoDeExcecaoSanitizado
         string? tiposInternos = ExtrairTiposInternos(excecao.InnerException);
         PostgresException? pg = EncontrarPostgresException(excecao);
 
-        return Formatar(tipo, tiposInternos, pg);
+        return Formatar(tipo, tiposInternos, pg) + ComplementoDaLeituraDoPacote(excecao);
     }
+
+    // Tabela (da lista fechada) e número da linha da recusa do pacote; nunca o conteúdo do arquivo.
+    private static string ComplementoDaLeituraDoPacote(Exception excecao) =>
+        excecao is ErroDeLeituraDoPacoteDneException leitura
+            ? $"; TabelaDoPacote={leitura.Tabela}; Linha={leitura.Linha}"
+            : string.Empty;
 
     private static string Formatar(string tipo, string? tiposInternos, PostgresException? pg)
     {

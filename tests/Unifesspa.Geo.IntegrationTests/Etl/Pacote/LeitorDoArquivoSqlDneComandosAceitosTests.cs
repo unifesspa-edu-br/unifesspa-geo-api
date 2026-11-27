@@ -94,7 +94,7 @@ public sealed class LeitorDoArquivoSqlDneComandosAceitosTests
         lidas.Should().ContainSingle().Which.Should().Equal("a'); DROP TABLE y;--", "it's", 1);
     }
 
-    [Fact(DisplayName = "Coluna extra no dump é tolerada desde que as obrigatórias existam")]
+    [Fact(DisplayName = "Coluna extra no dump é tolerada e descartada: só os valores das obrigatórias seguem, na ordem da tabela")]
     public async Task ColunaExtra_EhTolerada()
     {
         List<string> linhas = ArquivoSqlDneSintetico.ComFechamentoEmUmaLinha();
@@ -103,7 +103,19 @@ public sealed class LeitorDoArquivoSqlDneComandosAceitosTests
 
         List<object?[]> lidas = await LeituraDoArquivoSqlDne.LerTudoAsync(linhas);
 
-        lidas.Should().ContainSingle().Which.Should().HaveCount(4);
+        lidas.Should().ContainSingle().Which.Should().Equal("a", "b", 1);
+    }
+
+    [Fact(DisplayName = "Colunas do arquivo em outra ordem saem na ordem das obrigatórias da tabela")]
+    public async Task ColunasEmOutraOrdem_SaemNaOrdemDaTabela()
+    {
+        List<string> linhas = ArquivoSqlDneSintetico.ComFechamentoEmUmaLinha();
+        (linhas[2], linhas[4]) = (linhas[4], linhas[2]);
+        linhas.Add(ArquivoSqlDneSintetico.Insert("1, 'b', 'a'"));
+
+        List<object?[]> lidas = await LeituraDoArquivoSqlDne.LerTudoAsync(linhas);
+
+        lidas.Should().ContainSingle().Which.Should().Equal("a", "b", 1);
     }
 
     [Fact(DisplayName = "Texto com acento e linha de 64 KiB exatos são aceitos")]

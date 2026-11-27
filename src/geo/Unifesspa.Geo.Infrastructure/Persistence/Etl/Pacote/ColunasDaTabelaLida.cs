@@ -28,6 +28,14 @@ internal sealed class ColunasDaTabelaLida
     public bool AtendeObrigatorias(string tabela) =>
         TabelasDne.ColunasObrigatorias(tabela).All(obrigatoria => _colunas.Contains(obrigatoria));
 
+    /// <summary>
+    /// Escolhe, de uma linha com todas as colunas do arquivo, só os valores das colunas
+    /// obrigatórias da tabela, na ordem de <see cref="TabelasDne.ColunasObrigatorias"/>. As colunas
+    /// extras do arquivo são descartadas aqui e nenhum nome vindo do arquivo segue adiante.
+    /// </summary>
+    public object?[] ValoresObrigatorios(string tabela, object?[] valores) =>
+        [.. TabelasDne.ColunasObrigatorias(tabela).Select(obrigatoria => valores[_colunas.IndexOf(obrigatoria)])];
+
     /// <summary>A quantidade e o tipo dos valores combinam com as colunas (nulo vale para qualquer tipo).</summary>
     public bool AceitaValores(object?[] valores)
     {

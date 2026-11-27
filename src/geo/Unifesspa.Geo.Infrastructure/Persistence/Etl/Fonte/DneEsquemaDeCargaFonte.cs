@@ -1,39 +1,52 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 
 using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 using Npgsql;
 
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
+
 /// <summary>
-/// <see cref="IGeoFonteDados"/> que lê o dataset DNE de um <strong>schema de
-/// staging</strong> (os 15 dumps Navicat restaurados via <c>psql</c>), por
-/// <c>SELECT</c> streamado (<see cref="DbDataReader"/> — leitura linha-a-linha, uso
-/// de memória estável mesmo nas tabelas grandes). O nome de cada tabela é derivado
-/// da <see cref="Versao"/> (<c>tbl_cep_{versao}_n_{sufixo}</c>), garantindo que a
-/// release lida é exatamente a que o importador carimba como proveniência.
+/// <see cref="IGeoFonteDados"/> que lê o dataset DNE do esquema de carga
+/// <c>carga_dne_{execucaoId}</c> do banco do Geo, por <c>SELECT</c> streamado
+/// (<see cref="DbDataReader"/> — leitura linha a linha, uso de memória estável mesmo nas tabelas
+/// grandes). Cada tabela do esquema leva só o nome da tabela do pacote (<c>cidade_ibge_territorio</c>,
+/// no máximo 22 caracteres), sem a versão no nome: a <see cref="Versao"/> é a que o importador
+/// carimba como proveniência. Ao ser descartada, apaga o esquema de carga e o arquivo do pacote.
 /// </summary>
 /// <remarks>
-/// <see cref="Versao"/> e o nome do schema são validados no construtor (não há como
-/// parametrizar identificadores de tabela em SQL): só dígitos (AAAAMM) e identificador
-/// Postgres seguro são aceitos — defesa contra injeção via configuração administrativa.
+/// <see cref="Versao"/> e o nome do esquema são validados no construtor: só dígitos (AAAAMM) e o
+/// nome exato que o esquema de carga produz são aceitos. Todo <c>SELECT</c> sai de
+/// <see cref="ComandosDoEsquemaDeCarga"/>, que só aceita colunas obrigatórias da tabela.
 /// </remarks>
-internal sealed class DneStagingFonte : IGeoFonteDados
+internal sealed class DneEsquemaDeCargaFonte : IFonteDaCargaDne
 {
-    // "public" — schema nativo do banco de staging dedicado (issue #12): os dumps
-    // (Navicat) qualificam "public"."tbl_cep_..." explicitamente, então só um banco
-    // próprio (não um schema secundário do domínio) os recebe sem reescrita.
-    public const string SchemaPadrao = "public";
-
     private readonly string _connectionString;
-    private readonly string _schema;
+    private readonly string _esquema;
+    private readonly Func<Task> _descartar;
 
-    public DneStagingFonte(string connectionString, string versao, string schema = SchemaPadrao)
+    public DneEsquemaDeCargaFonte(string connectionString, string versao, string esquema, Func<Task> descartar)
     {
+        ArgumentNullException.ThrowIfNull(descartar);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ValidarVersaoEEsquema(versao, esquema);
+
+        _connectionString = connectionString;
+        _esquema = esquema;
+        _descartar = descartar;
+        Versao = versao;
+    }
+
+    public string Versao { get; }
+
+    /// <summary>Descarta o esquema de carga e o arquivo do pacote da execução.</summary>
+    public async ValueTask DisposeAsync() => await _descartar().ConfigureAwait(false);
+
+    private static void ValidarVersaoEEsquema(string versao, string esquema)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(versao);
-        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
+        ArgumentException.ThrowIfNullOrWhiteSpace(esquema);
 
         if (!VersaoValida(versao))
         {
@@ -42,42 +55,30 @@ internal sealed class DneStagingFonte : IGeoFonteDados
                 nameof(versao));
         }
 
-        if (!IdentificadorValido(schema))
+        if (!ComandosDoEsquemaDeCarga.EhNomeValido(esquema))
         {
-            throw new ArgumentException(
-                $"Nome de schema inválido: '{schema}'.",
-                nameof(schema));
+            throw new ArgumentException("Nome do esquema de carga inválido.", nameof(esquema));
         }
-
-        _connectionString = connectionString;
-        _schema = schema;
-        Versao = versao;
     }
-
-    public string Versao { get; }
 
     public IAsyncEnumerable<PaisCru> LerPaisesAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT sigla_iso, sigla, nome_pt, pais_bcb, pais_rbf, pais_sped, pais_siscomex FROM {Tabela("paises_ibge")}",
+            Consultar("paises_ibge", FiltroDeLinhasDoEsquema.Nenhum,
+                "sigla_iso", "sigla", "nome_pt", "pais_bcb", "pais_rbf", "pais_sped", "pais_siscomex"),
             static r => new PaisCru(Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6)),
             cancellationToken);
 
     public IAsyncEnumerable<EstadoCru> LerEstadosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT sigla, estado, estado_sem_acento, regiao, capital, faixa_ini, faixa_fim, latitude, longitude FROM {Tabela("estado")}",
+            Consultar("estado", FiltroDeLinhasDoEsquema.Nenhum,
+                "sigla", "estado", "estado_sem_acento", "regiao", "capital", "faixa_ini", "faixa_fim", "latitude", "longitude"),
             static r => new EstadoCru(Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6), Texto(r, 7), Texto(r, 8)),
             cancellationToken);
 
     public IAsyncEnumerable<EstadoIndicadorCru> LerEstadoIndicadoresAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"""
-             SELECT uf, codigo_ibge, gentilico, governador, area_territorial_km2,
-                    populacao_residente_2022, densidade_demografica_hab_km2,
-                    matriculas_ensino_fundamental_2023, idh_indice_desenv_humano,
-                    total_receitas_brutas_realizadas, total_despesas_brutas_empenhadas,
-                    rendimento_mensal_per_capita, total_veiculos_2023
-             FROM {Tabela("estado_ibge")}
-             """,
+            Consultar("estado_ibge", FiltroDeLinhasDoEsquema.Nenhum,
+                "uf", "codigo_ibge", "gentilico", "governador", "area_territorial_km2", "populacao_residente_2022", "densidade_demografica_hab_km2", "matriculas_ensino_fundamental_2023", "idh_indice_desenv_humano", "total_receitas_brutas_realizadas", "total_despesas_brutas_empenhadas", "rendimento_mensal_per_capita", "total_veiculos_2023"),
             static r => new EstadoIndicadorCru(
                 Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6),
                 Texto(r, 7), Texto(r, 8), Texto(r, 9), Texto(r, 10), Texto(r, 11), Texto(r, 12)),
@@ -85,24 +86,22 @@ internal sealed class DneStagingFonte : IGeoFonteDados
 
     public IAsyncEnumerable<EstadoFaixaCru> LerEstadoFaixasAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT sigla, regiao, faixa_ini, faixa_fim FROM {Tabela("estado_faixa")}",
+            Consultar("estado_faixa", FiltroDeLinhasDoEsquema.Nenhum,
+                "sigla", "regiao", "faixa_ini", "faixa_fim"),
             static r => new EstadoFaixaCru(Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3)),
             cancellationToken);
 
     public IAsyncEnumerable<CidadeCru> LerCidadesAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT cidade_ibge, cidade, estado, ddd, latitude, longitude FROM {Tabela("cidade")}",
+            Consultar("cidade", FiltroDeLinhasDoEsquema.Nenhum,
+                "cidade_ibge", "cidade", "estado", "ddd", "latitude", "longitude"),
             static r => new CidadeCru(Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5)),
             cancellationToken);
 
     public IAsyncEnumerable<CidadeTerritorioCru> LerCidadeTerritoriosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"""
-             SELECT cidade_ibge, mesorregiao, mesorregiao_nome, microrregiao, microrregiao_nome,
-                    regiao_intermediaria, regiao_intermediaria_nome,
-                    regiao_geografica_imediata, regiao_geografica_imediata_nome
-             FROM {Tabela("cidade_ibge_territorio")}
-             """,
+            Consultar("cidade_ibge_territorio", FiltroDeLinhasDoEsquema.Nenhum,
+                "cidade_ibge", "mesorregiao", "mesorregiao_nome", "microrregiao", "microrregiao_nome", "regiao_intermediaria", "regiao_intermediaria_nome", "regiao_geografica_imediata", "regiao_geografica_imediata_nome"),
             static r => new CidadeTerritorioCru(
                 Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4),
                 Texto(r, 5), Texto(r, 6), Texto(r, 7), Texto(r, 8)),
@@ -110,13 +109,8 @@ internal sealed class DneStagingFonte : IGeoFonteDados
 
     public IAsyncEnumerable<CidadeIndicadorCru> LerCidadeIndicadoresAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"""
-             SELECT cidade_ibge, gentilico, prefeito, area_territorial_km2, populacao_residente,
-                    densidade_demografica, escolarizacao_6_a_14_anos, idice_de_desenv_humano,
-                    mortalidade_infantil, receitas_realizadas, despesas_empenhadas,
-                    pib_per_capita, aniversario_municipio
-             FROM {Tabela("cidade_ibge")}
-             """,
+            Consultar("cidade_ibge", FiltroDeLinhasDoEsquema.Nenhum,
+                "cidade_ibge", "gentilico", "prefeito", "area_territorial_km2", "populacao_residente", "densidade_demografica", "escolarizacao_6_a_14_anos", "idice_de_desenv_humano", "mortalidade_infantil", "receitas_realizadas", "despesas_empenhadas", "pib_per_capita", "aniversario_municipio"),
             static r => new CidadeIndicadorCru(
                 Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6),
                 Texto(r, 7), Texto(r, 8), Texto(r, 9), Texto(r, 10), Texto(r, 11), Texto(r, 12)),
@@ -124,85 +118,81 @@ internal sealed class DneStagingFonte : IGeoFonteDados
 
     public IAsyncEnumerable<CidadeFaixaCru> LerCidadeFaixasAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT id_cidade, faixa_ini, faixa_fim FROM {Tabela("cidade_faixa")}",
+            Consultar("cidade_faixa", FiltroDeLinhasDoEsquema.Nenhum,
+                "id_cidade", "faixa_ini", "faixa_fim"),
             static r => new CidadeFaixaCru(Inteiro(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
     public IAsyncEnumerable<CidadeIdCru> LerCidadeIdsAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT id_cidade, cidade_ibge FROM {Tabela("cidade")}",
+            Consultar("cidade", FiltroDeLinhasDoEsquema.Nenhum,
+                "id_cidade", "cidade_ibge"),
             static r => new CidadeIdCru(Inteiro(r, 0), Texto(r, 1)),
             cancellationToken);
 
     public IAsyncEnumerable<DistritoCru> LerDistritosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT id_distrito, distrito, distrito_sem_acento, cidade_id, estado, latitude, longitude FROM {Tabela("distrito")}",
+            Consultar("distrito", FiltroDeLinhasDoEsquema.Nenhum,
+                "id_distrito", "distrito", "distrito_sem_acento", "cidade_id", "estado", "latitude", "longitude"),
             static r => new DistritoCru(Inteiro(r, 0), Texto(r, 1), Texto(r, 2), Inteiro(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6)),
             cancellationToken);
 
     public IAsyncEnumerable<FaixaLocalidadeCru> LerDistritoFaixasAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT id_distrito, faixa_ini, faixa_fim FROM {Tabela("distrito_faixa")}",
+            Consultar("distrito_faixa", FiltroDeLinhasDoEsquema.Nenhum,
+                "id_distrito", "faixa_ini", "faixa_fim"),
             static r => new FaixaLocalidadeCru(Inteiro(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
     public IAsyncEnumerable<BairroCru> LerBairrosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT id_bairro, bairro, bairro_sem_acento, cidade_id, estado, latitude, longitude FROM {Tabela("bairro")}",
+            Consultar("bairro", FiltroDeLinhasDoEsquema.Nenhum,
+                "id_bairro", "bairro", "bairro_sem_acento", "cidade_id", "estado", "latitude", "longitude"),
             static r => new BairroCru(Inteiro(r, 0), Texto(r, 1), Texto(r, 2), Inteiro(r, 3), Texto(r, 4), Texto(r, 5), Texto(r, 6)),
             cancellationToken);
 
     public IAsyncEnumerable<FaixaLocalidadeCru> LerBairroFaixasAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT id_bairro, faixa_ini, faixa_fim FROM {Tabela("bairro_faixa")}",
+            Consultar("bairro_faixa", FiltroDeLinhasDoEsquema.Nenhum,
+                "id_bairro", "faixa_ini", "faixa_fim"),
             static r => new FaixaLocalidadeCru(Inteiro(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
     public IAsyncEnumerable<CepGrandeUsuarioCru> LerCepGrandesUsuariosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT cep, grandes_usuarios, grandes_usuarios_sem_acento FROM {Tabela("log_grande_usuario")}",
+            Consultar("log_grande_usuario", FiltroDeLinhasDoEsquema.Nenhum,
+                "cep", "grandes_usuarios", "grandes_usuarios_sem_acento"),
             static r => new CepGrandeUsuarioCru(Texto(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
     public IAsyncEnumerable<LogradouroComplementoCru> LerLogradouroComplementosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT cep, complemento, complemento_sem_acento FROM {Tabela("log_complemento")}",
+            Consultar("log_complemento", FiltroDeLinhasDoEsquema.Nenhum,
+                "cep", "complemento", "complemento_sem_acento"),
             static r => new LogradouroComplementoCru(Texto(r, 0), Texto(r, 1), Texto(r, 2)),
             cancellationToken);
 
-    // CEP geral de cidade/distrito = linha de logradouro sem nome (tipo, nome_logradouro e
-    // logradouro vazios). Mesmo predicado, negado, separa os logradouros reais abaixo.
-    private const string SemNomeDeLogradouro =
-        "btrim(coalesce(tipo, '')) = '' AND btrim(coalesce(nome_logradouro, '')) = '' AND btrim(coalesce(logradouro, '')) = ''";
-
     public IAsyncEnumerable<CepGeralCru> LerCepGeraisAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            $"SELECT cep, cidade_id, distrito_id, estado, latitude, longitude FROM {Tabela("logradouro")} WHERE {SemNomeDeLogradouro}",
+            Consultar("logradouro", FiltroDeLinhasDoEsquema.SemNomeDeLogradouro,
+                "cep", "cidade_id", "distrito_id", "estado", "latitude", "longitude"),
             static r => new CepGeralCru(Texto(r, 0), Inteiro(r, 1), Inteiro(r, 2), Texto(r, 3), Texto(r, 4), Texto(r, 5)),
             cancellationToken);
 
+    // Coluna de busca e chave = logradouro_sem_acento (texto completo, ex.: "rua a"), não o nome
+    // sem o tipo (ex.: "a").
     public IAsyncEnumerable<LogradouroCru> LerLogradourosAsync(CancellationToken cancellationToken) =>
         ConsultarAsync(
-            // Coluna de busca/chave = logradouro_sem_acento (texto completo, ex.: "rua a"),
-            // não nome_logradouro_sem_acento (o nome sem o tipo, ex.: "a") — #707, opção A.
-            $"""
-             SELECT cep, tipo, nome_logradouro, logradouro, bairro_id, distrito_id, cidade_id,
-                    estado, logradouro_sem_acento, latitude, longitude, cep_ativo
-             FROM {Tabela("logradouro")}
-             WHERE NOT ({SemNomeDeLogradouro})
-             """,
+            Consultar("logradouro", FiltroDeLinhasDoEsquema.ComNomeDeLogradouro,
+                "cep", "tipo", "nome_logradouro", "logradouro", "bairro_id", "distrito_id", "cidade_id", "estado", "logradouro_sem_acento", "latitude", "longitude", "cep_ativo"),
             static r => new LogradouroCru(
                 Texto(r, 0), Texto(r, 1), Texto(r, 2), Texto(r, 3), Texto(r, 8),
                 Inteiro(r, 4), Inteiro(r, 5), Inteiro(r, 6),
                 Texto(r, 7), Texto(r, 9), Texto(r, 10), Texto(r, 11)),
             cancellationToken);
 
-    [SuppressMessage(
-        "Security",
-        "CA2100:Review SQL queries for security vulnerabilities",
-        Justification = "O SQL é literal de código (lista de colunas fixa) somada ao nome de tabela cujo schema e versão são validados no construtor (dígitos/identificador Postgres seguro). Não há entrada de usuário na query — não é parametrizável por se tratar de identificador de tabela.")]
     private async IAsyncEnumerable<T> ConsultarAsync<T>(
-        string sql,
+        ComandoDoEsquemaDeCarga comando,
         Func<DbDataReader, T> mapear,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -211,11 +201,11 @@ internal sealed class DneStagingFonte : IGeoFonteDados
         {
             await conexao.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            NpgsqlCommand comando = conexao.CreateCommand();
-            await using (comando.ConfigureAwait(false))
+            NpgsqlBatch lote = conexao.CreateBatch();
+            await using (lote.ConfigureAwait(false))
             {
-                comando.CommandText = sql;
-                DbDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                lote.BatchCommands.Add(new NpgsqlBatchCommand(comando.Texto));
+                DbDataReader leitor = await lote.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
                 await using (leitor.ConfigureAwait(false))
                 {
                     while (await leitor.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -227,27 +217,19 @@ internal sealed class DneStagingFonte : IGeoFonteDados
         }
     }
 
-    // Identificador de tabela qualificado e citado. Schema e versão já validados —
-    // o sufixo é literal de código; não há entrada de usuário no nome da tabela.
-    private string Tabela(string sufixo) => $"\"{_schema}\".\"tbl_cep_{Versao}_n_{sufixo}\"";
+    private ComandoDoEsquemaDeCarga Consultar(string tabela, FiltroDeLinhasDoEsquema filtro, params string[] colunas) =>
+        ComandosDoEsquemaDeCarga.Consultar(_esquema, tabela, filtro, colunas);
 
-    // As colunas projetadas pela fonte são todas text/varchar na DNE — GetString evita
-    // o boxing de GetValue().ToString() (relevante no volume dos logradouros, #673).
+    // As colunas de texto do esquema de carga são text — GetString evita o boxing de
+    // GetValue().ToString(), relevante no volume dos logradouros.
     private static string? Texto(DbDataReader leitor, int ordinal) =>
         leitor.IsDBNull(ordinal) ? null : leitor.GetString(ordinal);
 
     // Ids da fonte (id_cidade/id_distrito/id_bairro e as FKs cidade_id/distrito_id/
-    // bairro_id) são int4 — diferente do projeto da #672 (text-only). Lê como int,
-    // NULL → null (FK opcional do logradouro chega nula com frequência, #673).
+    // bairro_id) são integer. NULL vira null: a chave opcional do logradouro chega nula com frequência.
     private static int? Inteiro(DbDataReader leitor, int ordinal) =>
         leitor.IsDBNull(ordinal) ? null : leitor.GetInt32(ordinal);
 
     private static bool VersaoValida(string versao) =>
         versao.Length == 6 && versao.All(char.IsAsciiDigit);
-
-    private static bool IdentificadorValido(string identificador) =>
-        // PostgreSQL trunca identificadores em 63 bytes — defesa em profundidade.
-        identificador.Length is >= 1 and <= 63
-        && (char.IsAsciiLetter(identificador[0]) || identificador[0] == '_')
-        && identificador.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
 }

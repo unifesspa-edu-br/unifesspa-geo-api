@@ -51,26 +51,26 @@ internal sealed class MontagemDaCarga : IDisposable
         return execucao.Id;
     }
 
-    public async Task ExecutarAsync(Guid execucaoId, IGeoFonteDadosFactory fabrica)
+    public async Task ExecutarAsync(Guid execucaoId, IFonteDaExecucaoDne fabrica)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext(RelogioDaCarga);
         await ExecutarAsync(execucaoId, fabrica, contexto);
     }
 
-    public async Task ExecutarAsync(Guid execucaoId, IGeoFonteDadosFactory fabrica, GeoDbContext contexto)
+    public async Task ExecutarAsync(Guid execucaoId, IFonteDaExecucaoDne fabrica, GeoDbContext contexto)
     {
         CargaReservada carga = await TravaDaCargaParaTeste.ReservarAsync(_fixture.ConnectionString, execucaoId);
         await Montar(contexto, fabrica).ExecutarAsync(carga, CancellationToken.None);
     }
 
-    public async Task<Guid> PublicarAsync(IGeoFonteDados fonte)
+    public async Task<Guid> PublicarAsync(IFonteDaCargaDne fonte)
     {
         Guid id = await RegistrarExecucaoAsync(fonte.Versao);
         await ExecutarAsync(id, new FabricaDeFonteFixa(fonte));
         return id;
     }
 
-    private CargaDaImportacao Montar(GeoDbContext contexto, IGeoFonteDadosFactory fabrica)
+    private CargaDaImportacao Montar(GeoDbContext contexto, IFonteDaExecucaoDne fabrica)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString })
@@ -79,13 +79,13 @@ internal sealed class MontagemDaCarga : IDisposable
         return new CargaDaImportacao(
             contexto,
             MontarImportadorDaVersao(contexto, fabrica, configuracao),
-            MontarFinalizacao(),
+            MontarFinalizacao(fabrica),
             RelogioDaCarga,
             Options.Create(new EtlOpcoes()),
             Logs.Para<CargaDaImportacao>());
     }
 
-    private ImportadorDaVersaoDne MontarImportadorDaVersao(GeoDbContext contexto, IGeoFonteDadosFactory fabrica, IConfiguration configuracao)
+    private ImportadorDaVersaoDne MontarImportadorDaVersao(GeoDbContext contexto, IFonteDaExecucaoDne fabrica, IConfiguration configuracao)
     {
         IGeoImportador topo = new GeoImportadorPaisEstadoCidade(contexto, Logs.Para<GeoImportadorPaisEstadoCidade>());
         ImportadorDeLogradourosPorCopia logradouro = new(contexto, configuracao, RelogioDaCarga, Logs.Para<ImportadorDeLogradourosPorCopia>());
@@ -100,7 +100,7 @@ internal sealed class MontagemDaCarga : IDisposable
             RelogioDaCarga);
     }
 
-    private FinalizacaoDaCargaDne MontarFinalizacao()
+    private FinalizacaoDaCargaDne MontarFinalizacao(IFonteDaExecucaoDne fabrica)
     {
         ServiceCollection servicos = new();
         servicos.AddScoped(_ => _fixture.CreateDbContext(RelogioDaCarga));
@@ -110,6 +110,7 @@ internal sealed class MontagemDaCarga : IDisposable
             provedor.GetRequiredService<IServiceScopeFactory>(),
             new Lazy<IGeoCepCacheInvalidador>(() => Cache),
             _metricas,
+            fabrica,
             RelogioDaCarga,
             Logs.Para<FinalizacaoDaCargaDne>());
     }

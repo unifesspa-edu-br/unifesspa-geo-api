@@ -12,31 +12,29 @@ using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// <see cref="DneStagingFonte"/>: lê o dataset DNE de um schema de staging real
-/// (dumps restaurados) por <c>SELECT</c> streamado, e o importador roda fim-a-fim
-/// sobre ele. Cobre também a validação anti-injeção de versão/schema.
+/// <see cref="DneEsquemaDeCargaFonte"/>: lê o dataset DNE de um esquema de carga real
+/// por <c>SELECT</c> streamado, e o importador roda fim a fim sobre ele. Cobre também a
+/// validação anti-injeção de versão e do nome do esquema.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
-public sealed class DneStagingFonteTests
+public sealed class DneEsquemaDeCargaFonteTests
 {
     private const string Versao = "202601";
+    private const string Esquema = "carga_dne_00000000000000000000000000000001";
     private const string CodigoMaraba = "1500402";
 
     private readonly GeoPostgisFixture _fixture;
 
-    public DneStagingFonteTests(GeoPostgisFixture fixture)
+    public DneEsquemaDeCargaFonteTests(GeoPostgisFixture fixture)
     {
         _fixture = fixture;
     }
 
-    [Fact(DisplayName = "Lê os registros do staging mapeando colunas para os records crus")]
+    [Fact(DisplayName = "Lê os registros do esquema de carga mapeando colunas para os records crus")]
     public async Task LeRegistros_MapeiaColunas()
     {
-        await CriarStagingAsync();
-        // Schema explícito: o dado de teste é criado em "dne_staging" (isolado do
-        // "public" do mesmo Testcontainer, onde vive o domínio) — o default da
-        // classe agora é "public" (banco de staging dedicado real, issue #12).
-        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao, "dne_staging");
+        await CriarEsquemaAsync();
+        await using DneEsquemaDeCargaFonte fonte = new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
 
         List<PaisCru> paises = await ColetarAsync(fonte.LerPaisesAsync);
         paises.Should().HaveCount(2);
@@ -48,21 +46,18 @@ public sealed class DneStagingFonteTests
         List<CidadeCru> cidades = await ColetarAsync(fonte.LerCidadesAsync);
         cidades.Should().ContainSingle(c => c.CodigoIbge == CodigoMaraba && c.Uf == "PA");
 
-        // #14: a fonte real só expõe id_cidade na tabela de faixa, não cidade_ibge.
+        // A tabela de faixa expõe id_cidade, não cidade_ibge.
         List<CidadeFaixaCru> cidadeFaixas = await ColetarAsync(fonte.LerCidadeFaixasAsync);
         cidadeFaixas.Should().ContainSingle(f => f.IdCidade == 1 && f.FaixaIni == "68500000" && f.FaixaFim == "68519999");
     }
 
-    [Fact(DisplayName = "Importador roda fim-a-fim sobre o staging (SELECT streamado → upsert), com parse tolerante")]
-    public async Task EndToEnd_PopulaBancoViaStaging()
+    [Fact(DisplayName = "Importador roda fim a fim sobre o esquema de carga (SELECT streamado → upsert), com parse tolerante")]
+    public async Task EndToEnd_PopulaBancoViaEsquemaDeCarga()
     {
         await LimparDominioAsync();
-        await CriarStagingAsync();
+        await CriarEsquemaAsync();
 
-        // Schema explícito: o dado de teste é criado em "dne_staging" (isolado do
-        // "public" do mesmo Testcontainer, onde vive o domínio) — o default da
-        // classe agora é "public" (banco de staging dedicado real, issue #12).
-        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao, "dne_staging");
+        await using DneEsquemaDeCargaFonte fonte = new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
         await using (GeoDbContext ctx = _fixture.CreateDbContext())
         {
             GeoImportadorPaisEstadoCidade importador = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
@@ -79,24 +74,20 @@ public sealed class DneStagingFonteTests
         maraba.Coordenada.Should().NotBeNull();
 
         CidadeIndicador indicador = await leitura.CidadeIndicadores.SingleAsync(i => i.CidadeId == maraba.Id);
-        indicador.MortalidadeInfantil.Should().BeNull(); // '-' no staging degradou para null
+        indicador.MortalidadeInfantil.Should().BeNull(); // '-' no esquema de carga degradou para null
 
-        // #14: carga de cidade_faixa contra o schema real (id_cidade, sem cidade_ibge) —
-        // antes da correção, a carga inteira dava rollback ao chegar aqui.
+        // Carga de cidade_faixa pelo id_cidade (a tabela não tem cidade_ibge).
         CidadeFaixaCep faixa = await leitura.CidadeFaixasCep.SingleAsync(f => f.CidadeId == maraba.Id);
         faixa.CepInicial.Should().Be("68500000");
         faixa.CepFinal.Should().Be("68519999");
     }
 
-    [Fact(DisplayName = "Folhas: lê id_cidade/cidade_id como int e distrito_id NULL do logradouro (≠ projeção text-only da #672)")]
+    [Fact(DisplayName = "Folhas: lê id_cidade/cidade_id como inteiro e distrito_id NULL do logradouro")]
     public async Task LeFolhas_MapeiaIntENull()
     {
-        await CriarStagingAsync();
-        await CriarStagingFolhasAsync();
-        // Schema explícito: o dado de teste é criado em "dne_staging" (isolado do
-        // "public" do mesmo Testcontainer, onde vive o domínio) — o default da
-        // classe agora é "public" (banco de staging dedicado real, issue #12).
-        DneStagingFonte fonte = new(_fixture.ConnectionString, Versao, "dne_staging");
+        await CriarEsquemaAsync();
+        await CriarFolhasDoEsquemaAsync();
+        await using DneEsquemaDeCargaFonte fonte = new(_fixture.ConnectionString, Versao, Esquema, () => Task.CompletedTask);
 
         List<CidadeIdCru> ids = await ColetarAsync(fonte.LerCidadeIdsAsync);
         ids.Should().ContainSingle(c => c.IdCidade == 1 && c.CodigoIbge == CodigoMaraba);
@@ -109,7 +100,7 @@ public sealed class DneStagingFonteTests
         logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.DistritoIdDne == 10 && l.CidadeIdDne == 1 && l.CepAtivo == "S");
         logradouros.Should().ContainSingle(l => l.Cep == "68500001" && l.DistritoIdDne == null); // distrito_id NULL preservado
 
-        // #707: a fonte projeta o TEXTO COMPLETO sem acento (logradouro_sem_acento, "Rua A"),
+        // A fonte projeta o TEXTO COMPLETO sem acento (logradouro_sem_acento, "Rua A"),
         // não o nome sem o tipo (nome_logradouro, "A") — é ele que alimenta a busca e a chave.
         logradouros.Should().ContainSingle(l => l.Cep == "68500000" && l.Nome == "A" && l.LogradouroSemAcento == "Rua A");
 
@@ -121,7 +112,7 @@ public sealed class DneStagingFonteTests
             .Which.Should().Match<CepGeralCru>(g => g.Cep == "68525000" && g.CidadeIdDne == 1 && g.DistritoIdDne == null && g.Uf == "PA");
 
         // As faixas referenciam o pai pela coluna id_distrito/id_bairro (PK da fonte na
-        // própria tabela de faixa), não distrito_id/bairro_id — lê o schema real.
+        // própria tabela de faixa), não distrito_id/bairro_id — lê o esquema de carga.
         List<FaixaLocalidadeCru> distritoFaixas = await ColetarAsync(fonte.LerDistritoFaixasAsync);
         distritoFaixas.Should().ContainSingle(f => f.IdPaiDne == 10 && f.FaixaIni == "68500000" && f.FaixaFim == "68519999");
 
@@ -136,17 +127,19 @@ public sealed class DneStagingFonteTests
     [InlineData("2026-01")]
     public void VersaoInvalida_Lanca(string versao)
     {
-        Action criar = () => _ = new DneStagingFonte(_fixture.ConnectionString, versao);
+        Action criar = () => _ = new DneEsquemaDeCargaFonte(_fixture.ConnectionString, versao, Esquema, () => Task.CompletedTask);
         criar.Should().Throw<ArgumentException>();
     }
 
-    [Theory(DisplayName = "Nome de schema não-identificador é rejeitado no construtor (anti-injeção)")]
+    [Theory(DisplayName = "Nome de esquema que não é o do esquema de carga é rejeitado no construtor (anti-injeção)")]
     [InlineData("dne staging")]
-    [InlineData("dne;drop")]
-    [InlineData("1schema")]
-    public void SchemaInvalido_Lanca(string schema)
+    [InlineData("public")]
+    [InlineData("carga_dne_00000000000000000000000000000001\";drop")]
+    [InlineData("carga_dne_0000000000000000000000000000000G")]
+    [InlineData("carga_dne_0000000000000000000000000000001")]
+    public void EsquemaInvalido_Lanca(string esquema)
     {
-        Action criar = () => _ = new DneStagingFonte(_fixture.ConnectionString, Versao, schema);
+        Action criar = () => _ = new DneEsquemaDeCargaFonte(_fixture.ConnectionString, Versao, esquema, () => Task.CompletedTask);
         criar.Should().Throw<ArgumentException>();
     }
 
@@ -167,98 +160,97 @@ public sealed class DneStagingFonteTests
         await ctx.Database.ExecuteSqlRawAsync("TRUNCATE TABLE pais CASCADE");
     }
 
-    private async Task CriarStagingAsync()
+    private async Task CriarEsquemaAsync()
     {
         await using GeoDbContext ctx = _fixture.CreateDbContext();
-        await ctx.Database.ExecuteSqlRawAsync(StagingSql);
+        await ctx.Database.ExecuteSqlRawAsync(EsquemaSql);
     }
 
-    // Tabelas folha (Story #673) anexadas ao schema já criado por CriarStagingAsync —
-    // ids int4 e uma linha de logradouro com distrito_id NULL para exercitar a leitura
-    // de inteiro/nulo (≠ projeção text-only da #672).
-    private async Task CriarStagingFolhasAsync()
+    // Tabelas folha anexadas ao esquema já criado por CriarEsquemaAsync: ids inteiros e uma
+    // linha de logradouro com distrito_id NULL para exercitar a leitura de inteiro e nulo.
+    private async Task CriarFolhasDoEsquemaAsync()
     {
         await using GeoDbContext ctx = _fixture.CreateDbContext();
-        await ctx.Database.ExecuteSqlRawAsync(StagingFolhasSql);
+        await ctx.Database.ExecuteSqlRawAsync(FolhasDoEsquemaSql);
     }
 
-    // Schema de staging reduzido: só as colunas que a DneStagingFonte projeta, com
+    // Esquema de carga reduzido: só as colunas que a DneEsquemaDeCargaFonte projeta, com
     // dados mínimos consistentes (Brasil + Pará + Marabá; mortalidade '-' para o parse
     // tolerante). Recriado a cada teste (DROP CASCADE) para isolamento.
-    private const string StagingSql = """
-        DROP SCHEMA IF EXISTS dne_staging CASCADE;
-        CREATE SCHEMA dne_staging;
+    private const string EsquemaSql = """
+        DROP SCHEMA IF EXISTS carga_dne_00000000000000000000000000000001 CASCADE;
+        CREATE SCHEMA carga_dne_00000000000000000000000000000001;
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_paises_ibge" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."paises_ibge" (
             sigla_iso text, sigla text, nome_pt text, pais_bcb text, pais_rbf text, pais_sped text, pais_siscomex text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_paises_ibge" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."paises_ibge" VALUES
             ('BRA','BR','Brasil','1058','106','1058','105'),
             ('ARG','AR','Argentina','639','63','639','63');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_estado" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."estado" (
             sigla text, estado text, estado_sem_acento text, regiao text, capital text,
             faixa_ini text, faixa_fim text, latitude text, longitude text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_estado" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."estado" VALUES
             ('PA','Pará','Para','Norte','Belém','66000000','68899999','-1.9981271','-54.9306152');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_estado_ibge" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."estado_ibge" (
             uf text, codigo_ibge text, gentilico text, governador text, area_territorial_km2 text,
             populacao_residente_2022 text, densidade_demografica_hab_km2 text, matriculas_ensino_fundamental_2023 text,
             idh_indice_desenv_humano text, total_receitas_brutas_realizadas text, total_despesas_brutas_empenhadas text,
             rendimento_mensal_per_capita text, total_veiculos_2023 text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_estado_ibge" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."estado_ibge" VALUES
             ('PA','15','paraense','HELDER','1245870.242','8120131','6.52','1331723','0.69','52747856526.44','43981234831.53','1282','2627090');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_estado_faixa" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."estado_faixa" (
             sigla text, regiao text, faixa_ini text, faixa_fim text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_estado_faixa" VALUES ('PA','Pará','66000000','68899999');
+        INSERT INTO carga_dne_00000000000000000000000000000001."estado_faixa" VALUES ('PA','Pará','66000000','68899999');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_cidade" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."cidade" (
             id_cidade int, cidade_ibge text, cidade text, cidade_sem_acento text, estado text, ddd text, latitude text, longitude text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_cidade" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."cidade" VALUES
             (1,'1500402','Marabá','Maraba','PA','94','-5.36867','-49.11731');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_cidade_ibge_territorio" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."cidade_ibge_territorio" (
             cidade_ibge text, mesorregiao text, mesorregiao_nome text, microrregiao text, microrregiao_nome text,
             regiao_intermediaria text, regiao_intermediaria_nome text,
             regiao_geografica_imediata text, regiao_geografica_imediata_nome text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_cidade_ibge_territorio" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."cidade_ibge_territorio" VALUES
             ('1500402','1503','Sudeste Paraense','15009','Marabá','1503','Marabá','150009','Marabá');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_cidade_ibge" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."cidade_ibge" (
             cidade_ibge text, gentilico text, prefeito text, area_territorial_km2 text, populacao_residente text,
             densidade_demografica text, escolarizacao_6_a_14_anos text, idice_de_desenv_humano text,
             mortalidade_infantil text, receitas_realizadas text, despesas_empenhadas text, pib_per_capita text,
             aniversario_municipio text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_cidade_ibge" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."cidade_ibge" VALUES
             ('1500402','marabaense','PREFEITO','15128.27','283542','18.7','96.5','0.668','-','1234567.89','1000000.00','25000.00','05/04');
 
-        -- Schema real (#14): só id_cidade, cidade, estado, faixa_ini, faixa_fim — sem
-        -- cidade_ibge. id_cidade=1 casa com o id_cidade da tabela "cidade" acima.
-        CREATE TABLE dne_staging."tbl_cep_202601_n_cidade_faixa" (
+        -- Só id_cidade, cidade, estado, faixa_ini, faixa_fim — sem cidade_ibge.
+        -- id_cidade=1 casa com o id_cidade da tabela "cidade" acima.
+        CREATE TABLE carga_dne_00000000000000000000000000000001."cidade_faixa" (
             id_cidade int, cidade text, estado text, faixa_ini text, faixa_fim text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_cidade_faixa" VALUES (1,'Marabá','PA','68500000','68519999');
+        INSERT INTO carga_dne_00000000000000000000000000000001."cidade_faixa" VALUES (1,'Marabá','PA','68500000','68519999');
         """;
 
-    private const string StagingFolhasSql = """
-        CREATE TABLE dne_staging."tbl_cep_202601_n_distrito" (
+    private const string FolhasDoEsquemaSql = """
+        CREATE TABLE carga_dne_00000000000000000000000000000001."distrito" (
             id_distrito int, distrito text, distrito_sem_acento text, cidade_id int, estado text, latitude text, longitude text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_distrito" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."distrito" VALUES
             (10,'Cidade Nova','Cidade Nova',1,'PA','-5.36','-49.11');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_distrito_faixa" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."distrito_faixa" (
             id_distrito int, faixa_ini text, faixa_fim text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_distrito_faixa" VALUES (10,'68500000','68519999');
+        INSERT INTO carga_dne_00000000000000000000000000000001."distrito_faixa" VALUES (10,'68500000','68519999');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_bairro_faixa" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."bairro_faixa" (
             id_bairro int, faixa_ini text, faixa_fim text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_bairro_faixa" VALUES (100,'68500000','68509999');
+        INSERT INTO carga_dne_00000000000000000000000000000001."bairro_faixa" VALUES (100,'68500000','68509999');
 
-        CREATE TABLE dne_staging."tbl_cep_202601_n_logradouro" (
+        CREATE TABLE carga_dne_00000000000000000000000000000001."logradouro" (
             cep text, tipo text, nome_logradouro text, logradouro text, bairro_id int, distrito_id int, cidade_id int,
             estado text, tipo_sem_acento text, nome_logradouro_sem_acento text, logradouro_sem_acento text,
             latitude text, longitude text, cep_ativo text);
-        INSERT INTO dne_staging."tbl_cep_202601_n_logradouro" VALUES
+        INSERT INTO carga_dne_00000000000000000000000000000001."logradouro" VALUES
             ('68500000','Rua','A','Rua A',NULL,10,1,'PA','Rua','A','Rua A','-5.36','-49.11','S'),
             ('68500001','Rua','B','Rua B',NULL,NULL,1,'PA','Rua','B','Rua B',NULL,NULL,'N'),
             ('68525000','','','',NULL,NULL,1,'PA','','','','-5.046','-48.59947','N'),

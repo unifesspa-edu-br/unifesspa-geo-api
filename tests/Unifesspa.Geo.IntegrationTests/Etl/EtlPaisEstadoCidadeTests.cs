@@ -173,7 +173,7 @@ public sealed class EtlPaisEstadoCidadeTests
     public async Task FalhaNoMeio_FazRollbackTotal()
     {
         await LimparAsync();
-        FonteComFalhaNasCidades fonte = new(FonteCompleta());
+        await using FonteComFalhaNasCidades fonte = new(FonteCompleta());
 
         await using (GeoDbContext ctx = _fixture.CreateDbContext())
         {

@@ -14,6 +14,8 @@ using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Domain.Errors;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -154,6 +156,8 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime
         return new GeoReconciliacaoStartupHostedService(
             servicos.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
+            new FabricaDeFonteFixa(),
+            new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")),
             TimeProvider.System,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }

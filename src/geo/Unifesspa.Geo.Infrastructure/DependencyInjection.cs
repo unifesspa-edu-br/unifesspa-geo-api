@@ -3,7 +3,7 @@ namespace Unifesspa.Geo.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 using Unifesspa.Geo.Application.Abstractions;
 using Unifesspa.Geo.Application.Abstractions.Interfaces;
@@ -16,6 +16,7 @@ using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Bulk;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.Infrastructure.Persistence.Readers;
 
 /// <summary>
@@ -69,9 +70,16 @@ public static class GeoInfrastructureRegistration
         // 1 round-trip ao Redis no hot path em vez de 2. AddMemoryCache é idempotente.
         services.AddMemoryCache();
 
-        // carga DNE (ADR-0092) — serviços de carga de reference data. O gatilho (seed
-        // dev / endpoint admin) e a fonte concreta de produção entram na Story #674.
-        // Topo da hierarquia (País/Estado/Cidade, #672):
+        services.AddImportadoresDaCargaDne();
+        services.AddExecucaoDaCargaDne();
+
+        return services;
+    }
+
+    private static void AddImportadoresDaCargaDne(this IServiceCollection services)
+    {
+        // carga DNE (ADR-0092) — serviços de carga de reference data.
+        // Topo da hierarquia (País/Estado/Cidade):
         services.AddScoped<IGeoImportador, GeoImportadorPaisEstadoCidade>();
 
         // Folhas (Distrito/Bairro/Logradouro + satélites): compõe o upsert de
@@ -79,60 +87,53 @@ public static class GeoInfrastructureRegistration
         services.AddScoped<GeoImportadorDistritoBairro>();
         services.AddScoped<ImportadorDeLogradourosPorCopia>();
         services.AddScoped<IGeoImportadorLocalidades, GeoImportadorLocalidades>();
+    }
 
+    private static void AddExecucaoDaCargaDne(this IServiceCollection services)
+    {
         // Atualização periódica: registro e consulta (API), executor da carga (processo em segundo plano),
-        // trava consultiva, fila em processo, fonte por versão, selo do cache e métricas.
+        // trava consultiva, fila em processo, fonte da execução, selo do cache e métricas.
         services.AddSingleton<TravaConsultivaDaCargaDne>();
         services.AddScoped<ImportadorDaVersaoDne>();
         services.AddScoped<FinalizacaoDaCargaDne>();
         services.AddScoped<IGeoImportacaoService, RegistroDasImportacoes>();
         services.AddScoped<IGeoImportacaoExecutor, CargaDaImportacao>();
         services.AddSingleton<IGeoImportacaoFila, GeoImportacaoFila>();
-        services.AddSingleton<IGeoFonteDadosFactory, DneStagingFonteFactory>();
+        services.AddSingleton(sp => new ArquivoDoPacoteDne(sp.GetRequiredService<IOptions<EtlOpcoes>>().Value.DiretorioDoPacote));
+        services.AddSingleton<IFonteDaExecucaoDne, EsquemaDeCargaDne>();
         services.AddScoped<IGeoCepCacheInvalidador, RedisGeoCepCacheInvalidador>();
         // Lazy para o executor: difere a resolução da cadeia Redis (IConnectionMultiplexer
         // conecta na construção) até o momento de selar — só no processo em segundo plano, nunca no disparo.
         services.AddScoped(sp => new Lazy<IGeoCepCacheInvalidador>(sp.GetRequiredService<IGeoCepCacheInvalidador>));
         services.AddSingleton<GeoEtlMetrics>();
-
-        return services;
     }
 
     /// <summary>
-    /// Registra os gatilhos hospedados da carga: a reconciliação de órfãs na partida,
-    /// o <c>BackgroundService</c> que executa as cargas enfileiradas e o seed de
-    /// desenvolvimento. <strong>Deve ser chamado no Program APÓS
-    /// <c>AddDbContextMigrationsOnStartup&lt;GeoDbContext&gt;()</c></strong> — como
+    /// Registra os gatilhos hospedados da carga: a reconciliação na partida e o
+    /// <c>BackgroundService</c> que executa as cargas enfileiradas. <strong>Deve ser chamado
+    /// no Program APÓS <c>AddDbContextMigrationsOnStartup&lt;GeoDbContext&gt;()</c></strong> — como
     /// <c>HostOptions.ServicesStartConcurrently</c> é <see langword="false"/>, a ordem de
-    /// registro é a ordem de start: migrations → reconciliação → processo em segundo plano → seed.
+    /// registro é a ordem de start: migrations → reconciliação → processo em segundo plano.
     /// </summary>
     public static IServiceCollection AddGeoEtlGatilhos(
         this IServiceCollection services,
-        IConfiguration configuration,
-        IHostEnvironment environment)
+        IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(environment);
 
-        services.AddOptions<EtlOpcoes>().Bind(configuration.GetSection(EtlOpcoes.SectionName));
+        services.AddSingleton<IValidateOptions<EtlOpcoes>, ValidadorDasOpcoesDoPacote>();
+        services.AddOptions<EtlOpcoes>().Bind(configuration.GetSection(EtlOpcoes.SectionName)).ValidateOnStart();
 
         EtlOpcoes opcoes = configuration.GetSection(EtlOpcoes.SectionName).Get<EtlOpcoes>() ?? new EtlOpcoes();
 
         if (opcoes.ProcessoEmSegundoPlanoHabilitado)
         {
-            // Reconciliação de órfãs ANTES do processo em segundo plano e do seed: hosted service cujo
-            // StartAsync é aguardado pelo host, liberando o índice único parcial antes
-            // que qualquer disparo possa colidir nele.
+            // Reconciliação ANTES do processo em segundo plano: hosted service cujo StartAsync é
+            // aguardado pelo host, limpando o diretório de pacotes, liberando o índice único parcial
+            // e descartando os esquemas de carga órfãos antes que qualquer envio seja aceito.
             services.AddHostedService<GeoReconciliacaoStartupHostedService>();
             services.AddHostedService<GeoImportacaoBackgroundService>();
-        }
-
-        // Seed só em Development e com a flag ligada (default off) — os testes rodam como
-        // Development mas não ligam a flag, então nunca semeiam.
-        if (environment.IsDevelopment() && opcoes.SeedHabilitado)
-        {
-            services.AddHostedService<GeoSeedHostedService>();
         }
 
         return services;

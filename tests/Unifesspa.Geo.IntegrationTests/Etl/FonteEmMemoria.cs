@@ -5,12 +5,14 @@ using System.Runtime.CompilerServices;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 
 /// <summary>
-/// <see cref="IGeoFonteDados"/> em memória para exercitar o importador sem um schema
-/// de staging real — determinístico e legível. A <see cref="Versao"/> é a proveniência
+/// Fonte da carga em memória para exercitar o importador sem esquema de carga nem pacote:
+/// determinística e legível, e descartá-la não apaga nada. A <see cref="Versao"/> é a proveniência
 /// da carga.
 /// </summary>
-internal sealed class FonteEmMemoria : IGeoFonteDados
+internal sealed class FonteEmMemoria : IFonteDaCargaDne
 {
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
     public string Versao { get; init; } = "202601";
 
     public List<PaisCru> Paises { get; } = [];
@@ -234,7 +236,7 @@ internal static class DadosDne
 /// País/Estado já foram persistidos (dentro da transação) quando a falha ocorre, o
 /// que prova o rollback total da carga (nenhum dado publicado em versão parcial).
 /// </summary>
-internal sealed class FonteComFalhaNasCidades : IGeoFonteDados
+internal sealed class FonteComFalhaNasCidades : IFonteDaCargaDne
 {
     private readonly FonteEmMemoria _interna;
 
@@ -244,6 +246,8 @@ internal sealed class FonteComFalhaNasCidades : IGeoFonteDados
     }
 
     public string Versao => _interna.Versao;
+
+    public ValueTask DisposeAsync() => _interna.DisposeAsync();
 
     public IAsyncEnumerable<PaisCru> LerPaisesAsync(CancellationToken cancellationToken) => _interna.LerPaisesAsync(cancellationToken);
 

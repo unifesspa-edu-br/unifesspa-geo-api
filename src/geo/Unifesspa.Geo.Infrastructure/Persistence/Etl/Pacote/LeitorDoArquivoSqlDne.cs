@@ -46,7 +46,10 @@ internal sealed class LeitorDoArquivoSqlDne
     /// <summary>Bytes descompactados lidos do arquivo até aqui.</summary>
     public long BytesDescompactados => _linhas.BytesLidos;
 
-    /// <summary>Lê até o fim do <c>CREATE TABLE</c> e devolve as colunas na ordem do arquivo.</summary>
+    /// <summary>
+    /// Lê até o fim do <c>CREATE TABLE</c> e devolve as colunas obrigatórias da tabela, na ordem em
+    /// que <see cref="LerLinhasAsync"/> entrega os valores. As colunas extras do arquivo são descartadas.
+    /// </summary>
     public async Task<IReadOnlyList<ColunaDne>> LerCabecalhoAsync(CancellationToken cancellationToken)
     {
         while (_estado != EstadoDoArquivoSql.AposCreateTable)
@@ -56,10 +59,13 @@ internal sealed class LeitorDoArquivoSqlDne
             Processar(linha);
         }
 
-        return _colunas.Colunas;
+        return TabelasDne.ColunasObrigatorias(_tabela);
     }
 
-    /// <summary>Lê o resto do arquivo, devolvendo os valores de cada <c>INSERT</c>, e confere o fim do arquivo.</summary>
+    /// <summary>
+    /// Lê o resto do arquivo, devolvendo os valores das colunas obrigatórias de cada <c>INSERT</c>
+    /// (na ordem de <see cref="LerCabecalhoAsync"/>), e confere o fim do arquivo.
+    /// </summary>
     public async IAsyncEnumerable<object?[]> LerLinhasAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         string? linha;
@@ -199,18 +205,31 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private void ProcessarColuna(string linha)
     {
+        if (!TentarFecharColunas(linha))
+        {
+            AdicionarColuna(linha);
+        }
+    }
+
+    private bool TentarFecharColunas(string linha)
+    {
         if (linha == FechamentoEmUmaLinha)
         {
             FecharCriacaoDaTabela();
-            return;
+            return true;
         }
 
-        if (linha == ")")
+        if (linha != ")")
         {
-            _estado = EstadoDoArquivoSql.AguardandoPontoEVirgulaCreateTable;
-            return;
+            return false;
         }
 
+        _estado = EstadoDoArquivoSql.AguardandoPontoEVirgulaCreateTable;
+        return true;
+    }
+
+    private void AdicionarColuna(string linha)
+    {
         Match coluna = PadroesDoArquivoSqlDne.ColunaDaTabela().Match(linha);
         if (!coluna.Success || !_colunas.Adicionar(ColunaDe(coluna)))
         {
@@ -243,23 +262,29 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private object?[] LerInsert(string linha)
     {
-        int fimDoInicio = _inicioDoInsert.Length;
+        object?[] valores = LerValoresDoInsert(linha);
+        return _colunas.AceitaValores(valores)
+            ? _colunas.ValoresObrigatorios(_tabela, valores)
+            : throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.ValoresIncompativeis);
+    }
+
+    private object?[] LerValoresDoInsert(string linha)
+    {
+        ConferirFormaDoInsert(linha);
+        ReadOnlySpan<char> tupla = linha.AsSpan(_inicioDoInsert.Length, linha.Length - _inicioDoInsert.Length - FechamentoEmUmaLinha.Length);
+        return ValoresDoInsert.TentarLer(tupla, out object?[] valores)
+            ? valores
+            : throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.ValoresForaDaGramatica);
+    }
+
+    private void ConferirFormaDoInsert(string linha)
+    {
         if (!linha.StartsWith(_inicioDoInsert, StringComparison.Ordinal)
             || !linha.EndsWith(FechamentoEmUmaLinha, StringComparison.Ordinal)
-            || linha.Length < fimDoInicio + FechamentoEmUmaLinha.Length)
+            || linha.Length < _inicioDoInsert.Length + FechamentoEmUmaLinha.Length)
         {
             throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.ComandoForaDaGramatica);
         }
-
-        ReadOnlySpan<char> tupla = linha.AsSpan(fimDoInicio, linha.Length - fimDoInicio - FechamentoEmUmaLinha.Length);
-        if (!ValoresDoInsert.TentarLer(tupla, out object?[] valores))
-        {
-            throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.ValoresForaDaGramatica);
-        }
-
-        return _colunas.AceitaValores(valores)
-            ? valores
-            : throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.ValoresIncompativeis);
     }
 
     private bool TentarAbrirIndice(string linha)
@@ -271,16 +296,20 @@ internal sealed class LeitorDoArquivoSqlDne
         }
 
         ConferirNome(comando);
-        Group colunasEmLinhaUnica = comando.Groups["colunas"];
+        IniciarIndice(comando.Groups["colunas"]);
+        return true;
+    }
+
+    private void IniciarIndice(Group colunasEmLinhaUnica)
+    {
         if (colunasEmLinhaUnica.Success)
         {
             ConferirColunasDoIndice(colunasEmLinhaUnica.Value.Split(','));
-            return true;
+            return;
         }
 
         _colunasDoIndice = 0;
         _estado = EstadoDoArquivoSql.EmCreateIndex;
-        return true;
     }
 
     private void ProcessarLinhaDoIndice(string linha)
@@ -297,16 +326,16 @@ internal sealed class LeitorDoArquivoSqlDne
 
     private void ConferirColunasDoIndice(string[] colunas)
     {
-        bool existem = colunas.All(coluna =>
-        {
-            Match especificacao = PadroesDoArquivoSqlDne.ColunaDoIndice().Match(coluna);
-            return especificacao.Success && _colunas.Contem(especificacao.Groups["nome"].Value);
-        });
-
-        if (!existem)
+        if (!colunas.All(ColunaDoIndiceExiste))
         {
             throw _linhas.Recusa(MotivosDeRecusaDoArquivoSqlDne.IndiceInvalido);
         }
+    }
+
+    private bool ColunaDoIndiceExiste(string coluna)
+    {
+        Match especificacao = PadroesDoArquivoSqlDne.ColunaDoIndice().Match(coluna);
+        return especificacao.Success && _colunas.Contem(especificacao.Groups["nome"].Value);
     }
 
     private bool TentarChavePrimaria(string linha)

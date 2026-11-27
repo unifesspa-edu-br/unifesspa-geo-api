@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl;
+using Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
@@ -72,6 +73,8 @@ public sealed class GeoReconciliacaoStartupHostedServiceTests
         return new GeoReconciliacaoStartupHostedService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
+            new FabricaDeFonteFixa(),
+            new ArquivoDoPacoteDne(Path.Combine(Path.GetTempPath(), $"pacotes-dne-{Guid.NewGuid():N}")),
             TimeProvider.System,
             NullLogger<GeoReconciliacaoStartupHostedService>.Instance);
     }

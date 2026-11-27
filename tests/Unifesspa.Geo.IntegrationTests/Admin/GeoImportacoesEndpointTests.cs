@@ -228,7 +228,7 @@ public sealed class GeoImportacoesEndpointTests : IAsyncLifetime
     private async Task SemearCidadeAsync(string versao)
     {
         await using GeoDbContext ctx = _fixture.CreateDbContext();
-        FonteEmMemoria fonte = new() { Versao = versao };
+        await using FonteEmMemoria fonte = new() { Versao = versao };
         fonte.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
         fonte.Estados.Add(DadosDne.Estado("PA", "Pará"));
         fonte.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
