@@ -79,7 +79,7 @@ Consumers may:
 ## Cutover rule
 
 During environment promotion, only one Geo runtime may own database migrations,
-ETL workers, seed and reconciliation for a given environment.
+ETL workers and reconciliation for a given environment.
 
 Before starting a dedicated Geo image in an environment that still runs the old
 Geo deployable from `uniplus-api`, stop the old runtime or disable its migration
@@ -97,7 +97,7 @@ Rollback target:
 Rollback steps:
 
 1. Stop the failing dedicated Geo runtime.
-2. Confirm no second Geo runtime is running migrations, ETL, seed or
+2. Confirm no second Geo runtime is running migrations, ETL or
    reconciliation for the same database.
 3. Redeploy the selected known-good image.
 4. Verify `/health/live`, `/health/ready` and `GET /openapi/geo.json`.

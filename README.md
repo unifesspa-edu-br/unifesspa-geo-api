@@ -30,6 +30,13 @@ O contrato V1 deve preservar a semântica atual do Geo:
 
 O baseline inicial está em `contracts/openapi.geo.json`.
 
+## Atualização da base dos Correios
+
+A base de CEP e endereços é atualizada enviando o pacote zip dos Correios por
+`POST /api/admin/geo/importacoes` (`application/zip`, papel `plataforma-admin`).
+A carga roda em segundo plano, publica tudo numa única transação e, se falhar,
+mantém a versão anterior. Consulte `docs/geo-etl-dataset-dne.md` e a ADR-0098.
+
 ## Desenvolvimento
 
 Consulte `docs/development.md`.

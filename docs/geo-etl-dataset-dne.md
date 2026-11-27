@@ -1,76 +1,123 @@
-# ETL do Geo — ingestão do dataset DNE
+# Carga da base dos Correios (DNE) no Geo
 
-Guia operacional da carga de reference data do módulo `Geo` (localidades, endereçamento e georreferência nacional) a partir do dataset **DNE Correios + IBGE**. Decisões em [ADR-0090](adrs/0090-modulo-geo-localidades.md), [ADR-0091](adrs/0091-postgis-georreferencia-nts.md), [ADR-0092](adrs/0092-etl-carga-dne-reference-data.md) e [ADR-0097](adrs/0097-nome-do-municipio-pelo-ibge.md).
+Guia de operação da atualização dos dados de localidades, endereçamento e georreferência do Geo a partir do pacote dos Correios (DNE) e da lista de municípios do IBGE. Decisões em [ADR-0090](adrs/0090-modulo-geo-localidades.md), [ADR-0091](adrs/0091-postgis-georreferencia-nts.md), [ADR-0092](adrs/0092-etl-carga-dne-reference-data.md), [ADR-0097](adrs/0097-nome-do-municipio-pelo-ibge.md) e [ADR-0098](adrs/0098-carga-da-base-dos-correios-pelo-envio-do-pacote.md).
 
-## Estratégia: banco de staging dedicado + SELECT streamado
+## Visão geral
 
-O dataset DNE é distribuído como **15 dumps SQL** (um por tabela, `tbl_cep_{versao}_n_*`; a maior — `logradouro` — tem ~1,4M linhas / ~382 MB). Esses dumps **não são versionados** neste repositório: a base DNE é proprietária (Correios) e exige licença institucional. Os dumps são gerados via Navicat e qualificam o schema explicitamente em todo `CREATE TABLE`/`INSERT` (`"public"."tbl_cep_{versao}_n_*"`) — não há como redirecioná-los para outro schema via `search_path` (issue #12).
+A atualização é feita enviando o pacote dos Correios pela própria API. Não há banco de preparação nem restauração manual: o Geo recebe o arquivo, confere o conteúdo, carrega os dados num esquema temporário do seu banco e publica tudo de uma só vez. Se algo falhar, a versão anterior continua publicada.
 
-As colunas **descritivas** são `varchar` (nomes, siglas, métricas, lat/long como texto — daí o parse tolerante); os **identificadores** das folhas são `int4`: as PKs da fonte (`id_cidade`, `id_distrito`, `id_bairro`) e as FKs internas (`cidade_id`, `distrito_id`, `bairro_id`). O ETL os lê com o acessor tipado (`GetInt32`/`IsDBNull`) e os traduz para os Guid intra-banco; o domínio nunca adota esses inteiros como identidade.
+O pacote dos Correios é proprietário (exige licença institucional) e **não é versionado** neste repositório.
 
-A ingestão usa **dois bancos Postgres distintos** (mesma instância) e dois passos desacoplados:
+## Como obter o pacote
 
-1. **Provisionamento (fora do ciclo da API):** os dumps são restaurados sem nenhuma alteração no banco **`uniplus_geo_staging`** — dedicado, independente do banco de domínio `uniplus_geo` (issue #12) — via `psql -f`. Como os dumps já apontam para `"public"`, e esse banco não tem mais nada além do dataset bruto, seu `public` **nativo** os recebe tal como o Navicat os gerou, sem `sed`/reescrita de schema. Os dumps são auto-suficientes (`DROP TABLE IF EXISTS` + `CREATE TABLE` + `INSERT`), então re-restaurar é limpo e idempotente.
-2. **Carga (serviço de `Geo.Infrastructure`):** o ETL lê o staging (`ConnectionStrings:GeoStagingDb`) por `SELECT` **streamado** (`DbDataReader` — leitura linha-a-linha, uso de memória estável mesmo nas tabelas grandes), aplica **parse tolerante** (`'-'`/vazio → `null`, `'S'`/`'N'` → `bool`, lat/long → `geography(Point,4326)`), resolve as FKs e faz **upsert por chave natural** no banco de domínio `uniplus_geo` (`ConnectionStrings:GeoDb`, schema `public`).
+O pacote é o arquivo zip distribuído pelos Correios, por exemplo `tbl_cep_AAAAMM_postgresql.zip`. Ele contém:
 
-```
-dumps .sql  ──psql -f──▶  uniplus_geo_staging.public (15 tabelas varchar, banco dedicado)
-                              │  SELECT streamado (DneStagingFonte, GeoStagingDb)
-                              ▼
-        parse tolerante ─▶ upsert por chave natural ─▶ uniplus_geo.public.* (domínio Uni+, GeoDb)
-```
+- 15 arquivos `tbl_cep_AAAAMM_n_{tabela}.sql`, um por tabela, todos no topo do zip ou todos dentro de uma única pasta (por exemplo `postgresql/`), com ou sem a entrada da própria pasta;
+- opcionalmente, arquivos que acompanham o pacote, como a imagem `0relacionamentos.jpg` ou `0relacionamentos.png`, que o Geo ignora sem abrir.
 
-### Por que staging-DB (e não parsear os .sql em C#)
+A versão do pacote é lida do nome dos 15 arquivos `.sql`, e todos devem ter a mesma versão. O nome do zip não conta: um zip pode ter nome de um mês e conter tabelas do mês seguinte.
 
-- **Streaming nativo:** o `DbDataReader` do Npgsql resolve os ~382 MB de logradouro sem carregar o arquivo em memória — sem reimplementar um parser de `INSERT` textual (frágil com escaping/acentos/`NULL`).
-- **Resolução de FK:** as FKs internas da DNE (`id_cidade`, `distrito_id`, `bairro_id`, inteiros **instáveis entre versões**) ficam disponíveis para JOIN no staging. O domínio nunca usa esses inteiros como identidade — usa Guid v7 (ADR-0032) + chave natural.
-- **Banco dedicado, não um schema do domínio (issue #12):** como os dumps já se qualificam para `"public"`, um banco próprio deixa o `public` nativo recebê-los sem qualquer reescrita — zero risco às tabelas/extensões do domínio (PostGIS, `spatial_ref_sys`) e zero `sed`/`search_path` frágil. Role dedicada (`uniplus_geo_staging_app`, diferente de `uniplus_geo_app`) por menor privilégio.
-- **Recarga idempotente:** ver abaixo.
+## Como enviar
 
-## Restauração do staging (dev)
-
-Pré-requisito: o banco `uniplus_geo_staging` (role `uniplus_geo_staging_app`) provisionado por `docker/init-db.sql`. A connection string é `ConnectionStrings:GeoStagingDb` (`appsettings.Development.json` para rodar a API local; valores documentados em `docker/.env.example`).
-
-> `docker/init-db.sql` só roda no **primeiro boot** do volume do Postgres (`/docker-entrypoint-initdb.d`, comportamento padrão da imagem). Quem já tinha a stack rodando antes desta mudança precisa recriar o volume (`docker compose down -v && docker compose up -d postgres`, perde os dados locais existentes) **ou** rodar o provisionamento manualmente, sem perder nada — em **dois** comandos `psql -c` separados: `CREATE DATABASE` não pode rodar dentro de bloco de transação, e múltiplos statements num único `-c` são enviados como uma transação implícita:
-> ```bash
-> docker exec -it <container_postgres> psql -U "$POSTGRES_USER" -c \
->   "CREATE ROLE uniplus_geo_staging_app LOGIN PASSWORD 'uniplus_dev';"
-> docker exec -it <container_postgres> psql -U "$POSTGRES_USER" -c \
->   "CREATE DATABASE uniplus_geo_staging OWNER uniplus_geo_staging_app;"
-> ```
+O envio exige um token de acesso com o papel `plataforma-admin`. O arquivo vai direto no corpo da requisição, sem formulário:
 
 ```bash
-# 1. Descompactar os dumps (ex.: tbl_cep_202609_postgresql.zip, que traz as tabelas tbl_cep_202610_*) num diretório.
-# 2. Restaurar cada dump direto no banco de staging — SEM sed, SEM search_path: os
-#    dumps já qualificam "public", e esse banco só existe para recebê-los.
-GEO_STAGING_CONN="postgresql://uniplus_geo_staging_app:uniplus_dev@localhost:5432/uniplus_geo_staging"
-for f in tbl_cep_202610_n_*.sql; do
-  psql "$GEO_STAGING_CONN" -f "$f"
-done
+curl -i -X POST http://localhost:5270/api/admin/geo/importacoes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/zip" \
+  --data-binary @pacote.zip
 ```
 
-Restaurar de novo (mesma versão ou uma versão nova) é seguro: cada dump começa com `DROP TABLE IF EXISTS`, então o `psql -f` substitui a tabela por completo.
+`$TOKEN` é o token do operador. O tamanho máximo do pacote é 128 MiB por padrão (`Geo:Etl:TamanhoMaximoDoPacote`).
 
-## Disparo do ETL e validação ponta a ponta (dev)
+### Respostas
 
-Com o staging restaurado (seção anterior) e a API local no ar (`dotnet run --project src/geo/Unifesspa.Geo.API`), a carga é disparada pelo endpoint admin — exige JWT com role `plataforma-admin` (ver `docs/development.md` §Authentication):
+| Código | Significado | O que fazer |
+|---|---|---|
+| 202 | Pacote aceito; a carga começou em segundo plano. O cabeçalho `Location` aponta para o acompanhamento da execução. | Acompanhar pelo `Location`. |
+| 200 | Esse mesmo pacote já é a publicação vigente (mesmo resumo SHA-256 da última carga concluída). Nada foi repetido; o corpo traz essa execução. | Nada. |
+| 401 | Sem token válido. | Obter um token. |
+| 403 | O token não tem o papel `plataforma-admin`. | Usar uma conta com o papel. |
+| 409 | Há uma carga em andamento (`em_andamento`), ou a versão do pacote é anterior à última aplicada (`versao_nao_progressiva`). | Aguardar o fim da carga, ou enviar uma versão igual ou mais nova. |
+| 413 | O pacote passa do tamanho máximo (`pacote_acima_do_limite`). | Conferir o arquivo e o limite configurado. |
+| 415 | O tipo de conteúdo não é `application/zip` (`tipo_de_conteudo_nao_suportado`). | Enviar com `Content-Type: application/zip`. |
+| 422 | O conteúdo do zip não confere (`pacote_invalido`): não é um zip, falta ou sobra tabela, as entradas estão em pastas diferentes, há arquivo cifrado, o zip tem mais entradas que o limite, tamanho declarado acima do limite ou versões diferentes entre as tabelas. Todas as faltas vêm juntas na resposta. | Corrigir o pacote e reenviar. |
+| 503 | A carga foi registrada, mas não pôde entrar na fila porque o serviço está desligando (`nao_enfileirada`). | Reenviar depois que o serviço voltar. |
+
+Os erros usam `application/problem+json`. A autorização (401 e 403) é decidida antes de ler o corpo; o tipo de conteúdo e o tamanho declarado, também. O limite de tamanho vale ainda durante o recebimento, para envios sem tamanho declarado.
+
+### Conferência feita na hora do envio
+
+Antes de responder 202, o Geo confere a lista de arquivos do zip, sem descompactar:
+
+- exatamente as 15 tabelas, cada uma uma vez; um arquivo `.sql` que não é uma das 15 é recusado;
+- todas as entradas no topo ou todas na mesma pasta, de um só nível, com nome de até 64 caracteres entre letras, números, `_` e `-`; a entrada da própria pasta é opcional e deve estar vazia; nomes com `\`, `..`, `:` ou mais de uma `/` são recusados;
+- os demais arquivos (imagem, por exemplo) são aceitos e ignorados, cada um com tamanho declarado de até 5 MiB;
+- no máximo `QuantidadeMaximaDeEntradasDoPacote` entradas (padrão 32, contando a da pasta), nomes de até 128 caracteres, nenhuma entrada cifrada;
+- tamanhos declarados dentro dos limites (768 MiB por arquivo e 1 GiB no total);
+- a mesma versão AAAAMM válida em todas as tabelas.
+
+Na leitura de cada arquivo `.sql`, o `INSERT` pode cruzar linhas só dentro de texto entre aspas simples (até 8 linhas e 64 KiB por comando); o texto guarda as quebras de linha como estão no arquivo. Fora das aspas, cada comando continua numa só linha.
+
+## Acompanhar a execução
+
+Use o endereço do cabeçalho `Location` (`GET /api/admin/geo/importacoes/{id}`), com o mesmo token:
 
 ```bash
-# 1. Disparar a importação da versão restaurada (retorna 202 + Location do status).
-curl -s -X POST http://localhost:5400/api/admin/geo/importacoes \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"Versao":"202610"}'
-
-# 2. Acompanhar até a execução sair de "EmAndamento" (o worker processa em background —
-#    poucos minutos para o dataset completo, dominado pelo COPY de ~1,4M logradouros).
-curl -s http://localhost:5400/api/admin/geo/importacoes/{id} -H "Authorization: Bearer $TOKEN"
-
-# 3. Validar: um CEP real deve resolver (200), não 404 — sintoma original do #12
-#    era justamente uma base vazia por o staging ter sido restaurado no schema errado.
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5400/api/cep/{cep-real-do-dataset}
+curl -s http://localhost:5270/api/admin/geo/importacoes/{id} \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-O relatório da execução (passo 2) traz contadores por tabela (lidos/inseridos/atualizados/órfãos/duplicados/degradados) — qualquer tabela com "lidos=0" indica que o staging não tinha os dados esperados (dump não restaurado, versão divergente).
+A situação (`status`) é `EmAndamento`, `Concluida` ou `Falhou`. A resposta traz a versão, o resumo SHA-256 e o tamanho do pacote, a mensagem (em caso de falha) e, ao concluir, o relatório com os contadores por tabela (lidos, inseridos, atualizados, órfãos, duplicados e degradados). Com o conjunto completo, a carga leva alguns minutos e é dominada pela cópia dos cerca de 1,4 milhão de logradouros.
+
+Problemas no conteúdo dos arquivos `.sql` (comando desconhecido, coluna faltando, linha malformada) são descobertos durante a carga, depois do 202. Nesse caso a execução termina como `Falhou`, e a mensagem indica a tabela e o número da linha, nunca o conteúdo do arquivo.
+
+## Repetição e versões
+
+- Reenviar o pacote cujo resumo SHA-256 é o da última carga concluída devolve 200 e não repete nada. Não há opção de forçar a recarga do mesmo pacote.
+- Enviar um pacote diferente da mesma versão (uma correção) inicia uma nova carga.
+- Versão anterior à última aplicada é recusada com 409. Cargas que falharam não contam para esse limite.
+- Uma carga por vez: um segundo envio durante a carga recebe 409 antes de o corpo ser lido.
+
+## Falha mantém a versão anterior
+
+A publicação é uma única transação. Falha, cancelamento, estouro de `Geo:Etl:DuracaoMaximaDaCarga` (1 hora por padrão) ou queda do serviço antes da confirmação desfazem tudo: a base publicada continua a versão anterior e a execução termina como `Falhou`. Quem consulta a API vê a versão anterior até o instante da confirmação.
+
+## O que é descartado, e quando
+
+- **O arquivo do pacote** fica num volume em memória do pod (`Geo:Etl:DiretorioDoPacote`), com permissão `0600`, sem cifra no aplicativo. É apagado logo que a carga termina de popular o esquema temporário, em qualquer recusa (409, 413, 422, 200 por repetição), em qualquer falha ou cancelamento e na partida do serviço.
+- **O esquema temporário** `carga_dne_{execução}`, no banco do Geo, é descartado ao fim da carga, em sucesso ou falha, e também na partida do serviço.
+- **A trava da carga** (trava consultiva do PostgreSQL, uma por vez) é obtida no pedido, acompanha a execução e é solta ao fim.
+- Depois de um reinício do serviço, o pacote precisa ser reenviado. Na partida, o serviço só marca como `Falhou` as execuções em andamento quando consegue obter a trava da carga, isto é, quando nenhuma instância está carregando. Se outra instância segura a trava, a execução dela está viva e nada é alterado.
+- Evite implantar uma nova versão durante uma carga: o serviço antigo cancela a carga e desfaz a transação.
+
+## Opções de configuração (`Geo:Etl`)
+
+| Opção | Padrão | Função |
+|---|---|---|
+| `TamanhoMaximoDoPacote` | 128 MiB | Tamanho máximo do pacote enviado. |
+| `QuantidadeMaximaDeEntradasDoPacote` | 32 | Quantidade máxima de entradas do zip, contando a da pasta; aceita de 16 a 256, fora disso a aplicação não inicia. |
+| `DiretorioDoPacote` | `pacotes-dne` no diretório temporário do sistema | Onde o arquivo fica enquanto a carga não popula o esquema temporário (em implantação, o volume em memória do pod). |
+| `DuracaoMaximaDaCarga` | 1 hora | Prazo da carga; passado o prazo, ela é cancelada e desfeita. |
+| `TempoLimiteDosComandosDaCarga` | 30 minutos | Prazo de cada comando longo da carga. |
+| `ProcessoEmSegundoPlanoHabilitado` | `true` | Liga o serviço que executa as cargas; desligado, o envio é aceito e nada o consome. Só desligar em teste. |
+
+## Carga em desenvolvimento
+
+Com a infraestrutura local no ar (`docs/development.md`) e a API em execução (`dotnet run --project src/geo/Unifesspa.Geo.API`), envie um pacote real, se você tiver licença e autorização, ou um pacote sintético de teste, pelo comando da seção "Como enviar". Depois de uma carga concluída, confirme que um CEP do pacote resolve:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5270/api/cep/{cep-do-pacote}
+```
+
+A resposta esperada é 200. Nada é carregado automaticamente na partida da API.
+
+## Como a carga funciona por dentro
+
+1. O pacote é recebido em fluxo e gravado no volume em memória, com o resumo SHA-256 calculado durante a gravação.
+2. O Geo lê cada arquivo `.sql` por uma gramática fechada: reconhece só os comandos conhecidos do pacote, confere colunas e tipos de cada tabela contra uma lista fixa e **nunca executa SQL do arquivo**. Os valores são tipados e enviados ao banco por cópia binária.
+3. Os dados são carregados em tabelas `UNLOGGED` (que não geram registro de transações) do esquema `carga_dne_{execução}`.
+4. Numa única transação, o Geo publica país, estado e cidade, depois distrito, bairro, grande usuário, CEP geral, complementos e logradouros, marca os registros que não estão mais na versão e conclui a execução.
 
 ## Carga atômica e em lote das folhas — Distrito, Bairro e Logradouro
 
@@ -84,7 +131,7 @@ Toda a publicação de uma versão — topo (`pais`, `estado`, `cidade`), folhas
 
 O pipeline das folhas (`GeoImportadorLocalidades`) organiza a carga em duas etapas dentro dessa mesma transação:
 
-1. **Upsert (`GeoImportadorDistritoBairro`)** — `distrito`/`bairro` (+faixas), `cep_grande_usuario` e `cep_geral`, por chave natural. O `cep_geral` guarda o CEP oficial de cidade ou distrito, que a DNE entrega como linha de `logradouro` sem nome (tipo e nomes vazios); essas linhas saem do COPY de logradouros e não contam como ignoradas. Chave natural: `cep`. Esta etapa também **resolve as FKs**: monta os dicionários `id_cidade → Cidade.Id (Guid)` (via JOIN do staging com o domínio pelo código IBGE) e `id_distrito`/`id_bairro → Guid` (os ids da DNE são as PKs da fonte, únicos dentro de uma versão; homônimos em cidades distintas viram entidades distintas).
+1. **Upsert (`GeoImportadorDistritoBairro`)** — `distrito`/`bairro` (+faixas), `cep_grande_usuario` e `cep_geral`, por chave natural. O `cep_geral` guarda o CEP oficial de cidade ou distrito, que a DNE entrega como linha de `logradouro` sem nome (tipo e nomes vazios); essas linhas saem do COPY de logradouros e não contam como ignoradas. Chave natural: `cep`. Esta etapa também **resolve as FKs**: monta os dicionários `id_cidade → Cidade.Id (Guid)` (via JOIN do esquema de carga com o domínio pelo código IBGE) e `id_distrito`/`id_bairro → Guid` (os ids da DNE são as PKs da fonte, únicos dentro de uma versão; homônimos em cidades distintas viram entidades distintas).
 2. **COPY em lote (`ImportadorDeLogradourosPorCopia`)** — `logradouro_complemento` e `logradouro`, via COPY binário streamado sobre a conexão e a transação ativas do `GeoDbContext`.
 
 ### Estratégia de carga em lote (cópia → tabela temporária → mesclagem)
@@ -101,7 +148,7 @@ INSERT ... SELECT DISTINCT ON (chave natural) ... ON CONFLICT DO UPDATE  ─▶ 
 remoção da tabela temporária
 ```
 
-- **COPY binário** (`NpgsqlBinaryImporter`) em lotes sobre a transação ativa do `GeoDbContext`, com leitura **em streaming** do staging-DB — uso de memória estável mesmo nos 1,4M logradouros. A coordenada é escrita explicitamente como `NpgsqlDbType.Geography` (`geography(Point,4326)`).
+- **COPY binário** (`NpgsqlBinaryImporter`) em lotes sobre a transação ativa do `GeoDbContext`, com leitura **em streaming** do esquema de carga — uso de memória estável mesmo nos 1,4M logradouros. A coordenada é escrita explicitamente como `NpgsqlDbType.Geography` (`geography(Point,4326)`).
 - **Dedup intra-fonte** via `DISTINCT ON (chave natural) ... ORDER BY ..., ordem_de_copia DESC` (a última linha vence; `ordem_de_copia` é um `bigserial` preenchido na ordem do COPY) — evita o erro do Postgres "ON CONFLICT cannot affect row a second time".
 - **Idempotência** via `ON CONFLICT (chave natural) DO UPDATE`: preserva `id` (Guid v7) e `created_at`, carimba `updated_at` e reativa `vigente = true`. A chave de `logradouro` é `(cep, nome_normalizado, cidade_id)`; a de `logradouro_complemento`, `(cep, complemento_normalizado)`.
 - **Auditoria sem interceptor**: como o COPY e a mesclagem ignoram o `AuditableInterceptor`, o `created_at` é carimbado pelo `TimeProvider` (no insert) e o `updated_at` só no `DO UPDATE` — tudo num único instante por carga.
@@ -111,8 +158,8 @@ remoção da tabela temporária
 
 A DNE é atualizada mensalmente. Para aplicar uma nova versão (ex.: `202602`):
 
-1. Restaurar o novo dump no banco `uniplus_geo_staging` (substitui o anterior).
-2. Disparar a importação pelo endpoint administrativo (`POST /api/admin/geo/importacoes`) informando a versão `202602` em JSON (`{"Versao":"202602"}`).
+1. Obter o pacote novo dos Correios.
+2. Enviá-lo pelo endpoint administrativo (`POST /api/admin/geo/importacoes`, `application/zip`), como descrito acima. A versão `202602` sai do conteúdo do pacote.
 3. A carga faz **upsert por chave natural** — `sigla_iso`/`uf`/`codigo_ibge` são estáveis entre versões: insere o novo, atualiza o que mudou e grava `versao_dataset=202602` em cada linha tocada.
 4. Na mesma transação, registros ausentes na nova versão (ou não revistos na recarga da mesma versão) são marcados com `vigente = false` (`MarcacaoDeNaoVigentes`), sem exclusão física. Após confirmar a transação, o cache de CEP é selado sem garantia de sucesso com o identificador da execução concluída.
 
@@ -148,7 +195,7 @@ As duas formas existem porque as colunas vêm de fontes diferentes: o nome do mu
 
 ### Ambiente que já tem cidades carregadas
 
-Os nomes só mudam quando a carga roda. Ao atualizar a imagem do Geo num ambiente que já tem cidades (HML, produção, base local), o seed não recarrega e a API continua devolvendo os nomes antigos, e a busca pela grafia oficial não encontra o município. Depois de publicar a imagem nova, dispare a importação da mesma versão da DNE (`POST /api/admin/geo/importacoes`, seção anterior) e confira o resultado, por exemplo: `GET /api/cidades/1505551` deve devolver «Pau D'Arco». A recarga mantém o identificador de cada município.
+Os nomes só mudam quando uma carga roda. Ao atualizar a imagem do Geo num ambiente que já tem cidades (HML, produção, base local), a API continua devolvendo os nomes anteriores até a próxima carga concluída, e a busca pela grafia oficial não encontra o município. Reenviar o mesmo pacote já publicado devolve 200 sem repetir a carga; os nomes novos entram com o envio de um pacote diferente (por exemplo, a próxima versão mensal). Depois dela, confira, por exemplo: `GET /api/cidades/1505551` deve devolver «Pau D'Arco». A carga mantém o identificador de cada município.
 
 ## Parse tolerante (anti-frágil)
 
