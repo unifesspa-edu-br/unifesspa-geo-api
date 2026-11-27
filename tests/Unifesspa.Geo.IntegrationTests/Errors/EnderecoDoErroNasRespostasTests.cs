@@ -32,13 +32,13 @@ public sealed class EnderecoDoErroNasRespostasTests : IDisposable
     [Fact(DisplayName = "Erro de domínio mapeado aponta o type para a base mais o código")]
     public void ResultadoDeDominio_TypeEBaseMaisCodigo()
     {
-        Result falha = Result.Failure(new DomainError("Cpf.Invalido", "O CPF informado é inválido."));
+        Result falha = Result.Failure(new DomainError("uniplus.validacao", "A requisição contém erros de validação."));
 
         IActionResult resposta = falha.ToActionResult(_servicos.GetRequiredService<IDomainErrorMapper>());
 
         ProblemDetails problema = (ProblemDetails)((ObjectResult)resposta).Value!;
-        problema.Type.Should().Be(ServicosDeErroParaTeste.BaseDoPortal + "uniplus.cpf.invalido");
-        problema.Extensions["code"].Should().Be("uniplus.cpf.invalido");
+        problema.Type.Should().Be(ServicosDeErroParaTeste.BaseDoPortal + "uniplus.validacao");
+        problema.Extensions["code"].Should().Be("uniplus.validacao");
     }
 
     [Fact(DisplayName = "401 da autenticação aponta o type para a base mais o código")]

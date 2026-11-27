@@ -49,8 +49,8 @@ public sealed class ProblemTypeOptionsValidacaoTests
     {
         using ServiceProvider servicos = ServicosDeErroParaTeste.Criar(baseDoEndereco);
 
-        Uri endereco = servicos.GetRequiredService<IDomainErrorMapper>().GetProblemTypeUri("uniplus.cpf.invalido");
+        Uri endereco = servicos.GetRequiredService<IDomainErrorMapper>().GetProblemTypeUri("uniplus.geo.cep.formato_invalido");
 
-        endereco.AbsoluteUri.Should().Be("https://portal.exemplo.test/erros/uniplus.cpf.invalido");
+        endereco.AbsoluteUri.Should().Be("https://portal.exemplo.test/erros/uniplus.geo.cep.formato_invalido");
     }
 }
