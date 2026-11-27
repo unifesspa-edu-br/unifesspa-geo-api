@@ -157,13 +157,15 @@ public sealed class PaisEstadoPersistenceTests
     [Fact(DisplayName = "CA-03: Coordenada Point SRID 4326 persiste e relê via NetTopologySuite (geography)")]
     public async Task Estado_Coordenada_Point4326()
     {
-        const double longitude = -49.1278;
-        const double latitude = -5.3686;
+        const decimal longitudeEmGraus = -49.1278m;
+        const decimal latitudeEmGraus = -5.3686m;
+        double longitude = (double)longitudeEmGraus;
+        double latitude = (double)latitudeEmGraus;
 
         Pais pais = GeoTestKeys.Ok(Pais.Importar(GeoTestKeys.SiglaIso(), "AR", "Argentina", null, null, null, null, VersaoDataset));
         Estado estado = GeoTestKeys.Ok(Estado.Importar(
             pais.Id, GeoTestKeys.Uf(), "São Paulo", null, null, null, null,
-            (decimal)latitude, (decimal)longitude,
+            latitudeEmGraus, longitudeEmGraus,
             new Point(longitude, latitude) { SRID = 4326 },
             null, null, VersaoDataset));
 

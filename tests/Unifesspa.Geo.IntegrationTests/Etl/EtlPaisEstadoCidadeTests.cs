@@ -1,5 +1,7 @@
 namespace Unifesspa.Geo.IntegrationTests.Etl;
 
+using System.Runtime.InteropServices;
+
 using AwesomeAssertions;
 
 using Microsoft.EntityFrameworkCore;
@@ -199,6 +201,7 @@ public sealed class EtlPaisEstadoCidadeTests
         return new IdsCapturados(brasil, para.Id, maraba, indicadorPara, faixaPara);
     }
 
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct IdsCapturados(Guid Brasil, Guid Para, Guid Maraba, Guid IndicadorPara, Guid FaixaPara);
 
     private async Task<RelatorioImportacao> ExecutarAsync(IGeoFonteDados fonte)

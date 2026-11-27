@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl.Pacote;
 
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 using Unifesspa.Geo.Domain.Errors;
 using Unifesspa.Geo.Kernel.Results;
@@ -82,6 +83,7 @@ internal static class FimDoDiretorioDoZip
             : ErrosDoPacoteDne.PacoteInvalido("O diretório do zip é inconsistente com o tamanho do arquivo.");
     }
 
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct RegistroDeFim(int Total, uint Tamanho, uint Deslocamento, long Posicao)
     {
         public bool UsaZip64 =>
