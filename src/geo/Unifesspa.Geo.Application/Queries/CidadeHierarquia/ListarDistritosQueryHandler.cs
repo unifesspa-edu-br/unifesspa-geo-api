@@ -20,12 +20,7 @@ public static class ListarDistritosQueryHandler
                 .ListarPorCidadeAsync(query.CodigoIbge, query.AfterId, query.Limit, query.Direction, cancellationToken)
                 .ConfigureAwait(false);
 
-        if (!cidadeExiste)
-        {
-            return new ListarDistritosResult(false, [], anteriorAfterId, proximoAfterId);
-        }
-
         DistritoDto[] items = [.. itens.Select(d => d.ToDto(query.CodigoIbge))];
-        return new ListarDistritosResult(true, items, anteriorAfterId, proximoAfterId);
+        return new ListarDistritosResult(cidadeExiste, items, anteriorAfterId, proximoAfterId);
     }
 }

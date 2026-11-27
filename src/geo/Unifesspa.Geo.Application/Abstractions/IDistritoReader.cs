@@ -8,6 +8,9 @@ using Unifesspa.Geo.Kernel.Pagination;
 /// </summary>
 public interface IDistritoReader
 {
+    /// <summary>
+    /// Cidade inexistente devolve <c>CidadeExiste = false</c>, lista vazia e nenhum cursor.
+    /// </summary>
     Task<(bool CidadeExiste, IReadOnlyList<Distrito> Itens, Guid? AnteriorAfterId, Guid? ProximoAfterId)> ListarPorCidadeAsync(
         string codigoIbge,
         Guid? afterId,

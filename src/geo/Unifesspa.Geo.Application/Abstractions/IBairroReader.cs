@@ -9,6 +9,10 @@ using Unifesspa.Geo.Kernel.Pagination;
 /// </summary>
 public interface IBairroReader
 {
+    /// <summary>
+    /// Cidade inexistente devolve <c>CidadeExiste = false</c>, lista vazia e nenhum cursor.
+    /// Busca nula ou em branco significa "sem filtro".
+    /// </summary>
     Task<(bool CidadeExiste, IReadOnlyList<Bairro> Itens, Guid? AnteriorAfterId, Guid? ProximoAfterId)> ListarPorCidadeAsync(
         string codigoIbge,
         Guid? afterId,

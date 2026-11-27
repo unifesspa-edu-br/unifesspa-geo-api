@@ -14,20 +14,13 @@ public static class ListarLogradourosQueryHandler
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(reader);
 
-        string? busca = string.IsNullOrWhiteSpace(query.Busca) ? null : query.Busca;
-
         (bool cidadeExiste, IReadOnlyList<LogradouroComBairro> itens, Guid? anteriorAfterId, Guid? proximoAfterId) =
             await reader
                 .ListarPorCidadeAsync(
-                    query.CodigoIbge, query.AfterId, query.Limit, query.Direction, busca, cancellationToken)
+                    query.CodigoIbge, query.AfterId, query.Limit, query.Direction, query.Busca, cancellationToken)
                 .ConfigureAwait(false);
 
-        if (!cidadeExiste)
-        {
-            return new ListarLogradourosResult(false, [], anteriorAfterId, proximoAfterId);
-        }
-
         LogradouroResumoDto[] items = [.. itens.Select(l => l.ToDto(query.CodigoIbge))];
-        return new ListarLogradourosResult(true, items, anteriorAfterId, proximoAfterId);
+        return new ListarLogradourosResult(cidadeExiste, items, anteriorAfterId, proximoAfterId);
     }
 }
