@@ -13,8 +13,8 @@ using Unifesspa.Geo.Kernel.Pagination;
 
 /// <summary>
 /// Leitor read-side de <see cref="Estado"/> sobre o <see cref="GeoDbContext"/>.
-/// Só expõe reference data vigente (<c>vigente=true</c>, ADR-0092) — linhas stale
-/// do ETL não vazam na API pública. Listagem por keyset bidirecional ordenado
+/// Só expõe reference data vigente (<c>vigente=true</c>, ADR-0092) — linhas não vigentes
+/// da carga não vazam na API pública. Listagem por keyset bidirecional ordenado
 /// alfabeticamente por nome (<see cref="KeysetOrdenadoCursor"/>, ADR-0094); os
 /// <c>EXISTS</c> do keyset herdam o filtro de vigência por operarem sobre a mesma
 /// query base.
@@ -44,19 +44,13 @@ internal sealed class EstadoReader : IEstadoReader
             .AsNoTracking()
             .Where(e => e.Vigente);
 
-        // Keyset ordenado por nome_ordenacao (não-nulo, ADR-0095) + Id de desempate.
-        KeysetOrdenadoPage<Estado> page = await KeysetOrdenadoCursor
-            .ApplyAsync(
-                query,
-                b => b.Ascending(e => e.NomeOrdenacao).Ascending(e => e.Id),
-                e => e.NomeOrdenacao,
-                static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id },
-                afterSortKey,
-                afterId,
-                limit,
-                direction,
-                cancellationToken)
-            .ConfigureAwait(false);
+        KeysetOrdenadoPage<Estado> page = await PaginaEmOrdemAlfabeticaAsync(
+            query,
+            afterSortKey,
+            afterId,
+            limit,
+            direction,
+            cancellationToken).ConfigureAwait(false);
 
         return (page.Items, page.Anterior, page.Proximo);
     }
@@ -72,4 +66,23 @@ internal sealed class EstadoReader : IEstadoReader
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.Vigente && e.Uf == ufNormalizada, cancellationToken);
     }
+
+    // Keyset ordenado por nome_ordenacao (não-nulo, ADR-0095) + Id de desempate.
+    private static Task<KeysetOrdenadoPage<Estado>> PaginaEmOrdemAlfabeticaAsync(
+        IQueryable<Estado> query,
+        string? afterSortKey,
+        Guid? afterId,
+        int limit,
+        PaginationDirection direction,
+        CancellationToken cancellationToken) =>
+        KeysetOrdenadoCursor.ApplyAsync(
+            query,
+            b => b.Ascending(e => e.NomeOrdenacao).Ascending(e => e.Id),
+            e => e.NomeOrdenacao,
+            static (sortKey, id) => new { NomeOrdenacao = sortKey, Id = id },
+            afterSortKey,
+            afterId,
+            limit,
+            direction,
+            cancellationToken);
 }

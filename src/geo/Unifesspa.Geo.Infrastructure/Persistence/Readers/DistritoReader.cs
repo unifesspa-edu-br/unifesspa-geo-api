@@ -36,11 +36,21 @@ internal sealed class DistritoReader : IDistritoReader
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(codigoIbge);
 
-        if (await ResolverCidadeIdAsync(codigoIbge, cancellationToken).ConfigureAwait(false) is not { } cidadeId)
+        if (await _dbContext.IdDaCidadeVigenteAsync(codigoIbge, cancellationToken).ConfigureAwait(false) is not { } cidadeId)
         {
             return (false, [], null, null);
         }
 
+        return await ListarDaCidadeAsync(cidadeId, afterId, limit, direction, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<(bool, IReadOnlyList<Distrito>, Guid?, Guid?)> ListarDaCidadeAsync(
+        Guid cidadeId,
+        Guid? afterId,
+        int limit,
+        PaginationDirection direction,
+        CancellationToken cancellationToken)
+    {
         IQueryable<Distrito> query = _dbContext.Distritos
             .AsNoTracking()
             .Where(d => d.Vigente && d.CidadeId == cidadeId);
@@ -50,15 +60,5 @@ internal sealed class DistritoReader : IDistritoReader
             .ConfigureAwait(false);
 
         return (true, page.Items, page.PrevAfterId, page.NextAfterId);
-    }
-
-    private Task<Guid?> ResolverCidadeIdAsync(string codigoIbge, CancellationToken cancellationToken)
-    {
-        string codigo = codigoIbge.Trim();
-        return _dbContext.Cidades
-            .AsNoTracking()
-            .Where(c => c.Vigente && c.CodigoIbge == codigo)
-            .Select(c => (Guid?)c.Id)
-            .FirstOrDefaultAsync(cancellationToken);
     }
 }
