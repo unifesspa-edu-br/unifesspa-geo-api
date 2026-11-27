@@ -8,7 +8,8 @@ using Unifesspa.Geo.Kernel.Results;
 /// <summary>
 /// Estado de uma tabela durante a carga por chave natural: linhas já gravadas no banco,
 /// chaves já vistas nesta carga (para o último registro da fonte prevalecer) e o contador
-/// do relatório. Cada gravação segue <see cref="GeoEtlUpsert.Upsert{T}"/>.
+/// do relatório (ADR-0092): a chave repetida na própria fonte não estoura a unicidade e a
+/// última ocorrência prevalece.
 /// </summary>
 internal sealed class GravacaoPorChaveNatural<T>
     where T : EntityBase
@@ -38,9 +39,72 @@ internal sealed class GravacaoPorChaveNatural<T>
 
         Dictionary<string, T> existentes =
             await tabela.ToDictionaryAsync(chaveNatural, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
+        return SobreRegistrosCarregados(tabela, existentes, contador);
+    }
+
+    public static GravacaoPorChaveNatural<T> SobreRegistrosCarregados(
+        DbSet<T> tabela,
+        Dictionary<string, T> existentes,
+        ContadorTabela contador)
+    {
+        ArgumentNullException.ThrowIfNull(tabela);
+        ArgumentNullException.ThrowIfNull(existentes);
+        ArgumentNullException.ThrowIfNull(contador);
+
         return new GravacaoPorChaveNatural<T>(tabela, existentes, contador);
     }
 
-    public T? Gravar(string chave, Func<Result<T>> criar, Func<T, Result> atualizar) =>
-        GeoEtlUpsert.Upsert(chave, _jaVistos, _existentes, criar, atualizar, _tabela, Contador);
+    public T? Gravar(string chave, Func<Result<T>> criar, Func<T, Result> atualizar)
+    {
+        if (_jaVistos.TryGetValue(chave, out T? jaVisto))
+        {
+            return RegravarRepetida(chave, jaVisto, atualizar);
+        }
+
+        return _existentes.TryGetValue(chave, out T? existente)
+            ? AtualizarJaGravada(chave, existente, atualizar)
+            : Inserir(chave, criar);
+    }
+
+    private T? RegravarRepetida(string chave, T jaVisto, Func<T, Result> atualizar)
+    {
+        Contador.ContarDuplicado(chave);
+        Result reatualizacao = atualizar(jaVisto);
+        if (reatualizacao.IsSuccess)
+        {
+            GeoEtlUpsert.Tocar(_tabela, jaVisto);
+        }
+
+        return reatualizacao.IsSuccess ? jaVisto : null;
+    }
+
+    private T? AtualizarJaGravada(string chave, T existente, Func<T, Result> atualizar)
+    {
+        Result atualizacao = atualizar(existente);
+        if (atualizacao.IsFailure)
+        {
+            Contador.ContarIgnoradoSemChave();
+            return null;
+        }
+
+        GeoEtlUpsert.Tocar(_tabela, existente);
+        _jaVistos[chave] = existente;
+        Contador.ContarAtualizado();
+        return existente;
+    }
+
+    private T? Inserir(string chave, Func<Result<T>> criar)
+    {
+        Result<T> criado = criar();
+        if (criado.IsFailure)
+        {
+            Contador.ContarIgnoradoSemChave();
+            return null;
+        }
+
+        _tabela.Add(criado.Value!);
+        _jaVistos[chave] = criado.Value!;
+        Contador.ContarInserido();
+        return criado.Value;
+    }
 }

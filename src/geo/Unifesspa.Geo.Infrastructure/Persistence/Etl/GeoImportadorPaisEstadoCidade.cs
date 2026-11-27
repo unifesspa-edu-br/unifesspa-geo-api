@@ -64,30 +64,28 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
 
     private async Task<Guid> ImportarPaisAsync(IGeoFonteDados fonte, ContadorTabela contador, CancellationToken cancellationToken)
     {
-        Dictionary<string, Pais> existentes =
-            await _contexto.Paises.ToDictionaryAsync(p => p.SiglaIso, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
+        GravacaoPorChaveNatural<Pais> gravacao = await GravacaoPorChaveNatural<Pais>.AbrirAsync(
+            _contexto.Paises, p => p.SiglaIso, contador, cancellationToken).ConfigureAwait(false);
         ProvenienciaDaCarga proveniencia = new(fonte.Versao);
-        Guid brasilId = await UpsertarBrasilAsync(fonte, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
+        Guid brasilId = await GravarBrasilAsync(fonte, proveniencia, gravacao, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
         return brasilId;
     }
 
-    private async Task<Guid> UpsertarBrasilAsync(
+    private static async Task<Guid> GravarBrasilAsync(
         IGeoFonteDados fonte,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, Pais> existentes,
-        ContadorTabela contador,
+        GravacaoPorChaveNatural<Pais> gravacao,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, Pais> jaVistos = new(StringComparer.Ordinal);
         Guid brasilId = Guid.Empty;
 
         await foreach (PaisCru cru in fonte.LerPaisesAsync(cancellationToken).ConfigureAwait(false))
         {
-            contador.ContarLido();
-            if (ChaveDoBrasil(cru, contador) is { } siglaIso
-                && UpsertarBrasil(siglaIso, cru, proveniencia, existentes, jaVistos, contador) is { } pais)
+            gravacao.Contador.ContarLido();
+            if (ChaveDoBrasil(cru, gravacao.Contador) is { } siglaIso
+                && GravarBrasil(siglaIso, cru, proveniencia, gravacao) is { } pais)
             {
                 brasilId = pais.Id;
             }
@@ -109,22 +107,19 @@ internal sealed class GeoImportadorPaisEstadoCidade : IGeoImportador
         return string.Equals(siglaIso, "BRA", StringComparison.Ordinal) ? siglaIso : null;
     }
 
-    private Pais? UpsertarBrasil(
+    private static Pais? GravarBrasil(
         string siglaIso,
         PaisCru cru,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, Pais> existentes,
-        Dictionary<string, Pais> jaVistos,
-        ContadorTabela contador)
+        GravacaoPorChaveNatural<Pais> gravacao)
     {
         CodigosDoPaisNosCadastrosFederais codigos = new(cru.CodigoBcb, cru.CodigoRfb, cru.CodigoSped, cru.CodigoSiscomex);
         string sigla = cru.Sigla ?? string.Empty;
         string nome = cru.Nome ?? string.Empty;
 
-        return Upsert(
-            siglaIso, jaVistos, existentes,
+        return gravacao.Gravar(
+            siglaIso,
             () => Pais.Importar(siglaIso, sigla, nome, codigos, proveniencia),
-            existente => existente.Atualizar(sigla, nome, codigos, proveniencia),
-            _contexto.Paises, contador);
+            existente => existente.Atualizar(sigla, nome, codigos, proveniencia));
     }
 }

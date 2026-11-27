@@ -58,37 +58,35 @@ internal sealed class GeoImportadorEstados
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
-        // Sem o País (Brasil) carregado, os estados ficariam órfãos de FK — aborta o nível.
+        // Sem o País (Brasil) carregado, os estados ficariam sem vínculo com o país: aborta o nível.
         if (brasilId == Guid.Empty)
         {
             return new Dictionary<string, Guid>(StringComparer.Ordinal);
         }
 
-        Dictionary<string, Estado> existentes =
-            await _contexto.Estados.ToDictionaryAsync(e => e.Uf, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
-        Dictionary<string, Guid> estadosPorUf = await UpsertarEstadosAsync(
-            fonte, brasilId, indicadores, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
+        GravacaoPorChaveNatural<Estado> gravacao = await GravacaoPorChaveNatural<Estado>.AbrirAsync(
+            _contexto.Estados, e => e.Uf, contador, cancellationToken).ConfigureAwait(false);
+        Dictionary<string, Guid> estadosPorUf = await GravarEstadosAsync(
+            fonte, brasilId, indicadores, proveniencia, gravacao, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
         return estadosPorUf;
     }
 
-    private async Task<Dictionary<string, Guid>> UpsertarEstadosAsync(
+    private static async Task<Dictionary<string, Guid>> GravarEstadosAsync(
         IGeoFonteDados fonte,
         Guid brasilId,
         Dictionary<string, EstadoIndicadorCru> indicadores,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, Estado> existentes,
-        ContadorTabela contador,
+        GravacaoPorChaveNatural<Estado> gravacao,
         CancellationToken cancellationToken)
     {
         Dictionary<string, Guid> estadosPorUf = new(StringComparer.Ordinal);
-        Dictionary<string, Estado> jaVistos = new(StringComparer.Ordinal);
 
         await foreach (EstadoCru cru in fonte.LerEstadosAsync(cancellationToken).ConfigureAwait(false))
         {
-            contador.ContarLido();
-            if (UpsertarEstado(cru, brasilId, indicadores, proveniencia, existentes, jaVistos, contador) is { } estado)
+            gravacao.Contador.ContarLido();
+            if (GravarEstado(cru, brasilId, indicadores, proveniencia, gravacao) is { } estado)
             {
                 estadosPorUf[estado.Uf] = estado.Id;
             }
@@ -97,27 +95,24 @@ internal sealed class GeoImportadorEstados
         return estadosPorUf;
     }
 
-    private Estado? UpsertarEstado(
+    private static Estado? GravarEstado(
         EstadoCru cru,
         Guid brasilId,
         Dictionary<string, EstadoIndicadorCru> indicadores,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, Estado> existentes,
-        Dictionary<string, Estado> jaVistos,
-        ContadorTabela contador)
+        GravacaoPorChaveNatural<Estado> gravacao)
     {
         if (ChaveSigla(cru.Uf) is not { } uf)
         {
-            contador.ContarIgnoradoSemChave();
+            gravacao.Contador.ContarIgnoradoSemChave();
             return null;
         }
 
         ClassificacaoDaUfNoIbge classificacao = new(indicadores.GetValueOrDefault(uf)?.CodigoIbge, cru.Regiao);
-        return Upsert(
-            uf, jaVistos, existentes,
+        return gravacao.Gravar(
+            uf,
             () => Estado.Importar(new UfNoPais(brasilId, uf), NomeDe(cru), classificacao, cru.Capital, PosicaoDe(cru), FaixaGeralDe(cru), proveniencia),
-            existente => existente.Atualizar(brasilId, NomeDe(cru), classificacao, cru.Capital, PosicaoDe(cru), FaixaGeralDe(cru), proveniencia),
-            _contexto.Estados, contador);
+            existente => existente.Atualizar(brasilId, NomeDe(cru), classificacao, cru.Capital, PosicaoDe(cru), FaixaGeralDe(cru), proveniencia));
     }
 
     private static NomeComFormaDeBusca NomeDe(EstadoCru cru) => new(cru.Nome ?? string.Empty, cru.NomeSemAcento);
@@ -135,14 +130,14 @@ internal sealed class GeoImportadorEstados
     {
         Dictionary<Guid, EstadoIndicador> existentes =
             await _contexto.EstadoIndicadores.ToDictionaryAsync(i => i.EstadoId, cancellationToken).ConfigureAwait(false);
-        UpsertarIndicadores(estadosPorUf, indicadores, proveniencia, existentes, contador);
+        GravarIndicadores(estadosPorUf, indicadores, proveniencia, existentes, contador);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
 
     // Lidos, sem chave e duplicados já foram contados na agregação; aqui só resta
     // resolver o órfão (UF sem estado carregado) e gravar pela chave natural.
-    private void UpsertarIndicadores(
+    private void GravarIndicadores(
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, EstadoIndicadorCru> indicadores,
         ProvenienciaDaCarga proveniencia,
@@ -157,11 +152,11 @@ internal sealed class GeoImportadorEstados
                 continue;
             }
 
-            UpsertarIndicador(estadoId, cru, proveniencia, existentes, contador);
+            GravarIndicador(estadoId, cru, proveniencia, existentes, contador);
         }
     }
 
-    private void UpsertarIndicador(
+    private void GravarIndicador(
         Guid estadoId,
         EstadoIndicadorCru cru,
         ProvenienciaDaCarga proveniencia,
@@ -238,27 +233,26 @@ internal sealed class GeoImportadorEstados
         Dictionary<string, EstadoFaixaCep> existentes =
             (await _contexto.EstadoFaixasCep.Where(f => estadoIds.Contains(f.EstadoId)).ToListAsync(cancellationToken).ConfigureAwait(false))
             .ToDictionary(f => ChaveFaixa(f.EstadoId, f.CepInicial, f.CepFinal), StringComparer.Ordinal);
-        await UpsertarFaixasAsync(fonte, estadosPorUf, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
+        GravacaoPorChaveNatural<EstadoFaixaCep> gravacao = GravacaoPorChaveNatural<EstadoFaixaCep>.SobreRegistrosCarregados(
+            _contexto.EstadoFaixasCep, existentes, contador);
+        await GravarFaixasAsync(fonte, estadosPorUf, proveniencia, gravacao, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
 
-    private async Task UpsertarFaixasAsync(
+    private static async Task GravarFaixasAsync(
         IGeoFonteDados fonte,
         Dictionary<string, Guid> estadosPorUf,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, EstadoFaixaCep> existentes,
-        ContadorTabela contador,
+        GravacaoPorChaveNatural<EstadoFaixaCep> gravacao,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, EstadoFaixaCep> jaVistas = new(StringComparer.Ordinal);
-
         await foreach (EstadoFaixaCru cru in fonte.LerEstadoFaixasAsync(cancellationToken).ConfigureAwait(false))
         {
-            contador.ContarLido();
-            if (ResolverEstado(cru.Uf, estadosPorUf, contador) is { } estadoId)
+            gravacao.Contador.ContarLido();
+            if (ResolverEstado(cru.Uf, estadosPorUf, gravacao.Contador) is { } estadoId)
             {
-                UpsertarFaixa(cru, estadoId, proveniencia, existentes, jaVistas, contador);
+                GravarFaixa(cru, estadoId, proveniencia, gravacao);
             }
         }
     }
@@ -275,25 +269,22 @@ internal sealed class GeoImportadorEstados
         return null;
     }
 
-    private void UpsertarFaixa(
+    private static void GravarFaixa(
         EstadoFaixaCru cru,
         Guid estadoId,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, EstadoFaixaCep> existentes,
-        Dictionary<string, EstadoFaixaCep> jaVistas,
-        ContadorTabela contador)
+        GravacaoPorChaveNatural<EstadoFaixaCep> gravacao)
     {
         FaixaDeCep faixa = new(cru.FaixaIni, cru.FaixaFim);
         if (!faixa.TemCepInicial || !faixa.TemCepFinal)
         {
-            contador.ContarIgnoradoSemChave();
+            gravacao.Contador.ContarIgnoradoSemChave();
             return;
         }
 
-        Upsert(
-            ChaveFaixa(estadoId, faixa.CepInicial!, faixa.CepFinal!), jaVistas, existentes,
+        gravacao.Gravar(
+            ChaveFaixa(estadoId, faixa.CepInicial!, faixa.CepFinal!),
             () => EstadoFaixaCep.Importar(estadoId, faixa, cru.Descricao, proveniencia),
-            existente => existente.Atualizar(cru.Descricao, proveniencia),
-            _contexto.EstadoFaixasCep, contador);
+            existente => existente.Atualizar(cru.Descricao, proveniencia));
     }
 }
