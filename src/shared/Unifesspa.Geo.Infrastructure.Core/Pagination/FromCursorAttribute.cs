@@ -57,4 +57,13 @@ public sealed class FromCursorAttribute : ModelBinderAttribute
             .Where(static parametro => parametro.ParameterType == typeof(PageRequest))
             .Select(static parametro => parametro.ParameterInfo.GetCustomAttribute<FromCursorAttribute>())
             .FirstOrDefault(static atributo => atributo is not null);
+
+    /// <summary>
+    /// Como <see cref="DaAcao"/>, mas falha quando a ação não declara o atributo: ler ou emitir
+    /// cursor sem saber o recurso não tem como continuar.
+    /// </summary>
+    internal static FromCursorAttribute ExigidoNaAcao(ActionDescriptor descritor) =>
+        DaAcao(descritor)
+            ?? throw new InvalidOperationException(
+                $"Parâmetro do tipo {nameof(PageRequest)} requer [FromCursor(\"<recurso>\")].");
 }

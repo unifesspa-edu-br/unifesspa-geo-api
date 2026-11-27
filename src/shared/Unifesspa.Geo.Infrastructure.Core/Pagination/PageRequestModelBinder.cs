@@ -30,9 +30,7 @@ public sealed class PageRequestModelBinder : IModelBinder
 
     private static LeituraDaPaginaPedida CriarLeitura(ModelBindingContext bindingContext)
     {
-        FromCursorAttribute atributo = FromCursorAttribute.DaAcao(bindingContext.ActionContext.ActionDescriptor)
-            ?? throw new InvalidOperationException(
-                $"Parâmetro do tipo {nameof(PageRequest)} requer [FromCursor(\"<recurso>\")].");
+        FromCursorAttribute atributo = FromCursorAttribute.ExigidoNaAcao(bindingContext.ActionContext.ActionDescriptor);
 
         IServiceProvider servicos = bindingContext.HttpContext.RequestServices;
         CursorEncoder codificador = servicos.GetRequiredService<CursorEncoder>();

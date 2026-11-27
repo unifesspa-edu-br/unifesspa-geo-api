@@ -73,8 +73,7 @@ public sealed class EstadosController : ControllerBase
         EstadoDto[] comLinks = [.. resultado.Items.Select(e => e with { Links = _linksBuilder.Build(e) })];
 
         return await this.OkPaginatedOrdenadoAsync(
-            comLinks, resultado.Anterior, resultado.Proximo, page, ResourceTag,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            comLinks, resultado.Anterior, resultado.Proximo, page, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
