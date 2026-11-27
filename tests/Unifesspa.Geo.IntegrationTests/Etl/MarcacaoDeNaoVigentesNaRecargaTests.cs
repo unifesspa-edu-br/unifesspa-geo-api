@@ -36,35 +36,14 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-            ["202602"] = FonteSomenteMaraba("202602"),
-        });
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"), FonteSomenteMaraba("202602"));
 
-        Guid id1 = await _cenario.CriarExecucaoAsync("202601");
-        await _cenario.ExecutarAsync(id1, fonteFactory, cache);
-
-        Guid id2 = await _cenario.CriarExecucaoAsync("202602");
-        await _cenario.ExecutarAsync(id2, fonteFactory, cache);
+        await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cache);
+        await _cenario.ExecutarVersaoAsync("202602", fonteFactory, cache);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
-
-        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba);
-        maraba.VersaoDataset.Should().Be("202602", "Marabá foi revisto na nova versão");
-        maraba.Vigente.Should().BeTrue();
-
-        Cidade saoPaulo = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == SaoPaulo);
-        saoPaulo.VersaoDataset.Should().Be("202601", "São Paulo não consta na versão 202602");
-        saoPaulo.Vigente.Should().BeFalse("linha ausente na nova versão é marcada obsoleta");
-        (await leitura.Cidades.CountAsync()).Should().Be(2, "marcar como não vigente não remove fisicamente (rastreabilidade)");
-
-        Logradouro avPaulista = await leitura.Logradouros.SingleAsync(l => l.Cep == CepSaoPaulo);
-        avPaulista.Vigente.Should().BeFalse("o CEP ausente na nova versão fica obsoleto, sem remoção");
-
-        Logradouro ruaA = await leitura.Logradouros.SingleAsync(l => l.Cep == CepMaraba);
-        ruaA.VersaoDataset.Should().Be("202602");
-        ruaA.Vigente.Should().BeTrue();
+        await ConferirCidadesRevistaEAusenteAsync(leitura);
+        await ConferirLogradourosRevistoEAusenteAsync(leitura);
 
         await cache.Received(1).InvalidarAsync(Arg.Is<string>(v => v.StartsWith("202602.", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
     }
@@ -74,19 +53,10 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteEmMemoria primeira = FonteCompleta("202601");
-        primeira.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        primeira.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
-        FonteEmMemoria segunda = FonteSomenteMaraba("202602");
-        segunda.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = primeira,
-            ["202602"] = segunda,
-        });
+        FabricaDeFonteFixa fonteFactory = new(FonteCompletaComCepsGerais("202601"), FonteSomenteMarabaComCepGeral("202602"));
 
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fonteFactory, cache);
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202602"), fonteFactory, cache);
+        await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cache);
+        await _cenario.ExecutarVersaoAsync("202602", fonteFactory, cache);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
         (await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000")).Vigente.Should().BeTrue();
@@ -98,24 +68,14 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteEmMemoria completa = FonteCompleta("202601");
-        completa.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        completa.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
-        FonteEmMemoria semSaoPaulo = FonteSomenteMaraba("202601");
-        semSaoPaulo.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        FonteFactoryFake primeira = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal) { ["202601"] = completa });
-        FonteFactoryFake segunda = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal) { ["202601"] = semSaoPaulo });
+        FabricaDeFonteFixa primeira = new(FonteCompletaComCepsGerais("202601"));
+        FabricaDeFonteFixa segunda = new(FonteSomenteMarabaComCepGeral("202601"));
 
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), primeira, cache);
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), segunda, cache);
+        await _cenario.ExecutarVersaoAsync("202601", primeira, cache);
+        await _cenario.ExecutarVersaoAsync("202601", segunda, cache);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
-        (await leitura.CepGerais.SingleAsync(g => g.Cep == "01000999")).Vigente.Should().BeFalse();
-        (await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000")).Vigente.Should().BeTrue();
-        (await leitura.Logradouros.SingleAsync(l => l.Cep == CepSaoPaulo)).Vigente.Should().BeFalse();
-        (await leitura.Logradouros.SingleAsync(l => l.Cep == CepMaraba)).Vigente.Should().BeTrue();
-        (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == SaoPaulo)).Vigente.Should().BeFalse();
-        (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba)).Vigente.Should().BeTrue();
+        await ConferirSaoPauloNaoVigenteEMarabaVigenteAsync(leitura);
     }
 
     [Fact(DisplayName = "Recarga idêntica da MESMA versão não marca nenhuma linha como não vigente em nenhuma tabela")]
@@ -123,26 +83,13 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteEmMemoria fonte = FonteCompleta("202601");
-        fonte.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
-        fonte.CepGerais.Add(DadosDne.CepGeral("68525100", 1, distritoIdDne: 10));
-        fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(Maraba, populacao: "100"));
-        FonteFactoryFake fabrica = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal) { ["202601"] = fonte });
+        FabricaDeFonteFixa fabrica = new(FonteComCepsGeraisEPopulacaoDeMaraba());
 
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fabrica, cache);
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fabrica, cache);
+        await _cenario.ExecutarVersaoAsync("202601", fabrica, cache);
+        await _cenario.ExecutarVersaoAsync("202601", fabrica, cache);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
-        int naoVigentes =
-            await leitura.Paises.CountAsync(e => !e.Vigente)
-            + await leitura.Estados.CountAsync(e => !e.Vigente)
-            + await leitura.EstadoIndicadores.CountAsync(e => !e.Vigente)
-            + await leitura.Cidades.CountAsync(e => !e.Vigente)
-            + await leitura.CidadeIndicadores.CountAsync(e => !e.Vigente)
-            + await leitura.Distritos.CountAsync(e => !e.Vigente)
-            + await leitura.Logradouros.CountAsync(e => !e.Vigente)
-            + await leitura.CepGerais.CountAsync(e => !e.Vigente);
-        naoVigentes.Should().Be(0, "toda linha foi revista na recarga idêntica");
+        (await ContarLinhasNaoVigentesAsync(leitura)).Should().Be(0, "toda linha foi revista na recarga idêntica");
         (await leitura.CepGerais.CountAsync()).Should().Be(2);
     }
 
@@ -151,35 +98,14 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"), RecargaComTopoSemCidadesEComLogradouro());
 
-        // Staging corrompido: topo sem cidades, mas com uma folha (logradouro) referenciando
-        // uma cidade existente. A guarda deve abortar ANTES das folhas, então "Rua Nova" não
-        // pode ser commitada.
-        FonteEmMemoria recargaCorrompida = new() { Versao = "202602" };
-        recargaCorrompida.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
-        recargaCorrompida.Logradouros.Add(DadosDne.Logradouro("68500999", "Rua Nova", 1));
-
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-            ["202602"] = recargaCorrompida,
-        });
-
-        Guid id1 = await _cenario.CriarExecucaoAsync("202601");
-        await _cenario.ExecutarAsync(id1, fonteFactory, cache);
-
-        Guid id2 = await _cenario.CriarExecucaoAsync("202602");
-        await _cenario.ExecutarAsync(id2, fonteFactory, cache);
+        await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cache);
+        Guid id2 = await _cenario.ExecutarVersaoAsync("202602", fonteFactory, cache);
 
         await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao exec2 = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id2);
-        exec2.Status.Should().Be(StatusImportacao.Falhou, "uma versão vazia ou sem o Brasil e suas cidades não pode concluir");
-
-        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba);
-        maraba.Vigente.Should().BeTrue("a versão vazia não pode marcar a base existente como obsoleta");
-        maraba.VersaoDataset.Should().Be("202601");
-        (await leitura.Logradouros.AnyAsync(l => l.Nome == "Rua Nova")).Should()
-            .BeFalse("as folhas não podem rodar quando a topo não trouxe cidades");
+        await ConferirExecucaoFalhouAsync(leitura, id2, "uma versão vazia ou sem o Brasil e suas cidades não pode concluir");
+        await ConferirBaseExistenteSemMarcacaoAsync(leitura);
         await cache.DidNotReceive().InvalidarAsync("202602", Arg.Any<CancellationToken>());
     }
 
@@ -188,34 +114,121 @@ public sealed class MarcacaoDeNaoVigentesNaRecargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"), RecargaComTopoEFolhasVazias());
 
-        // Topo restaurado (cidades), mas dump das tabelas-folha vazio (sem logradouros).
+        await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cache);
+        Guid id2 = await _cenario.ExecutarVersaoAsync("202602", fonteFactory, cache);
+
+        await using GeoDbContext leitura = _fixture.CreateDbContext();
+        await ConferirExecucaoFalhouAsync(leitura, id2, "uma versão sem logradouros não pode concluir");
+
+        Logradouro ruaA = await leitura.Logradouros.SingleAsync(l => l.Cep == CepMaraba);
+        ruaA.Vigente.Should().BeTrue("a versão sem logradouros não pode marcar o CEP existente como obsoleto");
+        ruaA.VersaoDataset.Should().Be("202601");
+        await cache.DidNotReceive().InvalidarAsync("202602", Arg.Any<CancellationToken>());
+    }
+
+    private static FonteEmMemoria FonteCompletaComCepsGerais(string versao)
+    {
+        FonteEmMemoria fonte = FonteCompleta(versao);
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        fonte.CepGerais.Add(DadosDne.CepGeral("01000999", 2, uf: "SP"));
+        return fonte;
+    }
+
+    private static FonteEmMemoria FonteSomenteMarabaComCepGeral(string versao)
+    {
+        FonteEmMemoria fonte = FonteSomenteMaraba(versao);
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        return fonte;
+    }
+
+    private static FonteEmMemoria FonteComCepsGeraisEPopulacaoDeMaraba()
+    {
+        FonteEmMemoria fonte = FonteCompleta("202601");
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525000", 1));
+        fonte.CepGerais.Add(DadosDne.CepGeral("68525100", 1, distritoIdDne: 10));
+        fonte.CidadeIndicadores.Add(DadosDne.CidadeIndicador(Maraba, populacao: "100"));
+        return fonte;
+    }
+
+    // Staging corrompido: topo sem cidades, mas com uma folha (logradouro) referenciando
+    // uma cidade existente. A guarda deve abortar ANTES das folhas, então "Rua Nova" não
+    // pode ser commitada.
+    private static FonteEmMemoria RecargaComTopoSemCidadesEComLogradouro()
+    {
+        FonteEmMemoria recargaCorrompida = new() { Versao = "202602" };
+        recargaCorrompida.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
+        recargaCorrompida.Logradouros.Add(DadosDne.Logradouro("68500999", "Rua Nova", 1));
+        return recargaCorrompida;
+    }
+
+    // Topo restaurado (cidades), mas dump das tabelas-folha vazio (sem logradouros).
+    private static FonteEmMemoria RecargaComTopoEFolhasVazias()
+    {
         FonteEmMemoria folhasVazias = new() { Versao = "202602" };
         folhasVazias.Paises.Add(DadosDne.Pais("BRA", "Brasil", "BR"));
         folhasVazias.Estados.Add(DadosDne.Estado("PA", "Pará", capital: "Belém", faixaIni: "66000000", faixaFim: "68899999"));
         folhasVazias.EstadoIndicadores.Add(DadosDne.EstadoIndicador("PA", "15"));
         folhasVazias.Cidades.Add(DadosDne.Cidade(Maraba, "Marabá", "PA", ddd: "94"));
         folhasVazias.CidadeIds.Add(DadosDne.CidadeId(1, Maraba));
+        return folhasVazias;
+    }
 
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-            ["202602"] = folhasVazias,
-        });
+    private static async Task ConferirCidadesRevistaEAusenteAsync(GeoDbContext leitura)
+    {
+        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba);
+        maraba.VersaoDataset.Should().Be("202602", "Marabá foi revisto na nova versão");
+        maraba.Vigente.Should().BeTrue();
 
-        Guid id1 = await _cenario.CriarExecucaoAsync("202601");
-        await _cenario.ExecutarAsync(id1, fonteFactory, cache);
+        Cidade saoPaulo = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == SaoPaulo);
+        saoPaulo.VersaoDataset.Should().Be("202601", "São Paulo não consta na versão 202602");
+        saoPaulo.Vigente.Should().BeFalse("linha ausente na nova versão é marcada obsoleta");
+        (await leitura.Cidades.CountAsync()).Should().Be(2, "marcar como não vigente não remove fisicamente (rastreabilidade)");
+    }
 
-        Guid id2 = await _cenario.CriarExecucaoAsync("202602");
-        await _cenario.ExecutarAsync(id2, fonteFactory, cache);
-
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao exec2 = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id2);
-        exec2.Status.Should().Be(StatusImportacao.Falhou, "uma versão sem logradouros não pode concluir");
+    private static async Task ConferirLogradourosRevistoEAusenteAsync(GeoDbContext leitura)
+    {
+        Logradouro avPaulista = await leitura.Logradouros.SingleAsync(l => l.Cep == CepSaoPaulo);
+        avPaulista.Vigente.Should().BeFalse("o CEP ausente na nova versão fica obsoleto, sem remoção");
 
         Logradouro ruaA = await leitura.Logradouros.SingleAsync(l => l.Cep == CepMaraba);
-        ruaA.Vigente.Should().BeTrue("a versão sem logradouros não pode marcar o CEP existente como obsoleto");
-        ruaA.VersaoDataset.Should().Be("202601");
-        await cache.DidNotReceive().InvalidarAsync("202602", Arg.Any<CancellationToken>());
+        ruaA.VersaoDataset.Should().Be("202602");
+        ruaA.Vigente.Should().BeTrue();
+    }
+
+    private static async Task ConferirSaoPauloNaoVigenteEMarabaVigenteAsync(GeoDbContext leitura)
+    {
+        (await leitura.CepGerais.SingleAsync(g => g.Cep == "01000999")).Vigente.Should().BeFalse();
+        (await leitura.CepGerais.SingleAsync(g => g.Cep == "68525000")).Vigente.Should().BeTrue();
+        (await leitura.Logradouros.SingleAsync(l => l.Cep == CepSaoPaulo)).Vigente.Should().BeFalse();
+        (await leitura.Logradouros.SingleAsync(l => l.Cep == CepMaraba)).Vigente.Should().BeTrue();
+        (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == SaoPaulo)).Vigente.Should().BeFalse();
+        (await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba)).Vigente.Should().BeTrue();
+    }
+
+    private static async Task<int> ContarLinhasNaoVigentesAsync(GeoDbContext leitura) =>
+        await leitura.Paises.CountAsync(e => !e.Vigente)
+        + await leitura.Estados.CountAsync(e => !e.Vigente)
+        + await leitura.EstadoIndicadores.CountAsync(e => !e.Vigente)
+        + await leitura.Cidades.CountAsync(e => !e.Vigente)
+        + await leitura.CidadeIndicadores.CountAsync(e => !e.Vigente)
+        + await leitura.Distritos.CountAsync(e => !e.Vigente)
+        + await leitura.Logradouros.CountAsync(e => !e.Vigente)
+        + await leitura.CepGerais.CountAsync(e => !e.Vigente);
+
+    private static async Task ConferirExecucaoFalhouAsync(GeoDbContext leitura, Guid execucaoId, string motivo)
+    {
+        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == execucaoId);
+        execucao.Status.Should().Be(StatusImportacao.Falhou, motivo);
+    }
+
+    private static async Task ConferirBaseExistenteSemMarcacaoAsync(GeoDbContext leitura)
+    {
+        Cidade maraba = await leitura.Cidades.SingleAsync(c => c.CodigoIbge == Maraba);
+        maraba.Vigente.Should().BeTrue("a versão vazia não pode marcar a base existente como obsoleta");
+        maraba.VersaoDataset.Should().Be("202601");
+        (await leitura.Logradouros.AnyAsync(l => l.Nome == "Rua Nova")).Should()
+            .BeFalse("as folhas não podem rodar quando a topo não trouxe cidades");
     }
 }

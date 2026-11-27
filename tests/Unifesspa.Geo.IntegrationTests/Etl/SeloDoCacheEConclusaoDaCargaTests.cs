@@ -43,30 +43,18 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     public async Task RecargaMesmaVersao_InvalidaEntradasCacheadas()
     {
         await _cenario.LimparAsync();
-        MemoriaCacheFake cache = new();
-        IGeoCepCacheInvalidador invalidador = new RedisGeoCepCacheInvalidador(cache, NullLogger<RedisGeoCepCacheInvalidador>.Instance);
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-        });
-        ICepReader reader = Substitute.For<ICepReader>();
-        reader.ResolverAsync(CepMaraba, Arg.Any<CancellationToken>()).Returns(
-            new CepResolvidoDto(CepMaraba, null, null, null, null, null, "Marabá", Maraba, "PA", null, null, CepResolucao.NivelCidade, CepResolucao.OrigemFaixaCidade));
-        using Microsoft.Extensions.Caching.Memory.MemoryCache memoria = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
-        CepResolver resolver = new(
-            new Lazy<ICacheService>(() => cache), reader, memoria, _cenario.Relogio,
-            Microsoft.Extensions.Options.Options.Create(new GeoCepCacheOptions { SeloTtl = TimeSpan.Zero }),
-            NullLogger<CepResolver>.Instance);
+        using CacheDoCepParaTeste cep = new(_cenario.Relogio);
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"));
 
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fonteFactory, invalidador);
-        await resolver.ResolverAsync(CepMaraba, CancellationToken.None);
-        await resolver.ResolverAsync(CepMaraba, CancellationToken.None);
-        await reader.Received(1).ResolverAsync(CepMaraba, Arg.Any<CancellationToken>());
+        await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cep.Invalidador);
+        await cep.Resolver.ResolverAsync(CepMaraba, CancellationToken.None);
+        await cep.Resolver.ResolverAsync(CepMaraba, CancellationToken.None);
+        await cep.Leitor.Received(1).ResolverAsync(CepMaraba, Arg.Any<CancellationToken>());
 
-        await _cenario.ExecutarAsync(await _cenario.CriarExecucaoAsync("202601"), fonteFactory, invalidador);
-        await resolver.ResolverAsync(CepMaraba, CancellationToken.None);
+        await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cep.Invalidador);
+        await cep.Resolver.ResolverAsync(CepMaraba, CancellationToken.None);
 
-        await reader.Received(2).ResolverAsync(CepMaraba, Arg.Any<CancellationToken>());
+        await cep.Leitor.Received(2).ResolverAsync(CepMaraba, Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "CA-07/08: a carga conclui registrando status, relatório por tabela (contadores) e disparador — sem PII")]
@@ -74,29 +62,16 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-        });
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"));
 
-        Guid id = await _cenario.CriarExecucaoAsync("202601");
-        await _cenario.ExecutarAsync(id, fonteFactory, cache);
+        Guid id = await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cache);
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
-
+        GeoImportacaoExecucao execucao = await _cenario.LerExecucaoAsync(id);
         execucao.Status.Should().Be(StatusImportacao.Concluida);
         execucao.ConcluidoEm.Should().NotBeNull();
         execucao.DisparadoPor.Should().Be("teste");
         execucao.RelatorioJson.Should().NotBeNullOrWhiteSpace();
-
-        // O relatorio_json é persistido em camelCase (alinhado ao wire da API); lê no mesmo formato.
-        RelatorioImportacaoDto? relatorio = JsonSerializer.Deserialize<RelatorioImportacaoDto>(
-            execucao.RelatorioJson!, RelatorioJsonCamelCase);
-        relatorio.Should().NotBeNull();
-        relatorio!.VersaoDataset.Should().Be("202601");
-        relatorio.Tabelas.Should().Contain(t => t.Tabela == "cidade" && t.Inseridos >= 2);
-        relatorio.Inseridos.Should().BeGreaterThan(0);
+        ConferirRelatorioPorTabela(execucao.RelatorioJson!);
     }
 
     [Fact(DisplayName = "Robustez: falha na carga marca a execução como Falhou e NÃO sela o cache (a versão vigente não mudou)")]
@@ -104,17 +79,11 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     {
         await _cenario.LimparAsync();
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = new FonteComFalhaNasCidades(FonteCompleta("202601")),
-        });
+        FabricaDeFonteFixa fonteFactory = new(new FonteComFalhaNasCidades(FonteCompleta("202601")));
 
-        Guid id = await _cenario.CriarExecucaoAsync("202601");
-        await _cenario.ExecutarAsync(id, fonteFactory, cache);
+        Guid id = await _cenario.ExecutarVersaoAsync("202601", fonteFactory, cache);
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
-
+        GeoImportacaoExecucao execucao = await _cenario.LerExecucaoAsync(id);
         execucao.Status.Should().Be(StatusImportacao.Falhou);
         execucao.ConcluidoEm.Should().NotBeNull();
         await cache.DidNotReceive().InvalidarAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -142,10 +111,7 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
     public async Task SeloComCacheIndisponivel_NaoFalhaCarga()
     {
         await _cenario.LimparAsync();
-        FonteFactoryFake fonteFactory = new(new Dictionary<string, IFonteDaCargaDne>(StringComparer.Ordinal)
-        {
-            ["202601"] = FonteCompleta("202601"),
-        });
+        FabricaDeFonteFixa fonteFactory = new(FonteCompleta("202601"));
         // Lazy que lança ao resolver — simula o IConnectionMultiplexer.Connect falhando no .Value.
         Lazy<IGeoCepCacheInvalidador> cacheQuebrado = new(() => throw new InvalidOperationException("Redis fora do ar"));
 
@@ -154,8 +120,17 @@ public sealed class SeloDoCacheEConclusaoDaCargaTests
 
         await acao.Should().NotThrowAsync();
 
-        await using GeoDbContext leitura = _fixture.CreateDbContext();
-        GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
+        GeoImportacaoExecucao execucao = await _cenario.LerExecucaoAsync(id);
         execucao.Status.Should().Be(StatusImportacao.Concluida, "falha de cache ao selar é best-effort, não pode reverter a carga");
+    }
+
+    private static void ConferirRelatorioPorTabela(string relatorioJson)
+    {
+        // O relatorio_json é persistido em camelCase (alinhado ao wire da API); lê no mesmo formato.
+        RelatorioImportacaoDto? relatorio = JsonSerializer.Deserialize<RelatorioImportacaoDto>(relatorioJson, RelatorioJsonCamelCase);
+        relatorio.Should().NotBeNull();
+        relatorio!.VersaoDataset.Should().Be("202601");
+        relatorio.Tabelas.Should().Contain(t => t.Tabela == "cidade" && t.Inseridos >= 2);
+        relatorio.Inseridos.Should().BeGreaterThan(0);
     }
 }
