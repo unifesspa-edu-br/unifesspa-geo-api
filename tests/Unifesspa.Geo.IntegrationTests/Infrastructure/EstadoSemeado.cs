@@ -11,7 +11,9 @@ internal sealed record EstadoSemeado(Pais Pais, Estado Estado)
     public static EstadoSemeado Novo()
     {
         Pais pais = GeoTestKeys.Ok(Pais.Importar(GeoTestKeys.SiglaIso(), "BR", "Brasil", default, new ProvenienciaDaCarga(VersaoDataset)));
-        Estado estado = GeoTestKeys.Ok(Estado.Importar(pais.Id, GeoTestKeys.Uf(), "Estado seed", null, null, null, null, null, null, null, null, null, VersaoDataset));
+        Estado estado = GeoTestKeys.Ok(Estado.Importar(
+            new UfNoPais(pais.Id, GeoTestKeys.Uf()), new NomeComFormaDeBusca("Estado seed", null),
+            default, null, default, default, new ProvenienciaDaCarga(VersaoDataset)));
         return new EstadoSemeado(pais, estado);
     }
 

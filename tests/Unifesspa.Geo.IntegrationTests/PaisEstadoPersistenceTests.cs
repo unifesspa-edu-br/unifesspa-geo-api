@@ -176,14 +176,16 @@ public sealed class PaisEstadoPersistenceTests
         GeoTestKeys.Ok(Pais.Importar(siglaIso, sigla, nome, default, new ProvenienciaDaCarga(VersaoDataset, vigente)));
 
     private static Estado NovoEstado(Guid paisId, string uf, string nome) =>
-        GeoTestKeys.Ok(Estado.Importar(paisId, uf, nome, null, null, null, null, null, null, null, null, null, VersaoDataset));
+        GeoTestKeys.Ok(Estado.Importar(
+            new UfNoPais(paisId, uf), new NomeComFormaDeBusca(nome, null),
+            default, null, default, default, new ProvenienciaDaCarga(VersaoDataset)));
 
     private static Estado NovoEstadoNaPosicao(Guid paisId, decimal latitude, decimal longitude) =>
         GeoTestKeys.Ok(Estado.Importar(
-            paisId, GeoTestKeys.Uf(), "São Paulo", null, null, null, null,
-            latitude, longitude,
-            new Point((double)longitude, (double)latitude) { SRID = 4326 },
-            null, null, VersaoDataset));
+            new UfNoPais(paisId, GeoTestKeys.Uf()), new NomeComFormaDeBusca("São Paulo", null),
+            default, null,
+            new PosicaoGeografica(latitude, longitude, new Point((double)longitude, (double)latitude) { SRID = 4326 }),
+            default, new ProvenienciaDaCarga(VersaoDataset)));
 
     private static EstadoIndicador NovoIndicadorSemDados(Guid estadoId) =>
         GeoTestKeys.Ok(EstadoIndicador.Importar(
