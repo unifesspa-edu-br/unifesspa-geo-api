@@ -114,10 +114,8 @@ public sealed class CidadePersistenceTests
 
     private static Cidade NovaCidade(Guid estadoId, string uf, string codigoIbge, string nome) =>
         GeoTestKeys.Ok(Cidade.Importar(
-            estadoId, uf, codigoIbge, nome, nome, null,
-            null, null, null,
-            null, null, null, null, null, null, null, null,
-            VersaoDataset));
+            codigoIbge, new EstadoDaCidade(estadoId, uf), new NomeComFormaDeBusca(nome, nome), null,
+            default, default, new ProvenienciaDaCarga(VersaoDataset)));
 
     private static CidadeIndicador NovoIndicadorSemDados(Guid cidadeId) =>
         GeoTestKeys.Ok(CidadeIndicador.Importar(

@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests.Api;
 using NetTopologySuite.Geometries;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
@@ -91,9 +92,15 @@ internal sealed class CidadeBuilder
 
     public Cidade Construir() =>
         GeoTestKeys.Ok(Cidade.Importar(
-            _estadoId, _uf, _codigoIbge, _nome,
-            _nomeNormalizado ?? GeoReferenceSeed.Normalizar(_nome), _ddd, _latitude, _longitude, _coordenada,
-            null, _mesorregiao, null, _microrregiao,
-            null, _regiaoIntermediaria, null, _regiaoImediata,
-            GeoReferenceSeed.Versao, _vigente));
+            _codigoIbge,
+            new EstadoDaCidade(_estadoId, _uf),
+            new NomeComFormaDeBusca(_nome, _nomeNormalizado ?? GeoReferenceSeed.Normalizar(_nome)),
+            _ddd,
+            new PosicaoGeografica(_latitude, _longitude, _coordenada),
+            new DivisaoRegionalDaCidade(
+                new RegiaoGeografica(null, _mesorregiao),
+                new RegiaoGeografica(null, _microrregiao),
+                new RegiaoGeografica(null, _regiaoIntermediaria),
+                new RegiaoGeografica(null, _regiaoImediata)),
+            GeoReferenceSeed.Proveniencia(_vigente)));
 }

@@ -47,7 +47,7 @@ internal sealed class GeoImportadorCidades
             fonte.LerCidadeTerritoriosAsync(cancellationToken), t => ChaveCodigo(t.CodigoIbge)).ConfigureAwait(false);
 
         Dictionary<string, Guid> cidadesPorCodigo = await ImportarCidadesAsync(
-            fonte, estadosPorUf, territorios, relatorio.Tabela("cidade"), cancellationToken).ConfigureAwait(false);
+            fonte, estadosPorUf, territorios, proveniencia, relatorio.Tabela("cidade"), cancellationToken).ConfigureAwait(false);
         await ImportarIndicadoresAsync(fonte, cidadesPorCodigo, relatorio.Tabela("cidade_indicador"), cancellationToken).ConfigureAwait(false);
         await ImportarFaixasAsync(fonte, cidadesPorCodigo, proveniencia, relatorio.Tabela("cidade_faixa"), cancellationToken).ConfigureAwait(false);
     }
@@ -56,13 +56,14 @@ internal sealed class GeoImportadorCidades
         IGeoFonteDados fonte,
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, CidadeTerritorioCru> territorios,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
         Dictionary<string, Cidade> existentes =
             await _contexto.Cidades.ToDictionaryAsync(c => c.CodigoIbge, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
         Dictionary<string, Guid> cidadesPorCodigo =
-            await UpsertarCidadesAsync(fonte, estadosPorUf, territorios, existentes, contador, cancellationToken).ConfigureAwait(false);
+            await UpsertarCidadesAsync(fonte, estadosPorUf, territorios, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
         return cidadesPorCodigo;
@@ -72,6 +73,7 @@ internal sealed class GeoImportadorCidades
         IGeoFonteDados fonte,
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, CidadeTerritorioCru> territorios,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, Cidade> existentes,
         ContadorTabela contador,
         CancellationToken cancellationToken)
@@ -82,8 +84,7 @@ internal sealed class GeoImportadorCidades
         await foreach (CidadeCru cru in fonte.LerCidadesAsync(cancellationToken).ConfigureAwait(false))
         {
             contador.ContarLido();
-            Cidade? cidade = UpsertarCidade(cru, estadosPorUf, territorios, fonte.Versao, existentes, jaVistas, contador);
-            if (cidade is not null)
+            if (UpsertarCidade(cru, estadosPorUf, territorios, proveniencia, existentes, jaVistas, contador) is { } cidade)
             {
                 cidadesPorCodigo[cidade.CodigoIbge] = cidade.Id;
             }
@@ -96,7 +97,7 @@ internal sealed class GeoImportadorCidades
         CidadeCru cru,
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, CidadeTerritorioCru> territorios,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<string, Cidade> existentes,
         Dictionary<string, Cidade> jaVistas,
         ContadorTabela contador)
@@ -108,7 +109,7 @@ internal sealed class GeoImportadorCidades
 
         territorios.TryGetValue(chave.CodigoIbge, out CidadeTerritorioCru? territorio);
         string nome = NomeDaCidade(chave.CodigoIbge, cru, contador);
-        CidadeParaCarga carga = new(chave, nome, cru, CoordenadaDne.De(cru.Latitude, cru.Longitude), territorio, versao);
+        CidadeParaCarga carga = new(chave, NomeComBusca(nome), cru.Ddd, CoordenadaDne.De(cru.Latitude, cru.Longitude), DivisaoDe(territorio), proveniencia);
         return Upsert(chave.CodigoIbge, jaVistas, existentes, carga.Criar, carga.Atualizar, _contexto.Cidades, contador);
     }
 
@@ -139,8 +140,20 @@ internal sealed class GeoImportadorCidades
             return null;
         }
 
-        return new ChaveDaCidade(codigoIbge, uf, estadoId);
+        return new ChaveDaCidade(codigoIbge, new EstadoDaCidade(estadoId, uf));
     }
+
+    // Busca e ordenação usam o nome normalizado (sem acento, caixa nem apóstrofo), derivado do
+    // nome gravado; nome em branco fica sem normalizado e o domínio recusa a cidade.
+    private static NomeComFormaDeBusca NomeComBusca(string nome) =>
+        new(nome, string.IsNullOrWhiteSpace(nome) ? null : BuscaTextualNormalizada.NormalizarNomeDoMunicipio(nome));
+
+    private static DivisaoRegionalDaCidade DivisaoDe(CidadeTerritorioCru? territorio) =>
+        new(
+            new RegiaoGeografica(territorio?.MesorregiaoCodigo, territorio?.MesorregiaoNome),
+            new RegiaoGeografica(territorio?.MicrorregiaoCodigo, territorio?.MicrorregiaoNome),
+            new RegiaoGeografica(territorio?.RegiaoIntermediariaCodigo, territorio?.RegiaoIntermediariaNome),
+            new RegiaoGeografica(territorio?.RegiaoImediataCodigo, territorio?.RegiaoImediataNome));
 
     private async Task ImportarIndicadoresAsync(
         IGeoFonteDados fonte,
@@ -292,36 +305,21 @@ internal sealed class GeoImportadorCidades
             _contexto.CidadeFaixasCep, contador);
     }
 
-    private readonly record struct ChaveDaCidade(string CodigoIbge, string Uf, Guid EstadoId);
+    private readonly record struct ChaveDaCidade(string CodigoIbge, EstadoDaCidade Estado);
 
     private readonly record struct CidadeParaCarga(
         ChaveDaCidade Chave,
-        string Nome,
-        CidadeCru Cru,
+        NomeComFormaDeBusca Nome,
+        string? Ddd,
         PosicaoGeografica Posicao,
-        CidadeTerritorioCru? Territorio,
-        string Versao)
+        DivisaoRegionalDaCidade Divisao,
+        ProvenienciaDaCarga Proveniencia)
     {
-        // Busca e ordenação usam o nome normalizado (sem acento, caixa nem apóstrofo), derivado
-        // do nome gravado; nome em branco fica sem normalizado e o domínio recusa a cidade.
-        private string? NomeNormalizado =>
-            string.IsNullOrWhiteSpace(Nome) ? null : BuscaTextualNormalizada.NormalizarNomeDoMunicipio(Nome);
-
         public Result<Cidade> Criar() =>
-            Cidade.Importar(
-                Chave.EstadoId, Chave.Uf, Chave.CodigoIbge, Nome, NomeNormalizado, Cru.Ddd,
-                Posicao.Latitude, Posicao.Longitude, Posicao.Ponto,
-                Territorio?.MesorregiaoCodigo, Territorio?.MesorregiaoNome, Territorio?.MicrorregiaoCodigo, Territorio?.MicrorregiaoNome,
-                Territorio?.RegiaoIntermediariaCodigo, Territorio?.RegiaoIntermediariaNome, Territorio?.RegiaoImediataCodigo, Territorio?.RegiaoImediataNome,
-                Versao);
+            Cidade.Importar(Chave.CodigoIbge, Chave.Estado, Nome, Ddd, Posicao, Divisao, Proveniencia);
 
         public Result Atualizar(Cidade existente) =>
-            existente.Atualizar(
-                Chave.EstadoId, Chave.Uf, Nome, NomeNormalizado, Cru.Ddd,
-                Posicao.Latitude, Posicao.Longitude, Posicao.Ponto,
-                Territorio?.MesorregiaoCodigo, Territorio?.MesorregiaoNome, Territorio?.MicrorregiaoCodigo, Territorio?.MicrorregiaoNome,
-                Territorio?.RegiaoIntermediariaCodigo, Territorio?.RegiaoIntermediariaNome, Territorio?.RegiaoImediataCodigo, Territorio?.RegiaoImediataNome,
-                Versao);
+            existente.Atualizar(Chave.Estado, Nome, Ddd, Posicao, Divisao, Proveniencia);
     }
 
     private readonly record struct MetricasDaCidade
