@@ -33,7 +33,7 @@ public sealed class PrazoDosComandosNaConfiguracaoDaCargaTests
     private static ConfiguracaoDaCargaEmLote Ler(string prazo)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 [$"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TempoLimiteDosComandosDaCarga)}"] = prazo,
             })

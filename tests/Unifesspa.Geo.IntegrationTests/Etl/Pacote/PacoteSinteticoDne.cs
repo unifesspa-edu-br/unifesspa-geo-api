@@ -109,7 +109,7 @@ internal sealed class PacoteSinteticoDne
 
     private static string Literal((string Coluna, object? Valor)[] valores, string coluna)
     {
-        object? valor = valores.FirstOrDefault(v => v.Coluna == coluna).Valor;
+        object? valor = valores.FirstOrDefault(v => string.Equals(v.Coluna, coluna, StringComparison.Ordinal)).Valor;
         return valor switch
         {
             null => "NULL",

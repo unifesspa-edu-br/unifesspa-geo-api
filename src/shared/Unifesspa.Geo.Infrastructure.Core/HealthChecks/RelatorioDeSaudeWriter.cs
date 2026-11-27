@@ -23,7 +23,8 @@ public static class RelatorioDeSaudeWriter
             status = relatorio.Status.ToString(),
             verificacoes = relatorio.Entries.ToDictionary(
                 static e => e.Key,
-                static e => new { status = e.Value.Status.ToString() }),
+                static e => new { status = e.Value.Status.ToString() },
+                StringComparer.Ordinal),
         }, cancellationToken: contexto.RequestAborted);
     }
 }

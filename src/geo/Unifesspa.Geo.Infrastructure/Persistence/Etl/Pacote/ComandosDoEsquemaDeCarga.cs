@@ -57,7 +57,7 @@ internal static class ComandosDoEsquemaDeCarga
     public static ComandoDoEsquemaDeCarga Consultar(string esquema, string tabela, FiltroDeLinhasDoEsquema filtro, params string[] colunas)
     {
         IReadOnlyList<ColunaDne> obrigatorias = ColunasObrigatorias(tabela);
-        return colunas.All(nome => obrigatorias.Any(c => c.Nome == nome))
+        return colunas.All(nome => obrigatorias.Any(c => string.Equals(c.Nome, nome, StringComparison.Ordinal)))
             ? new($"SELECT {string.Join(", ", colunas.Select(Citar))} FROM {Qualificar(esquema, tabela)}{Condicao(filtro)}")
             : throw new ArgumentException("Coluna fora das obrigatórias da tabela.", nameof(colunas));
     }

@@ -19,7 +19,7 @@ internal sealed class ConexaoDoBancoDaCarga
     }
 
     public IConfiguration Configuracao => new ConfigurationBuilder()
-        .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString })
+        .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal) { ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString })
         .Build();
 
     public async Task<bool> ExisteEsquemaAsync(string esquema) =>

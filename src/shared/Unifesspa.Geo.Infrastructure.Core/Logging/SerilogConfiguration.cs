@@ -143,7 +143,7 @@ public static class SerilogConfiguration
 
                 if (!string.IsNullOrWhiteSpace(nomeServico))
                 {
-                    options.ResourceAttributes = new Dictionary<string, object>
+                    options.ResourceAttributes = new Dictionary<string, object>(StringComparer.Ordinal)
                     {
                         ["service.name"] = nomeServico,
                         ["service.namespace"] = OpenTelemetryConfiguration.ServiceNamespaceResourceValue,

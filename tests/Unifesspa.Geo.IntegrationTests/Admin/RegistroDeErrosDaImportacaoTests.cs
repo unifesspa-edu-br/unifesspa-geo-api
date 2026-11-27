@@ -12,7 +12,7 @@ using Unifesspa.Geo.Infrastructure.Core.Errors;
 public sealed class RegistroDeErrosDaImportacaoTests
 {
     private static readonly Dictionary<string, DomainErrorMapping> Mapeamentos =
-        new GeoDomainErrorRegistration().GetMappings().ToDictionary(m => m.Key, m => m.Value);
+        new GeoDomainErrorRegistration().GetMappings().ToDictionary(m => m.Key, m => m.Value, StringComparer.Ordinal);
 
     [Theory(DisplayName = "Código de erro da importação é registrado com o status, o código e o título esperados")]
     [InlineData(GeoImportacaoErrorCodes.ImportacaoEmAndamento, StatusCodes.Status409Conflict, "uniplus.geo.importacao.em_andamento", "Já existe uma importação do Geo em andamento")]

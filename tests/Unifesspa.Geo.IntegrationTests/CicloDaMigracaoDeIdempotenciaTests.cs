@@ -109,7 +109,7 @@ public sealed class CicloDaMigracaoDeIdempotenciaTests : IAsyncLifetime
     }
 
     private static async Task<string[]> ListarTabelasDeDadosAsync(GeoDbContext contexto) =>
-        [.. (await ListarTabelasAsync(contexto)).Where(tabela => tabela != TabelaRetirada)];
+        [.. (await ListarTabelasAsync(contexto)).Where(tabela => !string.Equals(tabela, TabelaRetirada, StringComparison.Ordinal))];
 
     private static async Task<string[]> ListarTabelasAsync(GeoDbContext contexto) =>
         await contexto.Database.SqlQuery<string>(

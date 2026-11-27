@@ -49,7 +49,7 @@ internal static class ConsultasDaGuardaDoEnvio
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return ultima is not null && ultima.PacoteSha256 == sha256 ? ultima.Id : null;
+        return ultima is not null && string.Equals(ultima.PacoteSha256, sha256, StringComparison.Ordinal) ? ultima.Id : null;
     }
 
     private static string? MaiorVersao(string? a, string? b)

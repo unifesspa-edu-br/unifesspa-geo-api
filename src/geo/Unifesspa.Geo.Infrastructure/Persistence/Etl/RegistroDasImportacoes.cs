@@ -320,7 +320,7 @@ internal sealed partial class RegistroDasImportacoes : IGeoImportacaoService
     }
 
     private static bool EhViolacaoUnica(DbUpdateException ex) =>
-        ex.InnerException is PostgresException pg && pg.SqlState == PostgresUniqueViolation;
+        ex.InnerException is PostgresException pg && string.Equals(pg.SqlState, PostgresUniqueViolation, StringComparison.Ordinal);
 
     private static PacoteDaImportacaoDto? MapearPacote(GeoImportacaoExecucao execucao) =>
         execucao.PacoteSha256 is not null && execucao.PacoteTamanhoEmBytes is not null

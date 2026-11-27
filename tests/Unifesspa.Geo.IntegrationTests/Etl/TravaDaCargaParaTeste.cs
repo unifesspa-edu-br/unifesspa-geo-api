@@ -15,7 +15,7 @@ internal static class TravaDaCargaParaTeste
     public static TravaConsultivaDaCargaDne Criar(string textoDeConexao, EtlOpcoes opcoes)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:GeoDb"] = textoDeConexao })
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal) { ["ConnectionStrings:GeoDb"] = textoDeConexao })
             .Build();
 
         return new TravaConsultivaDaCargaDne(configuracao, Options.Create(opcoes));

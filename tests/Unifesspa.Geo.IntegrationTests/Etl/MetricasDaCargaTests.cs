@@ -67,12 +67,12 @@ public sealed class MetricasDaCargaTests
             execucao.RelatorioJson!, RelatorioJsonCamelCase)!;
         long linhasEsperadas = relatorio.Inseridos + relatorio.Atualizados;
 
-        List<MedidaMetrica<long>> execucoes = [.. longs.Where(m => m.Nome == "geo.etl.execucoes")];
+        List<MedidaMetrica<long>> execucoes = [.. longs.Where(m => string.Equals(m.Nome, "geo.etl.execucoes", StringComparison.Ordinal))];
         execucoes.Should().ContainSingle();
         execucoes[0].Valor.Should().Be(1);
         Status(execucoes[0].Tags).Should().Be("concluida");
 
-        List<MedidaMetrica<long>> linhas = [.. longs.Where(m => m.Nome == "geo.etl.linhas")];
+        List<MedidaMetrica<long>> linhas = [.. longs.Where(m => string.Equals(m.Nome, "geo.etl.linhas", StringComparison.Ordinal))];
         linhas.Should().ContainSingle();
         linhas[0].Valor.Should().Be(linhasEsperadas, "as linhas reportadas batem com inseridos + atualizados do relatório");
 
@@ -105,7 +105,7 @@ public sealed class MetricasDaCargaTests
         GeoImportacaoExecucao execucao = await leitura.ImportacaoExecucoes.SingleAsync(e => e.Id == id);
         execucao.Status.Should().Be(StatusImportacao.Falhou);
 
-        List<MedidaMetrica<long>> execucoes = [.. longs.Where(m => m.Nome == "geo.etl.execucoes")];
+        List<MedidaMetrica<long>> execucoes = [.. longs.Where(m => string.Equals(m.Nome, "geo.etl.execucoes", StringComparison.Ordinal))];
         execucoes.Should().ContainSingle();
         execucoes[0].Valor.Should().Be(1);
         Status(execucoes[0].Tags).Should().Be("falhou");
@@ -123,7 +123,7 @@ public sealed class MetricasDaCargaTests
         {
             InstrumentPublished = (instrumento, l) =>
             {
-                if (instrumento.Meter.Name == GeoServiceNames.Geo &&
+                if (string.Equals(instrumento.Meter.Name, GeoServiceNames.Geo, StringComparison.Ordinal) &&
                     instrumento.Name.StartsWith("geo.etl.", StringComparison.Ordinal))
                 {
                     l.EnableMeasurementEvents(instrumento);
@@ -138,7 +138,7 @@ public sealed class MetricasDaCargaTests
     }
 
     private static string? Status(KeyValuePair<string, object?>[] tags) =>
-        tags.SingleOrDefault(t => t.Key == "status").Value as string;
+        tags.SingleOrDefault(t => string.Equals(t.Key, "status", StringComparison.Ordinal)).Value as string;
 
     private readonly record struct MedidaMetrica<T>(string Nome, T Valor, KeyValuePair<string, object?>[] Tags);
 }

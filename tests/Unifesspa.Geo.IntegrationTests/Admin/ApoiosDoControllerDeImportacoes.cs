@@ -17,7 +17,7 @@ internal sealed class UsuarioAdministradorParaTeste : IRequiredUserContext
 
     public IReadOnlyList<string> Roles => ["plataforma-admin"];
 
-    public bool HasRole(string role) => Roles.Contains(role);
+    public bool HasRole(string role) => Roles.Contains(role, StringComparer.Ordinal);
 }
 
 /// <summary>Links com o endereço de acompanhamento da execução, como o contrato real.</summary>

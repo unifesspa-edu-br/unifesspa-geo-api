@@ -110,7 +110,7 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
             using CancellationTokenSource prazoExterno = new(TimeSpan.FromSeconds(10));
 
             HealthReport relatorio = await servico.CheckHealthAsync(
-                r => r.Name == VerificacaoDoProvedor,
+                r => string.Equals(r.Name, VerificacaoDoProvedor, StringComparison.Ordinal),
                 prazoExterno.Token);
 
             relatorio.Entries[VerificacaoDoProvedor].Status.Should().Be(HealthStatus.Degraded);
@@ -148,7 +148,7 @@ public sealed class ProntidaoSemProvedorDeIdentidadeTests : IClassFixture<GeoPro
     public void Prontidao_RegistrosProdutivos_MantemPostgresERedisSemOProvedor()
     {
         IConfiguration configuracao = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["ConnectionStrings:GeoDb"] = "Host=localhost;Database=geo",
                 ["Redis:ConnectionString"] = "localhost:6379",

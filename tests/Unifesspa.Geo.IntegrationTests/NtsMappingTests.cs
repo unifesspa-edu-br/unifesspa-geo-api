@@ -38,7 +38,7 @@ public sealed class NtsMappingTests
     public void Runtime_AtivaNts()
     {
         IConfiguration configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["ConnectionStrings:GeoDb"] = "Host=stub;Database=stub;Username=u;Password=p",
             })

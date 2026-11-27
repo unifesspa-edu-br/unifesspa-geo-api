@@ -67,7 +67,7 @@ public sealed class EnderecoDoErroNasRespostasTests : IDisposable
         DefaultHttpContext http = NovoContextoHttp();
         http.Request.Headers[HeaderNames.Accept] = "application/vnd.uniplus.estado.v9+json";
         ActionExecutingContext contexto = new(
-            new ActionContext(http, new RouteData(), new ActionDescriptor()), [], new Dictionary<string, object?>(), controller: new object());
+            new ActionContext(http, new RouteData(), new ActionDescriptor()), [], new Dictionary<string, object?>(StringComparer.Ordinal), controller: new object());
 
         new VendorMediaTypeAttribute { Resource = "estado", Versions = [1] }.OnActionExecuting(contexto);
 
