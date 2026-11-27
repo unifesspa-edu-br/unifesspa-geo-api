@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
 using Unifesspa.Geo.Domain.Entities;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
 using Unifesspa.Geo.Kernel.Results;
@@ -16,7 +17,7 @@ internal readonly record struct CepGeralParaCarga(
     Guid CidadeId,
     Guid? DistritoId,
     string Uf,
-    CoordenadaDne Coordenada,
+    PosicaoGeografica Posicao,
     string Versao)
 {
     public static CepGeralParaCarga? De(
@@ -56,8 +57,8 @@ internal readonly record struct CepGeralParaCarga(
             versao);
 
     public Result<CepGeral> Criar() =>
-        CepGeral.Importar(Cep, CidadeId, DistritoId, Uf, Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto, Versao);
+        CepGeral.Importar(Cep, CidadeId, DistritoId, Uf, Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, Versao);
 
     public Result Atualizar(CepGeral existente) =>
-        existente.Atualizar(CidadeId, DistritoId, Uf, Coordenada.Latitude, Coordenada.Longitude, Coordenada.Ponto, Versao);
+        existente.Atualizar(CidadeId, DistritoId, Uf, Posicao.Latitude, Posicao.Longitude, Posicao.Ponto, Versao);
 }
