@@ -1,8 +1,6 @@
 namespace Unifesspa.Geo.Infrastructure.Core.Middleware;
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 
 using Errors;
 
@@ -13,8 +11,6 @@ using Microsoft.Extensions.Logging;
 
 public sealed partial class GlobalExceptionMiddleware
 {
-    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
-
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
     private readonly ProblemTypeUriFactory _problemTypeUriFactory;
@@ -58,42 +54,22 @@ public sealed partial class GlobalExceptionMiddleware
 
     private async Task EscreverRespostaValidacao(HttpContext context, ValidationException exception)
     {
-        Dictionary<string, object?> body = CorpoBase(context, ErrosDaFronteiraHttp.ErroDeValidacao);
+        Dictionary<string, object?> corpo = ProblemaNaResposta.Corpo(_problemTypeUriFactory, ErrosDaFronteiraHttp.ErroDeValidacao);
         // Invariante: e.ErrorMessage não deve conter PII nem o valor rejeitado.
         // Usar {PropertyValue} em templates FluentValidation viola essa restrição.
-        body["errors"] = exception.Errors
+        corpo["errors"] = exception.Errors
             .Select(static e => new { field = e.PropertyName, code = e.ErrorCode, message = e.ErrorMessage })
             .ToArray();
 
-        await context.Response
-            .WriteAsJsonAsync(body, WebJsonOptions, contentType: "application/problem+json")
-            .ConfigureAwait(false);
+        await ProblemaNaResposta.EscreverAsync(context, ErrosDaFronteiraHttp.ErroDeValidacao, corpo).ConfigureAwait(false);
     }
 
-    private async Task EscreverRespostaErro(HttpContext context)
-    {
-        Dictionary<string, object?> body = CorpoBase(context, ErrosDaFronteiraHttp.ErroInesperado);
-        body["detail"] = "Ocorreu um erro inesperado. Tente novamente mais tarde.";
-
-        await context.Response
-            .WriteAsJsonAsync(body, WebJsonOptions, contentType: "application/problem+json")
-            .ConfigureAwait(false);
-    }
-
-    private Dictionary<string, object?> CorpoBase(HttpContext context, DomainErrorMapping definicao)
-    {
-        context.Response.StatusCode = definicao.Status;
-
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["type"] = _problemTypeUriFactory.Build(definicao.Code).AbsoluteUri,
-            ["title"] = definicao.Title,
-            ["status"] = definicao.Status,
-            ["instance"] = $"urn:uuid:{Guid.CreateVersion7()}",
-            ["code"] = definicao.Code,
-            ["traceId"] = Activity.Current?.TraceId.ToHexString() ?? Guid.CreateVersion7().ToString("N"),
-        };
-    }
+    private Task EscreverRespostaErro(HttpContext context) =>
+        ProblemaNaResposta.EscreverAsync(
+            context,
+            _problemTypeUriFactory,
+            ErrosDaFronteiraHttp.ErroInesperado,
+            "Ocorreu um erro inesperado. Tente novamente mais tarde.");
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Erro de validação no request {Path}")]
     private static partial void LogValidationError(ILogger logger, PathString path, Exception ex);
