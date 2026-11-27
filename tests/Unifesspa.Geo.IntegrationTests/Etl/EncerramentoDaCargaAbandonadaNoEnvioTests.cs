@@ -134,12 +134,7 @@ public sealed class EncerramentoDaCargaAbandonadaNoEnvioTests : IDisposable
     {
         GeoImportacaoFila fila = new();
         await using GeoDbContext contexto = _fixture.CreateDbContext(_relogio);
-        RegistroDasImportacoes registro = _envio.CriarRegistro(
-            contexto,
-            fila,
-            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
-            _relogio,
-            NullLogger<RegistroDasImportacoes>.Instance);
+        RegistroDasImportacoes registro = CriarRegistroDoEnvio(contexto, fila);
 
         try
         {
@@ -147,10 +142,15 @@ public sealed class EncerramentoDaCargaAbandonadaNoEnvioTests : IDisposable
         }
         finally
         {
-            foreach (CargaReservada enfileirada in fila.DrenarRestante())
-            {
-                await enfileirada.DisposeAsync();
-            }
+            await EnvioDoPacoteParaTeste.DescartarCargasEnfileiradasAsync(fila);
         }
     }
+
+    private RegistroDasImportacoes CriarRegistroDoEnvio(GeoDbContext contexto, GeoImportacaoFila fila) =>
+        _envio.CriarRegistro(
+            contexto,
+            fila,
+            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
+            _relogio,
+            NullLogger<RegistroDasImportacoes>.Instance);
 }

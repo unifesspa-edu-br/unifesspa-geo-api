@@ -40,11 +40,7 @@ public sealed class CargaEmTransacaoUnicaTests
         List<ObservacaoDaTransacao> observacoes = [];
         ObservadorDaConfirmacao confirmacao = new(async transacao => observacoes.Add(await ObservarNaConfirmacaoAsync(transacao)));
         await using GeoDbContext contexto = _fixture.CreateDbContext([confirmacao]);
-        using MontagemDaCarga montagem = new(_fixture)
-        {
-            DecorarTopo = topo => new TopoComGancho(topo, async () => observacoes.Add(await ObservarAsync(contexto))),
-            DecorarFolhas = folhas => new FolhasComGancho(folhas, async () => observacoes.Add(await ObservarAsync(contexto))),
-        };
+        using MontagemDaCarga montagem = MontagemComObservacaoDoTopoEDasFolhas(contexto, observacoes);
         Guid id = await montagem.RegistrarExecucaoAsync(VersoesFicticias.VersaoAnterior);
 
         await montagem.ExecutarAsync(id, new FabricaDeFonteFixa(VersoesFicticias.Anterior()), contexto);
@@ -66,6 +62,13 @@ public sealed class CargaEmTransacaoUnicaTests
         await ConferirLeituraDoCepAsync();
         await ConferirLeituraDeProximidadeAsync();
     }
+
+    private MontagemDaCarga MontagemComObservacaoDoTopoEDasFolhas(GeoDbContext contexto, List<ObservacaoDaTransacao> observacoes) =>
+        new(_fixture)
+        {
+            DecorarTopo = topo => new TopoComGancho(topo, async () => observacoes.Add(await ObservarAsync(contexto))),
+            DecorarFolhas = folhas => new FolhasComGancho(folhas, async () => observacoes.Add(await ObservarAsync(contexto))),
+        };
 
     private async Task<ObservacaoDaTransacao> ObservarAsync(GeoDbContext contexto)
     {

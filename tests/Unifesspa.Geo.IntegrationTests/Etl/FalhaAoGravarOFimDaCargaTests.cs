@@ -59,12 +59,7 @@ public sealed class FalhaAoGravarOFimDaCargaTests : IDisposable
         GeoImportacaoFila fila = new();
         fila.Completar();
         await using GeoDbContext contexto = _fixture.CreateDbContext(_falha);
-        RegistroDasImportacoes registro = _envio.CriarRegistro(
-            contexto,
-            fila,
-            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
-            TimeProvider.System,
-            NullLogger<RegistroDasImportacoes>.Instance);
+        RegistroDasImportacoes registro = CriarRegistroDoEnvio(contexto, fila);
 
         Result<EnvioDoPacoteRegistrado> recusado = await registro.IniciarAsync(_envio.Receber("202601").Abrir(), "teste", CancellationToken.None);
 
@@ -88,6 +83,14 @@ public sealed class FalhaAoGravarOFimDaCargaTests : IDisposable
 
         await ConferirEnvioSeguinteEncerraAsync(id);
     }
+
+    private RegistroDasImportacoes CriarRegistroDoEnvio(GeoDbContext contexto, GeoImportacaoFila fila) =>
+        _envio.CriarRegistro(
+            contexto,
+            fila,
+            TravaDaCargaParaTeste.Criar(_fixture.ConnectionString),
+            TimeProvider.System,
+            NullLogger<RegistroDasImportacoes>.Instance);
 
     // Sem fonte cadastrada para a versão, a carga falha ao prepará-la.
     private CargaDaImportacao CriarExecutorSemFonte(GeoDbContext ctx, GeoEtlMetrics metricas) =>

@@ -82,11 +82,8 @@ public sealed class SinalDeVidaDaConexaoDaTravaTests
         DateTimeOffset limite = DateTimeOffset.UtcNow + PrazoDaQueda;
         while (DateTimeOffset.UtcNow < limite)
         {
-            IAsyncDisposable? outra = await TravaDaCargaParaTeste.Criar(_fixture.ConnectionString)
-                .TentarAdquirirAsync(CancellationToken.None);
-            if (outra is not null)
+            if (await TravaEstavaLivreAsync())
             {
-                await outra.DisposeAsync();
                 return true;
             }
 
@@ -94,5 +91,17 @@ public sealed class SinalDeVidaDaConexaoDaTravaTests
         }
 
         return false;
+    }
+
+    private async Task<bool> TravaEstavaLivreAsync()
+    {
+        IAsyncDisposable? outra = await TravaDaCargaParaTeste.Criar(_fixture.ConnectionString)
+            .TentarAdquirirAsync(CancellationToken.None);
+        if (outra is not null)
+        {
+            await outra.DisposeAsync();
+        }
+
+        return outra is not null;
     }
 }

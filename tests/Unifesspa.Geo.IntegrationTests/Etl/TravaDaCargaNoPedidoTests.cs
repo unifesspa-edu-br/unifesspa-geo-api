@@ -101,9 +101,7 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime, IDisposable
         Guid id = (await IniciarAsync("202611", fila)).Value!.ExecucaoId;
         IGeoCepCacheInvalidador cache = Substitute.For<IGeoCepCacheInvalidador>();
 
-        await CriarPartida(cache).StartAsync(CancellationToken.None);
-        (await _banco.ExecucaoAsync(id)).Status.Should().Be(StatusImportacao.EmAndamento, "a carga está na fila com a trava");
-        await cache.DidNotReceiveWithAnyArgs().InvalidarAsync(default!, default);
+        await ConferirPartidaNaoTocaACargaDaFilaAsync(id, cache);
 
         await SoltarFilaAsync(fila);
         await CriarPartida(cache).StartAsync(CancellationToken.None);
@@ -147,6 +145,13 @@ public sealed class TravaDaCargaNoPedidoTests : IAsyncLifetime, IDisposable
         resultado.Error!.Code.Should().Be(GeoImportacaoErrorCodes.ImportacaoEmAndamento);
         await ConferirTravaLivreAsync("o conflito não pode deixar a trava com o pedido");
         _envio.NomesDosArquivos().Should().BeEmpty();
+    }
+
+    private async Task ConferirPartidaNaoTocaACargaDaFilaAsync(Guid id, IGeoCepCacheInvalidador cache)
+    {
+        await CriarPartida(cache).StartAsync(CancellationToken.None);
+        (await _banco.ExecucaoAsync(id)).Status.Should().Be(StatusImportacao.EmAndamento, "a carga está na fila com a trava");
+        await cache.DidNotReceiveWithAnyArgs().InvalidarAsync(default!, default);
     }
 
     private async Task SemearExecucaoEmAndamentoAsync()
