@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Domain.Entities;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -8,7 +9,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// Satélite socioeconômico IBGE de um <see cref="Estado"/> (1:1). Reference data
 /// sem soft-delete (ADR-0092). Todos os indicadores são <c>nullable</c>: a fonte
 /// traz <c>'-'</c>/vazio para dado ausente e o ETL degrada para
-/// <see langword="null"/> (parse tolerante, F3) — só o vínculo e a proveniência
+/// <see langword="null"/> (leitura tolerante na carga) — só o vínculo e a proveniência
 /// são obrigatórios.
 /// </summary>
 public sealed class EstadoIndicador : EntityBase
@@ -40,10 +41,10 @@ public sealed class EstadoIndicador : EntityBase
 
     public int? TotalVeiculos2023 { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
-    /// <summary><see langword="false"/> quando o vínculo some da release vigente (stale do ETL).</summary>
+    /// <summary><see langword="false"/> quando o vínculo some da versão vigente (registro não vigente).</summary>
     public bool Vigente { get; private set; } = true;
 
     // Construtor privado para materialização do EF Core.
@@ -52,106 +53,83 @@ public sealed class EstadoIndicador : EntityBase
     }
 
     /// <summary>
-    /// Importa o indicador de um Estado. Valores já tipados (parse tolerante no
-    /// ETL). Valida só o mínimo: vínculo (<paramref name="estadoId"/>) e
-    /// proveniência (<paramref name="versaoDataset"/>).
+    /// Importa o indicador de um Estado. Valores já tipados (leitura tolerante na carga).
+    /// Valida só o mínimo: vínculo (<paramref name="estadoId"/>) e a versão da base em
+    /// <paramref name="proveniencia"/>.
     /// </summary>
     public static Result<EstadoIndicador> Importar(
         Guid estadoId,
         string? gentilico,
         string? governador,
-        decimal? areaKm2,
-        int? populacaoResidente2022,
-        decimal? densidadeDemografica,
-        int? matriculasEnsinoFundamental2023,
-        decimal? idh,
-        decimal? receitasBrutas,
-        decimal? despesasBrutas,
-        int? rendimentoMensalPerCapita,
-        int? totalVeiculos2023,
-        string versaoDataset,
-        bool vigente = true)
+        MetricasDoEstado metricas,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(metricas);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (estadoId == Guid.Empty)
+        DomainError? erro = Validar(estadoId, proveniencia);
+        if (erro is not null)
         {
-            return Result<EstadoIndicador>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoIndicadorEstadoObrigatorio,
-                "Estado do indicador é obrigatório."));
+            return Result<EstadoIndicador>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<EstadoIndicador>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoIndicadorVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do indicador de Estado é obrigatória."));
-        }
-
-        var indicador = new EstadoIndicador
-        {
-            EstadoId = estadoId,
-            Gentilico = GeoTexto.NormalizarOpcional(gentilico),
-            Governador = GeoTexto.NormalizarOpcional(governador),
-            AreaKm2 = areaKm2,
-            PopulacaoResidente2022 = populacaoResidente2022,
-            DensidadeDemografica = densidadeDemografica,
-            MatriculasEnsinoFundamental2023 = matriculasEnsinoFundamental2023,
-            Idh = idh,
-            ReceitasBrutas = receitasBrutas,
-            DespesasBrutas = despesasBrutas,
-            RendimentoMensalPerCapita = rendimentoMensalPerCapita,
-            TotalVeiculos2023 = totalVeiculos2023,
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var indicador = new EstadoIndicador { EstadoId = estadoId };
+        indicador.Aplicar(gentilico, governador, metricas, proveniencia);
 
         return Result<EstadoIndicador>.Success(indicador);
     }
 
     /// <summary>
-    /// Reaplica os indicadores de uma release sobre o satélite já existente (upsert
-    /// in place do ETL), preservando <see cref="EntityBase.Id"/> e o vínculo
+    /// Reaplica os indicadores de uma versão da base sobre o satélite já existente (atualização
+    /// pela chave natural da carga), preservando <see cref="EntityBase.Id"/> e o vínculo
     /// <see cref="EstadoId"/>. Valida o mínimo <strong>antes</strong> de mutar.
     /// </summary>
     public Result Atualizar(
         string? gentilico,
         string? governador,
-        decimal? areaKm2,
-        int? populacaoResidente2022,
-        decimal? densidadeDemografica,
-        int? matriculasEnsinoFundamental2023,
-        decimal? idh,
-        decimal? receitasBrutas,
-        decimal? despesasBrutas,
-        int? rendimentoMensalPerCapita,
-        int? totalVeiculos2023,
-        string versaoDataset,
-        bool vigente = true)
+        MetricasDoEstado metricas,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(metricas);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
+        DomainError? erro = Validar(EstadoId, proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.EstadoIndicadorVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do indicador de Estado é obrigatória."));
+            return Result.Failure(erro);
         }
 
-        Gentilico = GeoTexto.NormalizarOpcional(gentilico);
-        Governador = GeoTexto.NormalizarOpcional(governador);
-        AreaKm2 = areaKm2;
-        PopulacaoResidente2022 = populacaoResidente2022;
-        DensidadeDemografica = densidadeDemografica;
-        MatriculasEnsinoFundamental2023 = matriculasEnsinoFundamental2023;
-        Idh = idh;
-        ReceitasBrutas = receitasBrutas;
-        DespesasBrutas = despesasBrutas;
-        RendimentoMensalPerCapita = rendimentoMensalPerCapita;
-        TotalVeiculos2023 = totalVeiculos2023;
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(gentilico, governador, metricas, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(Guid estadoId, ProvenienciaDaCarga proveniencia) =>
+        estadoId == Guid.Empty
+            ? new DomainError(GeoReferenceDataErrorCodes.EstadoIndicadorEstadoObrigatorio, "Estado do indicador é obrigatório.")
+            : proveniencia.TemVersao
+                ? null
+                : new DomainError(
+                    GeoReferenceDataErrorCodes.EstadoIndicadorVersaoDatasetObrigatoria,
+                    "Versão do dataset (proveniência) do indicador de Estado é obrigatória.");
+
+    private void Aplicar(
+        string? gentilico,
+        string? governador,
+        MetricasDoEstado metricas,
+        ProvenienciaDaCarga proveniencia)
+    {
+        Gentilico = GeoTexto.NormalizarOpcional(gentilico);
+        Governador = GeoTexto.NormalizarOpcional(governador);
+        AreaKm2 = metricas.AreaKm2;
+        PopulacaoResidente2022 = metricas.PopulacaoResidente2022;
+        DensidadeDemografica = metricas.DensidadeDemografica;
+        MatriculasEnsinoFundamental2023 = metricas.MatriculasEnsinoFundamental2023;
+        Idh = metricas.Idh;
+        ReceitasBrutas = metricas.ReceitasBrutas;
+        DespesasBrutas = metricas.DespesasBrutas;
+        RendimentoMensalPerCapita = metricas.RendimentoMensalPerCapita;
+        TotalVeiculos2023 = metricas.TotalVeiculos2023;
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }

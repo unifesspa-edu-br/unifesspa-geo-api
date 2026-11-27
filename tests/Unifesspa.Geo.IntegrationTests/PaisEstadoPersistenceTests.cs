@@ -190,9 +190,6 @@ public sealed class PaisEstadoPersistenceTests
     private static EstadoIndicador NovoIndicadorSemDados(Guid estadoId) =>
         GeoTestKeys.Ok(EstadoIndicador.Importar(
             estadoId, gentilico: null, governador: null,
-            areaKm2: null, populacaoResidente2022: null, densidadeDemografica: null,
-            matriculasEnsinoFundamental2023: null, idh: null,
-            receitasBrutas: null, despesasBrutas: null,
-            rendimentoMensalPerCapita: null, totalVeiculos2023: null,
-            versaoDataset: VersaoDataset));
+            metricas: new MetricasDoEstado(),
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 }
