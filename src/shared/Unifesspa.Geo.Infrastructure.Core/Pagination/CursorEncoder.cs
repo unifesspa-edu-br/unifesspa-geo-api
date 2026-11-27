@@ -17,7 +17,7 @@ public sealed class CursorEncoder
     /// Chave do Transit que cifra o payload do cursor de paginação.
     /// A política do Vault do Geo precisa conceder encrypt/decrypt nesta chave.
     /// </summary>
-    public const string KeyName = "geo-idempotency-aesgcm";
+    public const string KeyName = "geo-cursor-aesgcm";
 
     private static readonly JsonSerializerOptions PayloadJsonOptions = new()
     {
