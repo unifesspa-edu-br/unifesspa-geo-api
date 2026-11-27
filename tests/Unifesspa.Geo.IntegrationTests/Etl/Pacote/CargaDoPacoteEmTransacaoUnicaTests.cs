@@ -65,10 +65,9 @@ public sealed class CargaDoPacoteEmTransacaoUnicaTests : IDisposable
         await PrepararBaseAnteriorAsync();
 
         using MontagemDaCarga montagem = new(_fixture);
-        Guid id = await montagem.RegistrarExecucaoAsync(VersoesFicticias.VersaoNova);
-        PacoteSinteticoDne.Completo(VersoesFicticias.VersaoNova)
-            .ComLinhaBruta("logradouro", $"'{Marcador}', E'x'")
-            .Gravar(_diretorio, id);
+        PacoteSinteticoDne pacote = PacoteSinteticoDne.Completo(VersoesFicticias.VersaoNova)
+            .ComLinhaBruta("logradouro", $"'{Marcador}', E'x'");
+        Guid id = await RegistrarExecucaoComPacoteAsync(montagem, pacote);
 
         await montagem.ExecutarAsync(id, EsquemaReal());
 
@@ -89,8 +88,7 @@ public sealed class CargaDoPacoteEmTransacaoUnicaTests : IDisposable
             DecorarFolhas = folhas => new FolhasComGancho(
                 folhas, () => throw new InvalidOperationException($"falha com {Marcador}")),
         };
-        Guid id = await montagem.RegistrarExecucaoAsync(VersoesFicticias.VersaoNova);
-        PacoteSinteticoDne.Completo(VersoesFicticias.VersaoNova).Gravar(_diretorio, id);
+        Guid id = await RegistrarExecucaoComPacoteAsync(montagem, PacoteSinteticoDne.Completo(VersoesFicticias.VersaoNova));
 
         await montagem.ExecutarAsync(id, EsquemaReal());
 
@@ -101,6 +99,13 @@ public sealed class CargaDoPacoteEmTransacaoUnicaTests : IDisposable
 
     private EsquemaDeCargaDne EsquemaReal() =>
         new(_conexao.Configuracao, _arquivos, NullLogger<EsquemaDeCargaDne>.Instance);
+
+    private async Task<Guid> RegistrarExecucaoComPacoteAsync(MontagemDaCarga montagem, PacoteSinteticoDne pacote)
+    {
+        Guid id = await montagem.RegistrarExecucaoAsync(VersoesFicticias.VersaoNova);
+        pacote.Gravar(_diretorio, id);
+        return id;
+    }
 
     private async Task PrepararBaseAnteriorAsync()
     {
