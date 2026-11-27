@@ -7,93 +7,54 @@ using System.Text.Json;
 
 using AwesomeAssertions;
 
-using Unifesspa.Geo.Domain.Entities;
-using Unifesspa.Geo.Infrastructure.Persistence;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Endpoints de leitura autenticada de Estados (#675) contra a API real + PostGIS.
-/// Read-only sem role administrativa. Cobre CA-01, CA-07,
-/// CA-09 e CA-10. A collection é serial; cada teste TRUNCA e semeia.
+/// Endpoints de leitura autenticada de estados contra a API real e o PostGIS.
+/// Leitura sem papel administrativo. Cobre CA-01, CA-07, CA-09 e CA-10.
+/// A collection é serial; cada teste apaga e semeia.
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
 public sealed class EstadosEndpointTests
 {
+    private static readonly string[] UfsSemeadas = ["AC", "AL", "AM", "BA", "CE"];
+
     private readonly GeoPostgisFixture _fixture;
+    private readonly CenarioDeEstados _cenario;
 
     public EstadosEndpointTests(GeoPostgisFixture fixture)
     {
         _fixture = fixture;
+        _cenario = new CenarioDeEstados(fixture);
     }
 
     [Fact(DisplayName = "CA-01/CA-10: lista de estados pagina por cursor estável e cada item tem _links.self")]
     public async Task Estados_Lista_Paginada()
     {
-        IReadOnlyList<string> ufsSemeadas = ["AC", "AL", "AM", "BA", "CE"];
-        await SemearEstadosAsync(ufsSemeadas);
-
+        await _cenario.SemearEstadosAsync(UfsSemeadas);
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
-
-        // Página 1 (limit=2) — espera-se header Link com next e _links.self por item.
         using HttpResponseMessage pagina1 = await GeoReferenceSeed.Obter(client, "/api/estados?limit=2");
         pagina1.StatusCode.Should().Be(HttpStatusCode.OK);
-
         JsonElement itens1 = await LerArrayAsync(pagina1);
         itens1.GetArrayLength().Should().Be(2);
-        foreach (JsonElement item in itens1.EnumerateArray())
-        {
-            string uf = item.GetProperty("uf").GetString()!;
-            item.GetProperty("_links").GetProperty("self").GetString()
-                .Should().Be($"/api/estados/{uf}");
-        }
-
-        GeoReferenceSeed.ExtrairLink(pagina1, "next").Should().NotBeNull("há mais páginas");
-
-        // Percorre todas as páginas seguindo o cursor 'next': união = conjunto semeado,
-        // sem duplicatas (keyset estável — ADR-0089/0094). A ordem alfabética é coberta
-        // pelos testes dedicados abaixo.
-        List<string> coletadas = [];
-        coletadas.AddRange(ExtrairUfs(itens1));
-
+        ConferirLinkSelfDeCadaEstado(itens1);
         string? proximo = GeoReferenceSeed.ExtrairLink(pagina1, "next");
-        bool viuPrevEmPaginaSeguinte = false;
-        while (proximo is not null)
-        {
-            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
-            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
-            JsonElement itens = await LerArrayAsync(pagina);
-            coletadas.AddRange(ExtrairUfs(itens));
-
-            if (GeoReferenceSeed.ExtrairLink(pagina, "prev") is not null)
-            {
-                viuPrevEmPaginaSeguinte = true;
-            }
-
-            proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
-        }
-
-        coletadas.Should().BeEquivalentTo(ufsSemeadas, "a paginação cobre todo o conjunto sem repetir/saltar");
+        proximo.Should().NotBeNull("há mais páginas");
+        (List<string> seguintes, bool viuPrev) = await ColetarUfsDasProximasPaginasAsync(client, proximo!);
+        List<string> coletadas = [.. ExtrairUfs(itens1), .. seguintes];
+        coletadas.Should().BeEquivalentTo(UfsSemeadas, "a paginação cobre todo o conjunto sem repetir/saltar");
         coletadas.Should().OnlyHaveUniqueItems();
-        viuPrevEmPaginaSeguinte.Should().BeTrue("páginas após a primeira emitem rel=prev");
+        viuPrev.Should().BeTrue("páginas após a primeira emitem rel=prev");
     }
 
     [Fact(DisplayName = "#700: lista de estados vem ordenada alfabeticamente por nome, estável ao paginar")]
     public async Task Estados_OrdenadosAlfabeticamente()
     {
         // Semeia fora de ordem: a ordem alfabética dos nomes difere da ordem de inserção/Id.
-        await SemearForaDeOrdemAsync();
+        await _cenario.SemearForaDeOrdemAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
-        List<string> nomes = [];
-        string? proximo = "/api/estados?limit=2";
-        while (proximo is not null)
-        {
-            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, proximo);
-            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
-            JsonElement itens = await LerArrayAsync(pagina);
-            nomes.AddRange(itens.EnumerateArray().Select(i => i.GetProperty("nome").GetString()!));
-            proximo = GeoReferenceSeed.ExtrairLink(pagina, "next");
-        }
+        List<string> nomes = await ListaDaApi.NomesDasPaginasAsync(client, "/api/estados?limit=2");
 
         nomes.Should().Equal(
             "Acre", "Bahia", "Minas Gerais", "Pará", "Sergipe");
@@ -102,7 +63,7 @@ public sealed class EstadosEndpointTests
     [Fact(DisplayName = "#700: navegação prev volta à página anterior na ordem alfabética (sem duplicata/salto)")]
     public async Task Estados_NavegacaoPrev_Alfabetica()
     {
-        await SemearForaDeOrdemAsync();
+        await _cenario.SemearForaDeOrdemAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage p1 = await GeoReferenceSeed.Obter(client, "/api/estados?limit=2");
@@ -121,24 +82,15 @@ public sealed class EstadosEndpointTests
     [Fact(DisplayName = "CA-09: detalhe do estado por UF traz núcleo + região + capital + coordenadas + _links")]
     public async Task Estado_Detalhe_PorUf()
     {
-        await SemearParaAsync();
+        await _cenario.SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/estados/PA");
         resposta.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using JsonDocument doc = JsonDocument.Parse(await resposta.Content.ReadAsStringAsync());
-        JsonElement raiz = doc.RootElement;
-        raiz.GetProperty("uf").GetString().Should().Be("PA");
-        raiz.GetProperty("nome").GetString().Should().Be("Pará");
-        raiz.GetProperty("regiao").GetString().Should().Be("Norte");
-        raiz.GetProperty("capital").GetString().Should().Be("Belém");
-        raiz.GetProperty("latitude").GetDecimal().Should().Be(-3.79m);
-
-        JsonElement links = raiz.GetProperty("_links");
-        links.GetProperty("self").GetString().Should().Be("/api/estados/PA");
-        links.GetProperty("cidades").GetString().Should().Be("/api/cidades?uf=PA");
-        links.GetProperty("collection").GetString().Should().Be("/api/estados");
+        ConferirDadosDoPara(doc.RootElement);
+        ConferirLinksDoPara(doc.RootElement.GetProperty("_links"));
     }
 
     [Theory(DisplayName = "CA-09: UF case-insensitive resolve o mesmo estado")]
@@ -146,7 +98,7 @@ public sealed class EstadosEndpointTests
     [InlineData("Pa")]
     public async Task Estado_Detalhe_PorUf_CaseInsensitive(string uf)
     {
-        await SemearParaAsync();
+        await _cenario.SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, $"/api/estados/{uf}");
@@ -158,7 +110,7 @@ public sealed class EstadosEndpointTests
     [Fact(DisplayName = "CA-09: UF bem-formada mas inexistente retorna 404")]
     public async Task Estado_Detalhe_Inexistente_404()
     {
-        await SemearParaAsync();
+        await _cenario.SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage resposta = await GeoReferenceSeed.Obter(client, "/api/estados/ZZ");
@@ -180,34 +132,20 @@ public sealed class EstadosEndpointTests
     [Fact(DisplayName = "CA-07: Accept vendor incompatível retorna 406; vendor estado.v1 é aceito")]
     public async Task Estados_VendorMime()
     {
-        await SemearParaAsync();
+        await _cenario.SemearParaAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
-        using HttpRequestMessage incompativel = new(HttpMethod.Get, "/api/estados");
-        incompativel.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.uniplus.estado.v2+json"));
-        using HttpResponseMessage resp406 = await client.SendAsync(incompativel);
+        using HttpResponseMessage resp406 = await EnviarAceitandoAsync(client, "application/vnd.uniplus.estado.v2+json");
         resp406.StatusCode.Should().Be(HttpStatusCode.NotAcceptable);
 
-        using HttpRequestMessage compativel = new(HttpMethod.Get, "/api/estados");
-        compativel.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.uniplus.estado.v1+json"));
-        using HttpResponseMessage resp200 = await client.SendAsync(compativel);
+        using HttpResponseMessage resp200 = await EnviarAceitandoAsync(client, "application/vnd.uniplus.estado.v1+json");
         resp200.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact(DisplayName = "ADR-0092: estado stale (vigente=false) não aparece na lista nem no detalhe")]
     public async Task Estados_NaoVigente_NaoVaza()
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using (GeoDbContext ctx = _fixture.CreateDbContext())
-        {
-            Pais brasil = GeoReferenceSeed.NovoBrasil();
-            Estado vigente = GeoReferenceSeed.NovoEstado(brasil.Id, "PA", "Pará");
-            Estado stale = GeoReferenceSeed.NovoEstado(brasil.Id, "ZZ", "Obsoleto", vigente: false);
-            ctx.Paises.Add(brasil);
-            ctx.Estados.AddRange(vigente, stale);
-            await ctx.SaveChangesAsync();
-        }
-
+        await _cenario.GravarEstadoVigenteEObsoletoAsync();
         using HttpClient client = _fixture.Factory.CreateAuthenticatedClient();
 
         using HttpResponseMessage lista = await GeoReferenceSeed.Obter(client, "/api/estados?limit=100");
@@ -218,55 +156,58 @@ public sealed class EstadosEndpointTests
         detalhe.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private async Task SemearEstadosAsync(IReadOnlyList<string> ufs)
+    private static void ConferirLinkSelfDeCadaEstado(JsonElement itens)
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using GeoDbContext ctx = _fixture.CreateDbContext();
-        Pais brasil = GeoReferenceSeed.NovoBrasil();
-        ctx.Paises.Add(brasil);
-        foreach (string uf in ufs)
+        foreach (JsonElement item in itens.EnumerateArray())
         {
-            ctx.Estados.Add(GeoReferenceSeed.NovoEstado(brasil.Id, uf, $"Estado {uf}"));
+            string uf = item.GetProperty("uf").GetString()!;
+            item.GetProperty("_links").GetProperty("self").GetString()
+                .Should().Be($"/api/estados/{uf}");
         }
-
-        await ctx.SaveChangesAsync();
     }
 
-    // Nomes cuja ordem alfabética (Acre < Bahia < Minas Gerais < Pará < Sergipe) difere
-    // da ordem de inserção — prova que a ordenação é por nome, não por Id/inserção.
-    private async Task SemearForaDeOrdemAsync()
+    private static void ConferirDadosDoPara(JsonElement raiz)
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using GeoDbContext ctx = _fixture.CreateDbContext();
-        Pais brasil = GeoReferenceSeed.NovoBrasil();
-        ctx.Paises.Add(brasil);
-        (string Uf, string Nome)[] semente =
-        [
-            ("SE", "Sergipe"),
-            ("AC", "Acre"),
-            ("BA", "Bahia"),
-            ("MG", "Minas Gerais"),
-            ("PA", "Pará"),
-        ];
-        foreach ((string uf, string nome) in semente)
-        {
-            ctx.Estados.Add(GeoReferenceSeed.NovoEstado(brasil.Id, uf, nome));
-        }
-
-        await ctx.SaveChangesAsync();
+        raiz.GetProperty("uf").GetString().Should().Be("PA");
+        raiz.GetProperty("nome").GetString().Should().Be("Pará");
+        raiz.GetProperty("regiao").GetString().Should().Be("Norte");
+        raiz.GetProperty("capital").GetString().Should().Be("Belém");
+        raiz.GetProperty("latitude").GetDecimal().Should().Be(-3.79m);
     }
 
-    private async Task SemearParaAsync()
+    private static void ConferirLinksDoPara(JsonElement links)
     {
-        await GeoReferenceSeed.LimparAsync(_fixture);
-        await using GeoDbContext ctx = _fixture.CreateDbContext();
-        Pais brasil = GeoReferenceSeed.NovoBrasil();
-        Estado para = GeoReferenceSeed.NovoEstado(
-            brasil.Id, "PA", "Pará", regiao: "Norte", capital: "Belém", codigoIbge: "15",
-            latitude: -3.79m, longitude: -52.48m);
-        ctx.Paises.Add(brasil);
-        ctx.Estados.Add(para);
-        await ctx.SaveChangesAsync();
+        links.GetProperty("self").GetString().Should().Be("/api/estados/PA");
+        links.GetProperty("cidades").GetString().Should().Be("/api/cidades?uf=PA");
+        links.GetProperty("collection").GetString().Should().Be("/api/estados");
+    }
+
+    // Percorre as páginas seguindo o cursor 'next': a união com a primeira página é o conjunto
+    // semeado, sem duplicatas (keyset estável — ADR-0089/0094). A ordem alfabética é coberta
+    // pelos testes dedicados. Informa se alguma página seguinte trouxe o link prev.
+    private static async Task<(List<string> Ufs, bool ViuPrev)> ColetarUfsDasProximasPaginasAsync(
+        HttpClient client, string proximo)
+    {
+        List<string> ufs = [];
+        bool viuPrev = false;
+        string? rota = proximo;
+        while (rota is not null)
+        {
+            using HttpResponseMessage pagina = await GeoReferenceSeed.Obter(client, rota);
+            pagina.StatusCode.Should().Be(HttpStatusCode.OK);
+            ufs.AddRange(ExtrairUfs(await LerArrayAsync(pagina)));
+            viuPrev |= GeoReferenceSeed.ExtrairLink(pagina, "prev") is not null;
+            rota = GeoReferenceSeed.ExtrairLink(pagina, "next");
+        }
+
+        return (ufs, viuPrev);
+    }
+
+    private static async Task<HttpResponseMessage> EnviarAceitandoAsync(HttpClient client, string vendorMime)
+    {
+        using HttpRequestMessage requisicao = new(HttpMethod.Get, "/api/estados");
+        requisicao.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(vendorMime));
+        return await client.SendAsync(requisicao);
     }
 
     private static async Task<JsonElement> LerArrayAsync(HttpResponseMessage resposta)
