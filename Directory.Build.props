@@ -10,7 +10,7 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <!-- MetricasBarradas = true (por nome exato de projeto) faz as cinco regras de métrica barrarem a build. -->
-    <MetricasBarradas Condition="'$(MSBuildProjectName)' == 'Unifesspa.Geo.Contracts' Or '$(MSBuildProjectName)' == 'Unifesspa.Geo.Governance.Contracts' Or '$(MSBuildProjectName)' == 'Unifesspa.Geo.Application.Abstractions'">true</MetricasBarradas>
+    <MetricasBarradas Condition="'$(MSBuildProjectName)' == 'Unifesspa.Geo.Contracts' Or '$(MSBuildProjectName)' == 'Unifesspa.Geo.Governance.Contracts' Or '$(MSBuildProjectName)' == 'Unifesspa.Geo.Application.Abstractions' Or '$(MSBuildProjectName)' == 'Unifesspa.Geo.IntegrationTests' Or '$(MSBuildProjectName)' == 'Unifesspa.Geo.IntegrationTests.Fixtures'">true</MetricasBarradas>
     <WarningsNotAsErrors Condition="'$(MetricasBarradas)' != 'true'">$(WarningsNotAsErrors);MA0051;S104;S3776;S1541;S107</WarningsNotAsErrors>
     <ErrorLog>$(MSBuildThisFileDirectory)artifacts/analise/$(MSBuildProjectName).sarif,version=2.1</ErrorLog>
   </PropertyGroup>
