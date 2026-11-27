@@ -35,11 +35,20 @@ internal sealed record CenarioDaCidadeDeMaraba(Cidade Maraba, CidadeIndicador In
 
     private static CidadeIndicador NovoIndicador(Cidade maraba) =>
         GeoTestKeys.Ok(CidadeIndicador.Importar(
-            cidadeId: maraba.Id, gentilico: "marabaense", prefeito: null,
-            areaKm2: 15128.058m, populacaoResidente: 233669, densidadeDemografica: 15.45m,
-            escolarizacao6a14: 96.8m, idh: 0.668m, mortalidadeInfantil: 17.2m,
-            receitas: 1_200_000_000.00m, despesas: 1_100_000_000.00m, pibPerCapita: 28000.50m,
-            aniversario: "05/04", versaoDataset: VersaoDataset));
+            cidadeId: maraba.Id, gentilico: "marabaense", prefeito: null, aniversario: "05/04",
+            metricas: new MetricasDaCidade
+            {
+                AreaKm2 = 15128.058m,
+                PopulacaoResidente = 233669,
+                DensidadeDemografica = 15.45m,
+                Escolarizacao6a14 = 96.8m,
+                Idh = 0.668m,
+                MortalidadeInfantil = 17.2m,
+                Receitas = 1_200_000_000.00m,
+                Despesas = 1_100_000_000.00m,
+                PibPerCapita = 28000.50m,
+            },
+            proveniencia: new ProvenienciaDaCarga(VersaoDataset)));
 
     private static CidadeFaixaCep NovaFaixa(Cidade maraba) =>
         GeoTestKeys.Ok(CidadeFaixaCep.Importar(

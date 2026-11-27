@@ -15,7 +15,7 @@ using static Unifesspa.Geo.Infrastructure.Persistence.Etl.GeoEtlUpsert;
 /// <summary>
 /// Importa Cidade (com o recorte territorial embutido), indicadores da Cidade e faixas
 /// de CEP da Cidade (ADR-0092) dentro da transação aberta por
-/// <see cref="GeoImportadorPaisEstadoCidade"/>. Upsert por chave natural (código IBGE):
+/// <see cref="GeoImportadorPaisEstadoCidade"/>. Gravação por chave natural (código IBGE):
 /// a recarga preserva o Guid e não duplica. O nome gravado é o oficial do IBGE, por
 /// código; só quando o código não consta na lista oficial vale o nome da DNE.
 /// </summary>
@@ -48,7 +48,7 @@ internal sealed class GeoImportadorCidades
 
         Dictionary<string, Guid> cidadesPorCodigo = await ImportarCidadesAsync(
             fonte, estadosPorUf, territorios, proveniencia, relatorio.Tabela("cidade"), cancellationToken).ConfigureAwait(false);
-        await ImportarIndicadoresAsync(fonte, cidadesPorCodigo, relatorio.Tabela("cidade_indicador"), cancellationToken).ConfigureAwait(false);
+        await ImportarIndicadoresAsync(fonte, cidadesPorCodigo, proveniencia, relatorio.Tabela("cidade_indicador"), cancellationToken).ConfigureAwait(false);
         await ImportarFaixasAsync(fonte, cidadesPorCodigo, proveniencia, relatorio.Tabela("cidade_faixa"), cancellationToken).ConfigureAwait(false);
     }
 
@@ -158,6 +158,7 @@ internal sealed class GeoImportadorCidades
     private async Task ImportarIndicadoresAsync(
         IGeoFonteDados fonte,
         Dictionary<string, Guid> cidadesPorCodigo,
+        ProvenienciaDaCarga proveniencia,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
@@ -165,17 +166,17 @@ internal sealed class GeoImportadorCidades
             fonte.LerCidadeIndicadoresAsync(cancellationToken), i => ChaveCodigo(i.CodigoIbge), contador).ConfigureAwait(false);
         Dictionary<Guid, CidadeIndicador> existentes =
             await _contexto.CidadeIndicadores.ToDictionaryAsync(i => i.CidadeId, cancellationToken).ConfigureAwait(false);
-        UpsertarIndicadores(cidadesPorCodigo, indicadores, fonte.Versao, existentes, contador);
+        UpsertarIndicadores(cidadesPorCodigo, indicadores, proveniencia, existentes, contador);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
 
     // Lidos, sem chave e duplicados já foram contados na agregação; aqui só resta
-    // resolver o órfão e fazer o upsert.
+    // resolver o órfão e gravar pela chave natural.
     private void UpsertarIndicadores(
         Dictionary<string, Guid> cidadesPorCodigo,
         Dictionary<string, CidadeIndicadorCru> indicadores,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<Guid, CidadeIndicador> existentes,
         ContadorTabela contador)
     {
@@ -187,39 +188,49 @@ internal sealed class GeoImportadorCidades
                 continue;
             }
 
-            UpsertarIndicador(cidadeId, cru, versao, existentes, contador);
+            UpsertarIndicador(cidadeId, cru, proveniencia, existentes, contador);
         }
     }
 
     private void UpsertarIndicador(
         Guid cidadeId,
         CidadeIndicadorCru cru,
-        string versao,
+        ProvenienciaDaCarga proveniencia,
         Dictionary<Guid, CidadeIndicador> existentes,
         ContadorTabela contador)
     {
-        MetricasDaCidade m = MetricasDaCidade.De(cru, contador);
+        MetricasDaCidade metricas = MetricasDe(cru, contador);
 
         if (existentes.TryGetValue(cidadeId, out CidadeIndicador? existente))
         {
-            AtualizarIndicador(existente, cru, m, versao, contador);
+            AtualizarIndicador(existente, cru, metricas, proveniencia, contador);
         }
         else
         {
-            CriarIndicador(cidadeId, cru, m, versao, contador);
+            CriarIndicador(cidadeId, cru, metricas, proveniencia, contador);
         }
     }
 
-    private void AtualizarIndicador(CidadeIndicador existente, CidadeIndicadorCru cru, MetricasDaCidade m, string versao, ContadorTabela contador)
+    private void AtualizarIndicador(
+        CidadeIndicador existente,
+        CidadeIndicadorCru cru,
+        MetricasDaCidade metricas,
+        ProvenienciaDaCarga proveniencia,
+        ContadorTabela contador)
     {
-        existente.Atualizar(cru.Gentilico, cru.Prefeito, m.Area, m.Populacao, m.Densidade, m.Escolarizacao, m.Idh, m.Mortalidade, m.Receitas, m.Despesas, m.Pib, cru.Aniversario, versao);
+        existente.Atualizar(cru.Gentilico, cru.Prefeito, cru.Aniversario, metricas, proveniencia);
         Tocar(_contexto, existente);
         contador.ContarAtualizado();
     }
 
-    private void CriarIndicador(Guid cidadeId, CidadeIndicadorCru cru, MetricasDaCidade m, string versao, ContadorTabela contador)
+    private void CriarIndicador(
+        Guid cidadeId,
+        CidadeIndicadorCru cru,
+        MetricasDaCidade metricas,
+        ProvenienciaDaCarga proveniencia,
+        ContadorTabela contador)
     {
-        Result<CidadeIndicador> criado = CidadeIndicador.Importar(cidadeId, cru.Gentilico, cru.Prefeito, m.Area, m.Populacao, m.Densidade, m.Escolarizacao, m.Idh, m.Mortalidade, m.Receitas, m.Despesas, m.Pib, cru.Aniversario, versao);
+        Result<CidadeIndicador> criado = CidadeIndicador.Importar(cidadeId, cru.Gentilico, cru.Prefeito, cru.Aniversario, metricas, proveniencia);
         if (criado.IsFailure)
         {
             contador.ContarIgnoradoSemChave();
@@ -229,6 +240,19 @@ internal sealed class GeoImportadorCidades
         _contexto.CidadeIndicadores.Add(criado.Value!);
         contador.ContarInserido();
     }
+
+    private static MetricasDaCidade MetricasDe(CidadeIndicadorCru cru, ContadorTabela contador) => new()
+    {
+        AreaKm2 = MetricaIbge.Decimal(cru.AreaTerritorialKm2, "area_territorial_km2", contador),
+        PopulacaoResidente = MetricaIbge.Inteira(cru.PopulacaoResidente, "populacao_residente", contador),
+        DensidadeDemografica = MetricaIbge.Decimal(cru.DensidadeDemografica, "densidade_demografica", contador),
+        Escolarizacao6a14 = MetricaIbge.Decimal(cru.Escolarizacao6a14, "escolarizacao_6_a_14_anos", contador),
+        Idh = MetricaIbge.Decimal(cru.Idh, "idice_de_desenv_humano", contador),
+        MortalidadeInfantil = MetricaIbge.Decimal(cru.MortalidadeInfantil, "mortalidade_infantil", contador),
+        Receitas = MetricaIbge.Decimal(cru.Receitas, "receitas_realizadas", contador),
+        Despesas = MetricaIbge.Decimal(cru.Despesas, "despesas_empenhadas", contador),
+        PibPerCapita = MetricaIbge.Decimal(cru.PibPerCapita, "pib_per_capita", contador),
+    };
 
     private async Task ImportarFaixasAsync(
         IGeoFonteDados fonte,
@@ -320,39 +344,5 @@ internal sealed class GeoImportadorCidades
 
         public Result Atualizar(Cidade existente) =>
             existente.Atualizar(Chave.Estado, Nome, Ddd, Posicao, Divisao, Proveniencia);
-    }
-
-    private readonly record struct MetricasDaCidade
-    {
-        public decimal? Area { get; init; }
-
-        public int? Populacao { get; init; }
-
-        public decimal? Densidade { get; init; }
-
-        public decimal? Escolarizacao { get; init; }
-
-        public decimal? Idh { get; init; }
-
-        public decimal? Mortalidade { get; init; }
-
-        public decimal? Receitas { get; init; }
-
-        public decimal? Despesas { get; init; }
-
-        public decimal? Pib { get; init; }
-
-        public static MetricasDaCidade De(CidadeIndicadorCru cru, ContadorTabela contador) => new()
-        {
-            Area = MetricaIbge.Decimal(cru.AreaTerritorialKm2, "area_territorial_km2", contador),
-            Populacao = MetricaIbge.Inteira(cru.PopulacaoResidente, "populacao_residente", contador),
-            Densidade = MetricaIbge.Decimal(cru.DensidadeDemografica, "densidade_demografica", contador),
-            Escolarizacao = MetricaIbge.Decimal(cru.Escolarizacao6a14, "escolarizacao_6_a_14_anos", contador),
-            Idh = MetricaIbge.Decimal(cru.Idh, "idice_de_desenv_humano", contador),
-            Mortalidade = MetricaIbge.Decimal(cru.MortalidadeInfantil, "mortalidade_infantil", contador),
-            Receitas = MetricaIbge.Decimal(cru.Receitas, "receitas_realizadas", contador),
-            Despesas = MetricaIbge.Decimal(cru.Despesas, "despesas_empenhadas", contador),
-            Pib = MetricaIbge.Decimal(cru.PibPerCapita, "pib_per_capita", contador),
-        };
     }
 }

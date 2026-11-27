@@ -1,6 +1,7 @@
 namespace Unifesspa.Geo.Domain.Entities;
 
 using Unifesspa.Geo.Domain.Errors;
+using Unifesspa.Geo.Domain.ValueObjects;
 using Unifesspa.Geo.Kernel.Domain.Entities;
 using Unifesspa.Geo.Kernel.Results;
 
@@ -8,7 +9,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// Satélite socioeconômico IBGE de uma <see cref="Cidade"/> (1:1). Reference data
 /// sem soft-delete (ADR-0092). Todos os indicadores são <c>nullable</c>: ~27% dos
 /// municípios trazem <c>'-'</c> em <see cref="MortalidadeInfantil"/> e o ETL degrada
-/// para <see langword="null"/> (parse tolerante, F3) — só o vínculo e a proveniência
+/// para <see langword="null"/> (leitura tolerante na carga) — só o vínculo e a proveniência
 /// são obrigatórios. <see cref="Aniversario"/> é <c>string</c> "DD/MM" (sem ano, não é data).
 /// </summary>
 public sealed class CidadeIndicador : EntityBase
@@ -43,10 +44,10 @@ public sealed class CidadeIndicador : EntityBase
     /// <summary>Aniversário do município no formato "DD/MM" (sem ano) — <c>string</c>, não data.</summary>
     public string? Aniversario { get; private set; }
 
-    /// <summary>Release DNE de origem (AAAAMM) — proveniência da carga (ADR-0092).</summary>
+    /// <summary>Versão da base dos Correios (AAAAMM) de origem — proveniência da carga (ADR-0092).</summary>
     public string VersaoDataset { get; private set; } = string.Empty;
 
-    /// <summary><see langword="false"/> quando o vínculo some da release vigente (stale do ETL).</summary>
+    /// <summary><see langword="false"/> quando o vínculo some da versão vigente (registro não vigente).</summary>
     public bool Vigente { get; private set; } = true;
 
     // Construtor privado para materialização do EF Core.
@@ -55,110 +56,87 @@ public sealed class CidadeIndicador : EntityBase
     }
 
     /// <summary>
-    /// Importa o indicador de uma Cidade. Valores já tipados (parse tolerante no
-    /// ETL). Valida só o mínimo: vínculo (<paramref name="cidadeId"/>) e
-    /// proveniência (<paramref name="versaoDataset"/>).
+    /// Importa o indicador de uma Cidade. Valores já tipados (leitura tolerante na carga).
+    /// Valida só o mínimo: vínculo (<paramref name="cidadeId"/>) e a versão da base em
+    /// <paramref name="proveniencia"/>.
     /// </summary>
     public static Result<CidadeIndicador> Importar(
         Guid cidadeId,
         string? gentilico,
         string? prefeito,
-        decimal? areaKm2,
-        int? populacaoResidente,
-        decimal? densidadeDemografica,
-        decimal? escolarizacao6a14,
-        decimal? idh,
-        decimal? mortalidadeInfantil,
-        decimal? receitas,
-        decimal? despesas,
-        decimal? pibPerCapita,
         string? aniversario,
-        string versaoDataset,
-        bool vigente = true)
+        MetricasDaCidade metricas,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(metricas);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (cidadeId == Guid.Empty)
+        DomainError? erro = Validar(cidadeId, proveniencia);
+        if (erro is not null)
         {
-            return Result<CidadeIndicador>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeIndicadorCidadeObrigatoria,
-                "Cidade do indicador é obrigatória."));
+            return Result<CidadeIndicador>.Failure(erro);
         }
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
-        {
-            return Result<CidadeIndicador>.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeIndicadorVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do indicador de Cidade é obrigatória."));
-        }
-
-        var indicador = new CidadeIndicador
-        {
-            CidadeId = cidadeId,
-            Gentilico = GeoTexto.NormalizarOpcional(gentilico),
-            Prefeito = GeoTexto.NormalizarOpcional(prefeito),
-            AreaKm2 = areaKm2,
-            PopulacaoResidente = populacaoResidente,
-            DensidadeDemografica = densidadeDemografica,
-            Escolarizacao6a14 = escolarizacao6a14,
-            Idh = idh,
-            MortalidadeInfantil = mortalidadeInfantil,
-            Receitas = receitas,
-            Despesas = despesas,
-            PibPerCapita = pibPerCapita,
-            Aniversario = GeoTexto.NormalizarOpcional(aniversario),
-            VersaoDataset = versaoDataset.Trim(),
-            Vigente = vigente,
-        };
+        var indicador = new CidadeIndicador { CidadeId = cidadeId };
+        indicador.Aplicar(gentilico, prefeito, aniversario, metricas, proveniencia);
 
         return Result<CidadeIndicador>.Success(indicador);
     }
 
     /// <summary>
-    /// Reaplica os indicadores de uma release sobre o satélite já existente (upsert
-    /// in place do ETL), preservando <see cref="EntityBase.Id"/> e o vínculo
+    /// Reaplica os indicadores de uma versão da base sobre o satélite já existente (atualização
+    /// pela chave natural da carga), preservando <see cref="EntityBase.Id"/> e o vínculo
     /// <see cref="CidadeId"/>. Valida o mínimo <strong>antes</strong> de mutar.
     /// </summary>
     public Result Atualizar(
         string? gentilico,
         string? prefeito,
-        decimal? areaKm2,
-        int? populacaoResidente,
-        decimal? densidadeDemografica,
-        decimal? escolarizacao6a14,
-        decimal? idh,
-        decimal? mortalidadeInfantil,
-        decimal? receitas,
-        decimal? despesas,
-        decimal? pibPerCapita,
         string? aniversario,
-        string versaoDataset,
-        bool vigente = true)
+        MetricasDaCidade metricas,
+        ProvenienciaDaCarga proveniencia)
     {
-        ArgumentNullException.ThrowIfNull(versaoDataset);
+        ArgumentNullException.ThrowIfNull(metricas);
+        ArgumentNullException.ThrowIfNull(proveniencia);
 
-        if (string.IsNullOrWhiteSpace(versaoDataset))
+        DomainError? erro = Validar(CidadeId, proveniencia);
+        if (erro is not null)
         {
-            return Result.Failure(new DomainError(
-                GeoReferenceDataErrorCodes.CidadeIndicadorVersaoDatasetObrigatoria,
-                "Versão do dataset (proveniência) do indicador de Cidade é obrigatória."));
+            return Result.Failure(erro);
         }
 
-        Gentilico = GeoTexto.NormalizarOpcional(gentilico);
-        Prefeito = GeoTexto.NormalizarOpcional(prefeito);
-        AreaKm2 = areaKm2;
-        PopulacaoResidente = populacaoResidente;
-        DensidadeDemografica = densidadeDemografica;
-        Escolarizacao6a14 = escolarizacao6a14;
-        Idh = idh;
-        MortalidadeInfantil = mortalidadeInfantil;
-        Receitas = receitas;
-        Despesas = despesas;
-        PibPerCapita = pibPerCapita;
-        Aniversario = GeoTexto.NormalizarOpcional(aniversario);
-        VersaoDataset = versaoDataset.Trim();
-        Vigente = vigente;
+        Aplicar(gentilico, prefeito, aniversario, metricas, proveniencia);
 
         return Result.Success();
+    }
+
+    private static DomainError? Validar(Guid cidadeId, ProvenienciaDaCarga proveniencia) =>
+        cidadeId == Guid.Empty
+            ? new DomainError(GeoReferenceDataErrorCodes.CidadeIndicadorCidadeObrigatoria, "Cidade do indicador é obrigatória.")
+            : proveniencia.TemVersao
+                ? null
+                : new DomainError(
+                    GeoReferenceDataErrorCodes.CidadeIndicadorVersaoDatasetObrigatoria,
+                    "Versão do dataset (proveniência) do indicador de Cidade é obrigatória.");
+
+    private void Aplicar(
+        string? gentilico,
+        string? prefeito,
+        string? aniversario,
+        MetricasDaCidade metricas,
+        ProvenienciaDaCarga proveniencia)
+    {
+        Gentilico = GeoTexto.NormalizarOpcional(gentilico);
+        Prefeito = GeoTexto.NormalizarOpcional(prefeito);
+        Aniversario = GeoTexto.NormalizarOpcional(aniversario);
+        AreaKm2 = metricas.AreaKm2;
+        PopulacaoResidente = metricas.PopulacaoResidente;
+        DensidadeDemografica = metricas.DensidadeDemografica;
+        Escolarizacao6a14 = metricas.Escolarizacao6a14;
+        Idh = metricas.Idh;
+        MortalidadeInfantil = metricas.MortalidadeInfantil;
+        Receitas = metricas.Receitas;
+        Despesas = metricas.Despesas;
+        PibPerCapita = metricas.PibPerCapita;
+        (VersaoDataset, Vigente) = proveniencia;
     }
 }

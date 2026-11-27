@@ -100,8 +100,15 @@ internal static partial class GeoReferenceSeed
         decimal? idh = null,
         string? aniversario = null) =>
         GeoTestKeys.Ok(CidadeIndicador.Importar(
-            cidadeId, gentilico, null, areaKm2, populacaoResidente, densidadeDemografica,
-            null, idh, null, null, null, null, aniversario, Versao));
+            cidadeId, gentilico, null, aniversario,
+            new MetricasDaCidade
+            {
+                AreaKm2 = areaKm2,
+                PopulacaoResidente = populacaoResidente,
+                DensidadeDemografica = densidadeDemografica,
+                Idh = idh,
+            },
+            Proveniencia()));
 
     /// <summary>Extrai a URL de um <c>rel</c> específico do header <c>Link</c> (RFC 5988/8288), ou <see langword="null"/>.</summary>
     public static string? ExtrairLink(HttpResponseMessage resposta, string rel)
