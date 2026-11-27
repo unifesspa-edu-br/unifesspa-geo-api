@@ -94,9 +94,14 @@ controller anexa **HATEOAS** (`IResourceLinksBuilder<T>`) e devolve.
   **sempre não-nula** (ADR-0095). Resposta via `OkPaginatedOrdenadoAsync` + header `Link`.
 - **Contrato HTTP**: respostas de erro em `application/problem+json`; vendor media types via
   `[VendorMediaType(Resource="…", Versions=[1])]`; OpenAPI 3.1 servido em `/openapi/geo.json`.
-- **ETL DNE** (`…Infrastructure/Persistence/Etl`, ADR-0092): worker hospedado que carrega o
-  dataset DNE/IBGE (dumps proprietários, **não versionados**) via schema de staging + SELECT
-  streamado. O reference data é **isento de soft-delete**. Detalhes em `docs/geo-etl-dataset-dne.md`.
+- **ETL DNE** (`…Infrastructure/Persistence/Etl`, ADR-0092 e ADR-0098): a carga parte do pacote
+  zip dos Correios (proprietário, **não versionado**), enviado em `POST /api/admin/geo/importacoes`
+  (`application/zip`, role `plataforma-admin`). O serviço em segundo plano lê o pacote por gramática
+  fechada (nunca executa SQL do arquivo), carrega num esquema temporário `carga_dne_{execucao}` do
+  próprio banco do Geo e publica em uma única transação. Não há banco de preparação nem carga de
+  dados na partida. O reference data é **isento de soft-delete**. Opções em `Geo:Etl`
+  (`TamanhoMaximoDoPacote`, `QuantidadeMaximaDeEntradasDoPacote`, `DiretorioDoPacote`, `DuracaoMaximaDaCarga`, `TempoLimiteDosComandosDaCarga`,
+  `ProcessoEmSegundoPlanoHabilitado`). Detalhes em `docs/geo-etl-dataset-dne.md`.
 - **Autenticação**: JWT Bearer/OIDC (Keycloak). Endpoints de leitura exigem JWT **do realm
   configurado** (sem role admin); escrita/admin (`/api/admin/geo`) exige a role `plataforma-admin`.
   `Auth:ValidateAudience` default `false`. Ver seção *Authentication* em `docs/development.md`.
@@ -105,7 +110,7 @@ controller anexa **HATEOAS** (`IResourceLinksBuilder<T>`) e devolve.
 
 `AddDbContextMigrationsOnStartup<GeoDbContext>` e os gatilhos de ETL são registrados **antes** de
 `UseWolverineOutboxCascading` + `AddWolverineMessaging` (invariante #419, coberto por fitness
-test). Migrations e seed tocam o banco e precisam acontecer antes do runtime de mensageria subir.
+test). As migrations tocam o banco e precisam acontecer antes do runtime de mensageria subir.
 
 ## Convenções e armadilhas específicas
 
@@ -140,10 +145,10 @@ Sem `Co-Authored-By` e sem qualquer atribuição de IA em commits ou PRs (regra 
 
 ## ADRs
 
-Decisões do módulo em `docs/adrs/` (0090–0097): contexto dedicado (0090), PostGIS/NTS (0091),
+Decisões do módulo em `docs/adrs/` (0090–0098): contexto dedicado (0090), PostGIS/NTS (0091),
 ETL DNE (0092), rate limiting na borda (0093), keyset via MR sob cursor opaco (0094), chave de
 ordenação não-nula (0095), endereço como referência estruturada (0096), nome do município pelo
-IBGE (0097).
+IBGE (0097), carga da base dos Correios pelo envio do pacote (0098).
 
 ADRs com numeração `00xx` fora dessa faixa (ex.: 0029, 0054, 0063) pertencem ao acervo do
 `uniplus-api`/`uniplus-docs` e **não existem neste repo**. Referencie-os apenas como menção

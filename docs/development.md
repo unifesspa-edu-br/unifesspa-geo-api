@@ -68,6 +68,27 @@ The integration test suite includes a real Keycloak container and exercises the
 production `JwtBearer` pipeline for valid tokens, tokens from another client in
 the same realm, wrong issuer/realm, missing token and insufficient roles.
 
+## Loading Geo data locally
+
+The Geo database starts empty and nothing is loaded at startup: there is no
+staging database and no development seed. To load data, start the local
+infrastructure and the API, then send a package through the admin endpoint
+(requires a token with the `plataforma-admin` role):
+
+```bash
+curl -i -X POST http://localhost:5270/api/admin/geo/importacoes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/zip" \
+  --data-binary @pacote.zip
+```
+
+Use the real Correios package (licensed, never committed) or a small synthetic
+package with the 15 expected `.sql` tables. Follow the execution through the
+`Location` header. Options live under `Geo:Etl`: `TamanhoMaximoDoPacote`, `QuantidadeMaximaDeEntradasDoPacote` (default 32)
+(default 128 MiB), `DiretorioDoPacote` (default `pacotes-dne` under the system
+temporary directory) and `DuracaoMaximaDaCarga` (default 1 hour). See
+`docs/geo-etl-dataset-dne.md` for responses and behavior.
+
 ## Local Commands
 
 Run the same gates used by CI before opening or updating a PR:
