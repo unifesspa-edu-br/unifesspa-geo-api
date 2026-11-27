@@ -109,8 +109,9 @@ controller anexa **HATEOAS** (`IResourceLinksBuilder<T>`) e devolve.
 ### Ordem de boot crítica (`API/Program.cs`)
 
 `AddDbContextMigrationsOnStartup<GeoDbContext>` e os gatilhos de ETL são registrados **antes** de
-`UseWolverineOutboxCascading` + `AddWolverineMessaging` (invariante #419, coberto por fitness
-test). As migrations tocam o banco e precisam acontecer antes do runtime de mensageria subir.
+`UseWolverineOutboxCascading` + `AddWolverineMessaging`. As migrations tocam o banco e precisam
+acontecer antes do runtime de mensageria subir. O teste `OrdemDaInicializacaoDaApiTests` sobe a API
+sem banco e confere a ordem: migrações, gatilhos da carga, mensageria.
 
 ## Convenções e armadilhas específicas
 
