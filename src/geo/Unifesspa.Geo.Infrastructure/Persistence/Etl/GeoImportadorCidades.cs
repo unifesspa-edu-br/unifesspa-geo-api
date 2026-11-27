@@ -60,31 +60,29 @@ internal sealed class GeoImportadorCidades
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, Cidade> existentes =
-            await _contexto.Cidades.ToDictionaryAsync(c => c.CodigoIbge, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
+        GravacaoPorChaveNatural<Cidade> gravacao = await GravacaoPorChaveNatural<Cidade>.AbrirAsync(
+            _contexto.Cidades, c => c.CodigoIbge, contador, cancellationToken).ConfigureAwait(false);
         Dictionary<string, Guid> cidadesPorCodigo =
-            await UpsertarCidadesAsync(fonte, estadosPorUf, territorios, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
+            await GravarCidadesAsync(fonte, estadosPorUf, territorios, proveniencia, gravacao, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
         return cidadesPorCodigo;
     }
 
-    private async Task<Dictionary<string, Guid>> UpsertarCidadesAsync(
+    private async Task<Dictionary<string, Guid>> GravarCidadesAsync(
         IGeoFonteDados fonte,
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, CidadeTerritorioCru> territorios,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, Cidade> existentes,
-        ContadorTabela contador,
+        GravacaoPorChaveNatural<Cidade> gravacao,
         CancellationToken cancellationToken)
     {
         Dictionary<string, Guid> cidadesPorCodigo = new(StringComparer.Ordinal);
-        Dictionary<string, Cidade> jaVistas = new(StringComparer.Ordinal);
 
         await foreach (CidadeCru cru in fonte.LerCidadesAsync(cancellationToken).ConfigureAwait(false))
         {
-            contador.ContarLido();
-            if (UpsertarCidade(cru, estadosPorUf, territorios, proveniencia, existentes, jaVistas, contador) is { } cidade)
+            gravacao.Contador.ContarLido();
+            if (GravarCidade(cru, estadosPorUf, territorios, proveniencia, gravacao) is { } cidade)
             {
                 cidadesPorCodigo[cidade.CodigoIbge] = cidade.Id;
             }
@@ -93,15 +91,14 @@ internal sealed class GeoImportadorCidades
         return cidadesPorCodigo;
     }
 
-    private Cidade? UpsertarCidade(
+    private Cidade? GravarCidade(
         CidadeCru cru,
         Dictionary<string, Guid> estadosPorUf,
         Dictionary<string, CidadeTerritorioCru> territorios,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, Cidade> existentes,
-        Dictionary<string, Cidade> jaVistas,
-        ContadorTabela contador)
+        GravacaoPorChaveNatural<Cidade> gravacao)
     {
+        ContadorTabela contador = gravacao.Contador;
         if (ResolverChave(cru, estadosPorUf, contador) is not { } chave)
         {
             return null;
@@ -110,7 +107,7 @@ internal sealed class GeoImportadorCidades
         territorios.TryGetValue(chave.CodigoIbge, out CidadeTerritorioCru? territorio);
         string nome = NomeDaCidade(chave.CodigoIbge, cru, contador);
         CidadeParaCarga carga = new(chave, NomeComBusca(nome), cru.Ddd, CoordenadaDne.Ler(cru.Latitude, cru.Longitude), DivisaoDe(territorio), proveniencia);
-        return Upsert(chave.CodigoIbge, jaVistas, existentes, carga.Criar, carga.Atualizar, _contexto.Cidades, contador);
+        return gravacao.Gravar(chave.CodigoIbge, carga.Criar, carga.Atualizar);
     }
 
     // O nome oficial do IBGE prevalece sobre o da DNE. Código fora da lista oficial não
@@ -166,14 +163,14 @@ internal sealed class GeoImportadorCidades
             fonte.LerCidadeIndicadoresAsync(cancellationToken), i => ChaveCodigo(i.CodigoIbge), contador).ConfigureAwait(false);
         Dictionary<Guid, CidadeIndicador> existentes =
             await _contexto.CidadeIndicadores.ToDictionaryAsync(i => i.CidadeId, cancellationToken).ConfigureAwait(false);
-        UpsertarIndicadores(cidadesPorCodigo, indicadores, proveniencia, existentes, contador);
+        GravarIndicadores(cidadesPorCodigo, indicadores, proveniencia, existentes, contador);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
 
     // Lidos, sem chave e duplicados já foram contados na agregação; aqui só resta
     // resolver o órfão e gravar pela chave natural.
-    private void UpsertarIndicadores(
+    private void GravarIndicadores(
         Dictionary<string, Guid> cidadesPorCodigo,
         Dictionary<string, CidadeIndicadorCru> indicadores,
         ProvenienciaDaCarga proveniencia,
@@ -188,11 +185,11 @@ internal sealed class GeoImportadorCidades
                 continue;
             }
 
-            UpsertarIndicador(cidadeId, cru, proveniencia, existentes, contador);
+            GravarIndicador(cidadeId, cru, proveniencia, existentes, contador);
         }
     }
 
-    private void UpsertarIndicador(
+    private void GravarIndicador(
         Guid cidadeId,
         CidadeIndicadorCru cru,
         ProvenienciaDaCarga proveniencia,
@@ -267,31 +264,39 @@ internal sealed class GeoImportadorCidades
         // preserva o Id da faixa e não estoura a restrição de unicidade.
         Dictionary<int, Guid> cidadesPorIdDne = await ResolverIdsDneParaGuidAsync(
             fonte.LerCidadeIdsAsync(cancellationToken), cru => cru.IdCidade, cru => cru.CodigoIbge, cidadesPorCodigo).ConfigureAwait(false);
-        Guid[] cidadeIds = [.. cidadesPorIdDne.Values];
-        Dictionary<string, CidadeFaixaCep> existentes =
-            (await _contexto.CidadeFaixasCep.Where(f => cidadeIds.Contains(f.CidadeId)).ToListAsync(cancellationToken).ConfigureAwait(false))
-            .ToDictionary(f => ChaveFaixa(f.CidadeId, f.CepInicial, f.CepFinal), StringComparer.Ordinal);
-        await UpsertarFaixasAsync(fonte, cidadesPorIdDne, proveniencia, existentes, contador, cancellationToken).ConfigureAwait(false);
+        GravacaoPorChaveNatural<CidadeFaixaCep> gravacao =
+            await AbrirGravacaoDasFaixasAsync(cidadesPorIdDne, contador, cancellationToken).ConfigureAwait(false);
+        await GravarFaixasAsync(fonte, cidadesPorIdDne, proveniencia, gravacao, cancellationToken).ConfigureAwait(false);
         await _contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         GeoEtlLog.TabelaConcluida(_logger, contador);
     }
 
-    private async Task UpsertarFaixasAsync(
-        IGeoFonteDados fonte,
+    // Carrega só as faixas das cidades desta carga, não a tabela inteira.
+    private async Task<GravacaoPorChaveNatural<CidadeFaixaCep>> AbrirGravacaoDasFaixasAsync(
         Dictionary<int, Guid> cidadesPorIdDne,
-        ProvenienciaDaCarga proveniencia,
-        Dictionary<string, CidadeFaixaCep> existentes,
         ContadorTabela contador,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, CidadeFaixaCep> jaVistas = new(StringComparer.Ordinal);
+        Guid[] cidadeIds = [.. cidadesPorIdDne.Values];
+        Dictionary<string, CidadeFaixaCep> existentes =
+            (await _contexto.CidadeFaixasCep.Where(f => cidadeIds.Contains(f.CidadeId)).ToListAsync(cancellationToken).ConfigureAwait(false))
+            .ToDictionary(f => ChaveFaixa(f.CidadeId, f.CepInicial, f.CepFinal), StringComparer.Ordinal);
+        return GravacaoPorChaveNatural<CidadeFaixaCep>.SobreRegistrosCarregados(_contexto.CidadeFaixasCep, existentes, contador);
+    }
 
+    private static async Task GravarFaixasAsync(
+        IGeoFonteDados fonte,
+        Dictionary<int, Guid> cidadesPorIdDne,
+        ProvenienciaDaCarga proveniencia,
+        GravacaoPorChaveNatural<CidadeFaixaCep> gravacao,
+        CancellationToken cancellationToken)
+    {
         await foreach (CidadeFaixaCru cru in fonte.LerCidadeFaixasAsync(cancellationToken).ConfigureAwait(false))
         {
-            contador.ContarLido();
-            if (ResolverCidade(cru.IdCidade, cidadesPorIdDne, contador) is { } cidadeId)
+            gravacao.Contador.ContarLido();
+            if (ResolverCidade(cru.IdCidade, cidadesPorIdDne, gravacao.Contador) is { } cidadeId)
             {
-                UpsertarFaixa(cru, cidadeId, proveniencia, existentes, jaVistas, contador);
+                GravarFaixa(cru, cidadeId, proveniencia, gravacao);
             }
         }
     }
@@ -307,26 +312,23 @@ internal sealed class GeoImportadorCidades
         return null;
     }
 
-    private void UpsertarFaixa(
+    private static void GravarFaixa(
         CidadeFaixaCru cru,
         Guid cidadeId,
         ProvenienciaDaCarga proveniencia,
-        Dictionary<string, CidadeFaixaCep> existentes,
-        Dictionary<string, CidadeFaixaCep> jaVistas,
-        ContadorTabela contador)
+        GravacaoPorChaveNatural<CidadeFaixaCep> gravacao)
     {
         FaixaDeCep faixa = new(cru.FaixaIni, cru.FaixaFim);
         if (!faixa.TemCepInicial || !faixa.TemCepFinal)
         {
-            contador.ContarIgnoradoSemChave();
+            gravacao.Contador.ContarIgnoradoSemChave();
             return;
         }
 
-        Upsert(
-            ChaveFaixa(cidadeId, faixa.CepInicial!, faixa.CepFinal!), jaVistas, existentes,
+        gravacao.Gravar(
+            ChaveFaixa(cidadeId, faixa.CepInicial!, faixa.CepFinal!),
             () => CidadeFaixaCep.Importar(cidadeId, faixa, proveniencia),
-            existente => existente.Atualizar(proveniencia),
-            _contexto.CidadeFaixasCep, contador);
+            existente => existente.Atualizar(proveniencia));
     }
 
     private readonly record struct ChaveDaCidade(string CodigoIbge, EstadoDaCidade Estado);
