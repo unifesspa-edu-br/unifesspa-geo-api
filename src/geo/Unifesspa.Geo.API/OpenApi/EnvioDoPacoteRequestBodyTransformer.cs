@@ -24,22 +24,25 @@ internal sealed class EnvioDoPacoteRequestBodyTransformer : IOpenApiOperationTra
 
         if (EhOEnvioDoPacote(context))
         {
-            operation.RequestBody = new OpenApiRequestBody
-            {
-                Description = "Pacote dos Correios em formato zip, enviado como o corpo da requisição.",
-                Required = true,
-                Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
-                {
-                    [TipoDeConteudoDoPacote] = new OpenApiMediaType
-                    {
-                        Schema = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" },
-                    },
-                },
-            };
+            operation.RequestBody = CorpoDoPacoteZip();
         }
 
         return Task.CompletedTask;
     }
+
+    private static OpenApiRequestBody CorpoDoPacoteZip() =>
+        new()
+        {
+            Description = "Pacote dos Correios em formato zip, enviado como o corpo da requisição.",
+            Required = true,
+            Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
+            {
+                [TipoDeConteudoDoPacote] = new OpenApiMediaType
+                {
+                    Schema = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" },
+                },
+            },
+        };
 
     private static bool EhOEnvioDoPacote(OpenApiOperationTransformerContext context) =>
         context.Description.ActionDescriptor is ControllerActionDescriptor descriptor
