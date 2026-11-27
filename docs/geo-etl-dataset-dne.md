@@ -38,7 +38,7 @@ curl -i -X POST http://localhost:5270/api/admin/geo/importacoes \
 | 200 | Esse mesmo pacote já é a publicação vigente (mesmo resumo SHA-256 da última carga concluída). Nada foi repetido; o corpo traz essa execução. | Nada. |
 | 401 | Sem token válido. | Obter um token. |
 | 403 | O token não tem o papel `plataforma-admin`. | Usar uma conta com o papel. |
-| 409 | Há uma carga em andamento (`em_andamento`), ou a versão do pacote é anterior à última aplicada (`versao_nao_progressiva`). | Aguardar o fim da carga, ou enviar uma versão igual ou mais nova. |
+| 409 | Há uma carga sendo executada (`em_andamento`), ou a versão do pacote é anterior à última aplicada (`versao_nao_progressiva`). | Aguardar o fim da carga, ou enviar uma versão igual ou mais nova. |
 | 413 | O pacote passa do tamanho máximo (`pacote_acima_do_limite`). | Conferir o arquivo e o limite configurado. |
 | 415 | O tipo de conteúdo não é `application/zip` (`tipo_de_conteudo_nao_suportado`). | Enviar com `Content-Type: application/zip`. |
 | 422 | O conteúdo do zip não confere (`pacote_invalido`): não é um zip, falta ou sobra tabela, as entradas estão em pastas diferentes, há arquivo cifrado, o zip tem mais entradas que o limite, tamanho declarado acima do limite ou versões diferentes entre as tabelas. Todas as faltas vêm juntas na resposta. | Corrigir o pacote e reenviar. |
@@ -88,7 +88,7 @@ A publicação é uma única transação. Falha, cancelamento, estouro de `Geo:E
 - **O arquivo do pacote** fica num volume em memória do pod (`Geo:Etl:DiretorioDoPacote`), com permissão `0600`, sem cifra no aplicativo. É apagado logo que a carga termina de popular o esquema temporário, em qualquer recusa (409, 413, 422, 200 por repetição), em qualquer falha ou cancelamento e na partida do serviço.
 - **O esquema temporário** `carga_dne_{execução}`, no banco do Geo, é descartado ao fim da carga, em sucesso ou falha, e também na partida do serviço, quando a instância obtém a trava.
 - **A trava da carga** (trava consultiva do PostgreSQL, uma por vez) é obtida no pedido, depois da conferência do pacote, acompanha a execução e é solta ao fim.
-- Depois de um reinício do serviço, o pacote precisa ser reenviado. Na partida, o serviço só marca como `Falhou` as execuções em andamento quando consegue obter a trava da carga, isto é, quando nenhuma instância está carregando. Se outra instância segura a trava, a execução dela está viva e nada é alterado.
+- Depois de um reinício do serviço, o pacote precisa ser reenviado. O serviço só marca como `Falhou` as execuções em andamento quando consegue obter a trava da carga, isto é, quando nenhuma instância está carregando, e faz isso na partida e também no envio seguinte. Se outra instância segura a trava, a execução dela está viva e nada é alterado.
 - Evite implantar uma nova versão durante uma carga: o serviço antigo cancela a carga e desfaz a transação.
 
 ## Opções de configuração (`Geo:Etl`)
@@ -125,9 +125,9 @@ Toda a publicação de uma versão — topo (`pais`, `estado`, `cidade`), folhas
 
 ### Trava da carga e reinício do serviço
 
-- **Ordem do pedido:** o endpoint recebe e confere o pacote e só então obtém a trava consultiva do PostgreSQL (`pg_try_advisory_lock`, em conexão própria), antes da guarda de versão e do registro da execução como `EmAndamento`. A trava não cobre o recebimento do pacote. Com a trava ocupada, responde 409 `em_andamento` sem gravar nada. Recusa posterior (versão anterior à aplicada, conflito de registro, fila fechada) solta a trava.
+- **Ordem do pedido:** o endpoint recebe e confere o pacote e só então obtém a trava consultiva do PostgreSQL (`pg_try_advisory_lock`, em conexão própria), antes da guarda de versão e do registro da execução como `EmAndamento`. A trava não cobre o recebimento do pacote. Antes de ler o corpo, o envio é recusado com 409 `em_andamento` só se há execução em andamento e a trava está ocupada; com a trava livre, a execução em andamento está abandonada e é encerrada como `Falhou`, depois de descartar os esquemas temporários que sobraram, e o envio segue. Se o descarte falhar, a execução segue `EmAndamento` e o envio recebe o erro do servidor, sem 409. Depois de receber o pacote, com a trava ocupada, responde 409 `em_andamento` sem gravar nada. Recusa posterior (versão anterior à aplicada, conflito de registro, fila fechada) solta a trava.
 - **Duração:** a trava acompanha a execução pela fila em memória e só é solta quando a carga termina, depois de marcar o resultado (`Concluida` ou `Falhou`). No desligamento, as cargas ainda na fila são marcadas `Falhou` antes de a trava ser solta.
-- **Reinício:** na partida, o serviço tenta obter a mesma trava. Se conseguir, toda execução `EmAndamento` está abandonada (execução viva sempre tem a trava), marca todas como `Falhou` e sincroniza o selo do cache de CEP com a última execução `Concluida`, na mesma seção sob a trava. Se a trava estiver ocupada, outra instância está carregando (por exemplo, durante a implantação com duas instâncias): nada é alterado e o selo fica a cargo de quem detém a trava, que o grava ao confirmar a carga.
+- **Reinício e abandono:** na partida, e também no envio seguinte, o serviço tenta obter a mesma trava. Se conseguir, toda execução `EmAndamento` está abandonada (execução viva sempre tem a trava), descarta os esquemas temporários que sobraram e marca todas como `Falhou`. Só a partida, na mesma seção sob a trava, sincroniza também o selo do cache de CEP com a última execução `Concluida`; o envio apenas encerra como `Falhou` e descarta os esquemas. Se a trava estiver ocupada, outra instância está carregando (por exemplo, durante a implantação com duas instâncias): nada é alterado e o selo fica a cargo de quem detém a trava, que o grava ao confirmar a carga.
 
 O pipeline das folhas (`GeoImportadorLocalidades`) organiza a carga em duas etapas dentro dessa mesma transação:
 
