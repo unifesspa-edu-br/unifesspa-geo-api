@@ -7,6 +7,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Unifesspa.Geo.Domain.Entities;
@@ -17,15 +18,15 @@ using Unifesspa.Geo.IntegrationTests.Fixtures.Authentication;
 using Unifesspa.Geo.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Endpoint admin de disparo/acompanhamento do ETL (Story #674, CA-02/CA-06) contra a
-/// API real. O worker fica desligado (<c>GeoApiFactory</c>), então o disparo registra a
+/// Endpoint admin de disparo/acompanhamento da carga (Story #674, CA-02/CA-06) contra a
+/// API real. O processo em segundo plano fica desligado (<c>GeoApiFactory</c>), então o disparo registra a
 /// execução EmAndamento e responde 202 sem rodar a carga. O conflito de concorrência
 /// (CA-06) é exercitado a partir de uma execução EmAndamento semeada diretamente — não da
 /// corrida contra a conclusão de uma primeira carga (#718) — tornando o 409 determinístico.
 /// Autorização por role <c>plataforma-admin</c> (401/403).
 /// </summary>
 [Collection(GeoPostgisCollection.Name)]
-public sealed class GeoImportacoesEndpointTests
+public sealed class GeoImportacoesEndpointTests : IAsyncLifetime
 {
     private const string Rota = "/api/admin/geo/importacoes";
 
@@ -34,6 +35,19 @@ public sealed class GeoImportacoesEndpointTests
     public GeoImportacoesEndpointTests(GeoPostgisFixture fixture)
     {
         _fixture = fixture;
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    // Sem o processo em segundo plano, a carga aceita fica na fila segurando a trava consultiva;
+    // soltá-la ao fim de cada teste evita que ela bloqueie os testes seguintes da coleção.
+    public async Task DisposeAsync()
+    {
+        IGeoImportacaoFila fila = _fixture.Factory.Services.GetRequiredService<IGeoImportacaoFila>();
+        foreach (CargaReservada carga in fila.DrenarRestante())
+        {
+            await carga.DisposeAsync();
+        }
     }
 
     [Fact(DisplayName = "CA-02: POST com plataforma-admin retorna 202, Location e registra a execução EmAndamento")]
@@ -124,7 +138,7 @@ public sealed class GeoImportacoesEndpointTests
         resposta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
-    [Fact(DisplayName = "CA-03: versão anterior à última release concluída é recusada com 409 (não rebaixa o dataset)")]
+    [Fact(DisplayName = "CA-03: versão anterior à última versão concluída é recusada com 409 (não rebaixa o dataset)")]
     public async Task Disparar_VersaoAnteriorAUltimaConcluida_Retorna409()
     {
         await LimparExecucoesAsync();
@@ -144,15 +158,15 @@ public sealed class GeoImportacoesEndpointTests
         resposta.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
-    [Fact(DisplayName = "CA-03: versão anterior a uma release que falhou (pode ter dados parciais) também é recusada com 409")]
-    public async Task Disparar_VersaoAnteriorAUltimaFalha_Retorna409()
+    [Fact(DisplayName = "CA-03: versão anterior a uma versão que falhou (sem publicação efetivada) é aceita com 202")]
+    public async Task Disparar_VersaoAnteriorAUltimaFalha_Retorna202()
     {
         await LimparExecucoesAsync();
         await using (GeoDbContext ctx = _fixture.CreateDbContext())
         {
             GeoImportacaoExecucao falhou = GeoImportacaoExecucao
                 .Iniciar("202602", "teste", TimeProvider.System.GetUtcNow()).Value!;
-            falhou.Falhar(TimeProvider.System.GetUtcNow(), "falha parcial nas folhas");
+            falhou.Falhar(TimeProvider.System.GetUtcNow(), "falha antes da publicação");
             ctx.ImportacaoExecucoes.Add(falhou);
             await ctx.SaveChangesAsync();
         }
@@ -161,7 +175,7 @@ public sealed class GeoImportacoesEndpointTests
         using HttpRequestMessage requisicao = RequisicaoDisparo("202601", admin: true);
         using HttpResponseMessage resposta = await client.SendAsync(requisicao);
 
-        resposta.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
     [Fact(DisplayName = "CA-03: versão anterior aos dados já carregados (sem histórico de execução) é recusada com 409")]
@@ -209,7 +223,7 @@ public sealed class GeoImportacoesEndpointTests
             "TRUNCATE TABLE pais, logradouro_complemento, cep_grande_usuario, geo_importacao_execucao CASCADE");
     }
 
-    // Carrega uma cidade na versão informada (topo do ETL) — para exercitar a guarda de versão
+    // Carrega uma cidade na versão informada (topo da carga) — para exercitar a guarda de versão
     // a partir do reference data, sem nenhum histórico de execução.
     private async Task SemearCidadeAsync(string versao)
     {

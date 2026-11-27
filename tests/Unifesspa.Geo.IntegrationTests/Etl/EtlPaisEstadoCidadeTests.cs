@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests.Etl;
 using AwesomeAssertions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Unifesspa.Geo.Domain.Entities;
@@ -168,7 +169,7 @@ public sealed class EtlPaisEstadoCidadeTests
         relatorio.Tabelas["estado"].Duplicados.Should().BeGreaterThanOrEqualTo(1);
     }
 
-    [Fact(DisplayName = "Rollback: falha no meio da carga reverte tudo — nem País nem Estado ficam persistidos")]
+    [Fact(DisplayName = "Rollback: falha no meio da carga dentro da transação reverte tudo — nem País nem Estado ficam persistidos")]
     public async Task FalhaNoMeio_FazRollbackTotal()
     {
         await LimparAsync();
@@ -176,6 +177,7 @@ public sealed class EtlPaisEstadoCidadeTests
 
         await using (GeoDbContext ctx = _fixture.CreateDbContext())
         {
+            await using IDbContextTransaction transacao = await ctx.Database.BeginTransactionAsync();
             GeoImportadorPaisEstadoCidade importador = new(ctx, NullLogger<GeoImportadorPaisEstadoCidade>.Instance);
             Func<Task> carga = () => importador.ImportarAsync(fonte, CancellationToken.None);
             await carga.Should().ThrowAsync<InvalidOperationException>();

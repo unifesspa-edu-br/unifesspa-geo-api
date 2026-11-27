@@ -14,7 +14,7 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 /// <summary>
 /// Resolve CEP com cache-aside (Redis) sobre o <see cref="ICepReader"/>. A chave
 /// compõe-se com o selo de versão vigente (<see cref="RedisGeoCepCacheInvalidador.ChaveSeloVersaoVigente"/>,
-/// #674) e com a versão do formato da resolução: <c>geo:cep:{formato}:v{versao}:{cep}</c>. Quando o ETL sela uma nova release, o selo
+/// #674) e com a versão do formato da resolução: <c>geo:cep:{formato}:v{versao}:{cep}</c>. Quando a carga sela uma nova versão, o selo
 /// muda e as entradas antigas viram inalcançáveis (invalidação O(1), sem SCAN). Só
 /// resolução positiva (200) é cacheada; 404 nunca — a ausência não pode congelar
 /// caso a base seja recarregada/enriquecida.
@@ -24,7 +24,7 @@ using Unifesspa.Geo.Infrastructure.Core.Caching;
 /// <c>IConnectionMultiplexer</c> conecta na construção, e diferir essa resolução
 /// (capturando a falha) garante que o lookup <strong>degrade para o banco</strong>
 /// quando o Redis está fora — a resolução não depende do cache estar de pé. Espelha
-/// o padrão do <c>GeoEtlOrquestrador</c> (#674).
+/// o padrão do executor da carga.
 /// </remarks>
 [SuppressMessage(
     "Performance",
@@ -119,7 +119,7 @@ internal sealed partial class CepResolver : ICepResolver
         }
     }
 
-    // Compõe a chave versionada a partir do selo de versão vigente. Sem selo (ETL ainda
+    // Compõe a chave versionada a partir do selo de versão vigente. Sem selo (carga ainda
     // não selou) → null: não há chave determinística, segue direto ao banco sem cachear.
     private async Task<string?> ResolverChaveAsync(ICacheService cache, string cep, CancellationToken cancellationToken)
     {
@@ -128,7 +128,7 @@ internal sealed partial class CepResolver : ICepResolver
     }
 
     // Memoiza o selo em processo (IMemoryCache) por uma janela curta (SeloTtl, #703): o
-    // selo só muda em re-selagem do ETL (#674), então no hot path o lookup faz 1
+    // selo só muda em re-selagem da carga, então no hot path o lookup faz 1
     // round-trip ao Redis (a entrada) em vez de 2 (selo + entrada). A expiração é
     // governada pelo TimeProvider injetado (testável); a expiração do IMemoryCache é a
     // rede de segurança contra leak de memória. Só um selo presente é memoizado — a
@@ -216,6 +216,6 @@ internal sealed partial class CepResolver : ICepResolver
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Geo: falha ao gravar o cache de CEP (best-effort); a resolução já foi devolvida.")]
+        Message = "Geo: falha ao gravar o cache de CEP (sem garantia de sucesso); a resolução já foi devolvida.")]
     private static partial void LogFalhaGravarCache(ILogger logger, Exception excecao);
 }

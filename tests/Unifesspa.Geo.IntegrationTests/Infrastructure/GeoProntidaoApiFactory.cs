@@ -34,7 +34,7 @@ public sealed class GeoProntidaoApiFactory : ApiFactoryBase<Program>
         new("ConnectionStrings:GeoDb", "Host=localhost;Port=5432;Database=uniplus_tests;Username=uniplus;Password=uniplus_dev"),
         new("Auth:Authority", "http://provedor.invalido/test-realm"),
         new("Auth:Audience", "uniplus"),
-        new("Geo:Etl:WorkerHabilitado", "false"),
+        new("Geo:Etl:ProcessoEmSegundoPlanoHabilitado", "false"),
         new("Redis:ConnectionString", string.Empty),
     ];
 

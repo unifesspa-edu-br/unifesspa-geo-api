@@ -13,12 +13,9 @@ using Microsoft.Extensions.Options;
 /// </summary>
 /// <remarks>
 /// A validação da connection string acontece em <see cref="Criar"/>, não no construtor: esta
-/// classe é resolvida via <c>IGeoImportacaoService</c>/<c>GeoEtlOrquestrador</c>, injetado no
-/// <c>GeoImportacoesController</c> tanto para disparar (<c>POST</c>) quanto para consultar
-/// status (<c>GET</c>). Validar no construtor faria o DI lançar ao resolver o controller para
-/// qualquer requisição — inclusive um <c>GET</c> de status que nunca toca o staging — em
-/// ambientes que não configuram <c>GeoStagingDb</c> (a chave não é mais compartilhada com
-/// <c>GeoDb</c>, que é sempre obrigatória, então este cenário passou a ser plausível).
+/// classe é resolvida no escopo da carga, mas pode ser instanciada em ambientes que
+/// não configuram <c>GeoStagingDb</c> (como rotas de consulta). Validar no construtor faria
+/// o DI lançar ao resolver dependentes em cenários que nunca tocam o staging.
 /// </remarks>
 internal sealed class DneStagingFonteFactory : IGeoFonteDadosFactory
 {
@@ -40,7 +37,7 @@ internal sealed class DneStagingFonteFactory : IGeoFonteDadosFactory
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(
-                "ConnectionStrings:GeoStagingDb não configurada — necessária para o ETL DNE do Geo. "
+                "ConnectionStrings:GeoStagingDb não configurada — necessária para o carga DNE do Geo. "
                 + "O appsettings.json base declara a chave vazia (\"\"); defina o valor real via "
                 + "appsettings.Development.json ou env var ConnectionStrings__GeoStagingDb.");
         }

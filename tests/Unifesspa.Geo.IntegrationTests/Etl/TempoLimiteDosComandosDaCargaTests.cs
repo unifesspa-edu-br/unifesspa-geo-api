@@ -4,6 +4,7 @@ using System.Diagnostics;
 
 using AwesomeAssertions;
 
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -54,7 +55,7 @@ public sealed class TempoLimiteDosComandosDaCargaTests
     [InlineData("30000.00:00:00")]
     public void PrazoNaoPositivo_ERecusado(string prazo)
     {
-        Func<LogradouroCopyImporter> criar = () => CriarImportador(prazo);
+        Func<ImportadorDeLogradourosPorCopia> criar = () => CriarImportador(_fixture.CreateDbContext(), prazo);
 
         criar.Should().Throw<InvalidOperationException>()
             .WithMessage("*TempoLimiteDosComandosDaCarga*maior que zero*");
@@ -63,24 +64,25 @@ public sealed class TempoLimiteDosComandosDaCargaTests
     private async Task ExecutarCargaVaziaAsync(string prazo)
     {
         await using GeoDbContext contexto = _fixture.CreateDbContext();
-        GeoImportadorLocalidades orquestrador = new(
+        await using IDbContextTransaction transacao = await contexto.Database.BeginTransactionAsync();
+        GeoImportadorLocalidades importadorDasFolhas = new(
             new GeoImportadorDistritoBairro(contexto),
-            CriarImportador(prazo),
+            CriarImportador(contexto, prazo),
             NullLogger<GeoImportadorLocalidades>.Instance);
 
-        await orquestrador.ImportarAsync(new FonteEmMemoria(), ModoCarga.Recarga, CancellationToken.None);
+        await importadorDasFolhas.ImportarAsync(new FonteEmMemoria(), CancellationToken.None);
+        await transacao.CommitAsync();
     }
 
-    private LogradouroCopyImporter CriarImportador(string prazo)
+    private static ImportadorDeLogradourosPorCopia CriarImportador(GeoDbContext contexto, string prazo)
     {
         IConfiguration configuracao = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:GeoDb"] = _fixture.ConnectionString,
                 [$"{EtlOpcoes.SectionName}:{nameof(EtlOpcoes.TempoLimiteDosComandosDaCarga)}"] = prazo,
             })
             .Build();
 
-        return new LogradouroCopyImporter(configuracao, TimeProvider.System, NullLogger<LogradouroCopyImporter>.Instance);
+        return new ImportadorDeLogradourosPorCopia(contexto, configuracao, new RelogioFixo(), NullLogger<ImportadorDeLogradourosPorCopia>.Instance);
     }
 }

@@ -6,6 +6,8 @@ using NetTopologySuite.Geometries;
 
 using Npgsql;
 
+using NpgsqlTypes;
+
 using Unifesspa.Geo.Domain.Entities;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Fonte;
 using Unifesspa.Geo.Infrastructure.Persistence.Etl.Parsing;
@@ -105,10 +107,22 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
         await importador.WriteAsync(linha.Uf, cancellationToken).ConfigureAwait(false);
         await EscreverValorOuNuloAsync(importador, linha.Latitude, cancellationToken).ConfigureAwait(false);
         await EscreverValorOuNuloAsync(importador, linha.Longitude, cancellationToken).ConfigureAwait(false);
-        await EscreverReferenciaOuNuloAsync(importador, linha.Coordenada, cancellationToken).ConfigureAwait(false);
+        await EscreverPontoAsync(importador, linha.Coordenada, cancellationToken).ConfigureAwait(false);
         await importador.WriteAsync(linha.Ativo, cancellationToken).ConfigureAwait(false);
         await importador.WriteAsync(linha.VersaoDataset, cancellationToken).ConfigureAwait(false);
         await importador.WriteAsync(instante, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EscreverPontoAsync(NpgsqlBinaryImporter importador, Point? ponto, CancellationToken cancellationToken)
+    {
+        if (ponto is null)
+        {
+            await importador.WriteNullAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await importador.WriteAsync(ponto, NpgsqlDbType.Geography, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task EscreverReferenciaOuNuloAsync<T>(NpgsqlBinaryImporter importador, T? valor, CancellationToken cancellationToken)
@@ -148,7 +162,7 @@ internal sealed class LogradourosCarregadosPorCopia : ITabelaCarregadaPorCopia<L
 
         // Distrito e bairro são opcionais: id ausente ou não resolvido vira nulo, sem descartar a
         // linha. Se a localidade resolvida pertence a outra cidade, também vira nulo e é contada:
-        // o domínio delega ao ETL a coerência hierárquica.
+        // o domínio delega à carga a coerência hierárquica.
         Guid? distrito = GeoEtlUpsert.ResolverCoerente(_resolucao.DistritosPorIdDne, cru.DistritoIdDne, cidade, contador);
         Guid? bairro = GeoEtlUpsert.ResolverCoerente(_resolucao.BairrosPorIdDne, cru.BairroIdDne, cidade, contador);
         Point? coordenada = PontoFactory.Criar(cru.Latitude, cru.Longitude);

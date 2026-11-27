@@ -34,9 +34,9 @@ public sealed class GeoApiFactory : ApiFactoryBase<Program>
     [
         new("Auth:Authority", "http://localhost/test-realm"),
         new("Auth:Audience", "uniplus"),
-        // Worker do ETL desligado: o disparo (POST) cria o registro EmAndamento e
+        // Processo em segundo plano desligado: o disparo (POST) cria o registro EmAndamento e
         // retorna 202 sem que a carga real rode — torna 202/409 determinísticos (#674).
-        new("Geo:Etl:WorkerHabilitado", "false"),
+        new("Geo:Etl:ProcessoEmSegundoPlanoHabilitado", "false"),
         // Redis vazio: o lookup de CEP (#676) degrada para o banco de forma rápida e
         // determinística (sem o connect lento ao localhost:6379 do appsettings.Development).
         // O comportamento de cache-aside é coberto pelos testes de unidade do CepResolver.

@@ -1,42 +1,41 @@
 namespace Unifesspa.Geo.Infrastructure.Persistence.Etl;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+
+using Unifesspa.Geo.Application.Abstractions;
+using Unifesspa.Geo.Domain.Entities;
 
 /// <summary>
-/// Reconcilia execuções <c>EmAndamento</c> abandonadas por crash/restart (Story #674) ANTES
-/// de o host aceitar disparos (#695). Diferente de um <see cref="BackgroundService"/> — cujo
-/// <c>StartAsync</c> retorna no primeiro <c>await</c> do <c>ExecuteAsync</c>, deixando a
-/// reconciliação correr concorrente ao seed e ao servidor HTTP — este é um
-/// <see cref="IHostedService"/> simples cujo <see cref="StartAsync"/> é <strong>aguardado</strong>
-/// pelo host. Com <c>HostOptions.ServicesStartConcurrently = false</c> (default), a ordem de
-/// start é a de registro: registrado antes do worker e do seed, garante que a reconciliação
-/// conclua antes de qualquer disparo — fechando a janela em que um seed/disparo imediato
-/// colidiria no índice único parcial com uma órfã ainda não marcada <c>Falhou</c>.
+/// Na partida, sob a trava consultiva (<c>pg_try_advisory_lock</c>), reconcilia as execuções
+/// <c>EmAndamento</c> órfãs e sincroniza o selo do cache de CEP com a última execução
+/// concluída antes de o host aceitar disparos. Toda execução <c>EmAndamento</c> viva tem a
+/// trava desde o pedido; por isso, com a trava livre, todas as que existem estão abandonadas,
+/// sem critério de tempo. Com a trava ocupada, não faz nada: quem a detém sela ao confirmar.
 /// </summary>
 internal sealed partial class GeoReconciliacaoStartupHostedService : IHostedService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly TravaConsultivaDaCargaDne _trava;
     private readonly TimeProvider _relogio;
-    private readonly TimeSpan _limiteAbandono;
     private readonly ILogger<GeoReconciliacaoStartupHostedService> _logger;
 
     public GeoReconciliacaoStartupHostedService(
         IServiceScopeFactory scopeFactory,
+        TravaConsultivaDaCargaDne trava,
         TimeProvider relogio,
-        IOptions<EtlOpcoes> opcoes,
         ILogger<GeoReconciliacaoStartupHostedService> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
+        ArgumentNullException.ThrowIfNull(trava);
         ArgumentNullException.ThrowIfNull(relogio);
-        ArgumentNullException.ThrowIfNull(opcoes);
         ArgumentNullException.ThrowIfNull(logger);
 
         _scopeFactory = scopeFactory;
+        _trava = trava;
         _relogio = relogio;
-        _limiteAbandono = opcoes.Value.LimiteAbandono;
         _logger = logger;
     }
 
@@ -44,31 +43,114 @@ internal sealed partial class GeoReconciliacaoStartupHostedService : IHostedServ
     {
         try
         {
-            using IServiceScope escopo = _scopeFactory.CreateScope();
-            GeoDbContext contexto = escopo.ServiceProvider.GetRequiredService<GeoDbContext>();
-
-            int afetadas = await GeoExecucaoReconciliador
-                .ReclamarAbandonadasAsync(contexto, _relogio.GetUtcNow(), _limiteAbandono, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (afetadas > 0)
-            {
-                LogOrfasReconciliadas(_logger, afetadas);
-            }
+            await ReconciliarComTravaAsync(cancellationToken).ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // Reconciliação best-effort no startup: uma falha aqui (ex.: banco transitório) não pode impedir o host de subir.
         catch (Exception excecao) when (excecao is not OperationCanceledException)
         {
-            LogErroReconciliar(_logger, excecao);
+            LogErroReconciliar(_logger, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
         }
-#pragma warning restore CA1031
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "ETL Geo: {Afetadas} execução(ões) em andamento reconciliada(s) como falha no startup (abandonadas por reinício).")]
+    private async Task ReconciliarComTravaAsync(CancellationToken cancellationToken)
+    {
+        IAsyncDisposable? travaAdquirida = await _trava
+            .TentarAdquirirAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (travaAdquirida is null)
+        {
+            LogTravaOcupadaNaPartida(_logger);
+            return;
+        }
+
+        await using (travaAdquirida.ConfigureAwait(false))
+        {
+            await ReconciliarEmEscopoAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ReconciliarEmEscopoAsync(CancellationToken cancellationToken)
+    {
+        using IServiceScope escopo = _scopeFactory.CreateScope();
+        GeoDbContext contexto = escopo.ServiceProvider.GetRequiredService<GeoDbContext>();
+        await FalharExecucoesOrfasAsync(contexto, cancellationToken).ConfigureAwait(false);
+        await SincronizarSeloDoCacheAsync(escopo.ServiceProvider, contexto, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task FalharExecucoesOrfasAsync(GeoDbContext contexto, CancellationToken cancellationToken)
+    {
+        List<GeoImportacaoExecucao> orfas = await contexto.ImportacaoExecucoes
+            .Where(e => e.Status == StatusImportacao.EmAndamento)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (orfas.Count > 0)
+        {
+            await MarcarOrfasComoFalhasAsync(contexto, orfas, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task MarcarOrfasComoFalhasAsync(
+        GeoDbContext contexto,
+        List<GeoImportacaoExecucao> orfas,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset agora = _relogio.GetUtcNow();
+        foreach (GeoImportacaoExecucao execucao in orfas)
+        {
+            execucao.Falhar(agora, "Carga interrompida antes de concluir (reconciliada na partida).");
+        }
+
+        await contexto.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        LogOrfasReconciliadas(_logger, orfas.Count);
+    }
+
+    private async Task SincronizarSeloDoCacheAsync(
+        IServiceProvider serviceProvider,
+        GeoDbContext contexto,
+        CancellationToken cancellationToken)
+    {
+        GeoImportacaoExecucao? ultima = await ObterUltimaConcluidaAsync(contexto, cancellationToken).ConfigureAwait(false);
+        if (ultima is not null)
+        {
+            await TentarSelarCacheAsync(serviceProvider, ultima, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static Task<GeoImportacaoExecucao?> ObterUltimaConcluidaAsync(GeoDbContext contexto, CancellationToken cancellationToken) =>
+        contexto.ImportacaoExecucoes
+            .AsNoTracking()
+            .Where(e => e.Status == StatusImportacao.Concluida)
+            .OrderByDescending(e => e.ConcluidoEm)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task TentarSelarCacheAsync(IServiceProvider serviceProvider, GeoImportacaoExecucao ultima, CancellationToken cancellationToken)
+    {
+        try
+        {
+            IGeoCepCacheInvalidador invalidador = serviceProvider.GetRequiredService<IGeoCepCacheInvalidador>();
+            await invalidador
+                .InvalidarAsync(SeloDoCacheDeCep.Identificar(ultima.VersaoDataset, ultima.Id), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception excecao) when (excecao is not OperationCanceledException)
+        {
+            LogErroSincronizarSelo(_logger, ultima.VersaoDataset, DiagnosticoDeExcecaoSanitizado.Descrever(excecao));
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: {Afetadas} execução(ões) em andamento reconciliada(s) como falha no startup.")]
     private static partial void LogOrfasReconciliadas(ILogger logger, int afetadas);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "ETL Geo: falha ao reconciliar execuções em andamento no startup.")]
-    private static partial void LogErroReconciliar(ILogger logger, Exception excecao);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Geo: trava consultiva ocupada na partida — nenhuma execução foi alterada e o selo do cache não foi sincronizado.")]
+    private static partial void LogTravaOcupadaNaPartida(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Geo: falha ao reconciliar execuções em andamento no startup. Diagnóstico: {Diagnostico}")]
+    private static partial void LogErroReconciliar(ILogger logger, string diagnostico);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Geo: falha ao sincronizar o selo do cache para a versão {Versao} na partida. Diagnóstico: {Diagnostico}")]
+    private static partial void LogErroSincronizarSelo(ILogger logger, string versao, string diagnostico);
 }

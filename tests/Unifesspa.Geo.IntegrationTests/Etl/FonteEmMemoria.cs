@@ -232,7 +232,7 @@ internal static class DadosDne
 /// <summary>
 /// Decora uma <see cref="FonteEmMemoria"/> fazendo a leitura de cidades lançar — o
 /// País/Estado já foram persistidos (dentro da transação) quando a falha ocorre, o
-/// que prova o rollback total da carga (nenhum dado publicado em release parcial).
+/// que prova o rollback total da carga (nenhum dado publicado em versão parcial).
 /// </summary>
 internal sealed class FonteComFalhaNasCidades : IGeoFonteDados
 {

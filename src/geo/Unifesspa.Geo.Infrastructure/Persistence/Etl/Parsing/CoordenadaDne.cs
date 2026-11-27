@@ -13,4 +13,14 @@ internal readonly record struct CoordenadaDne(decimal? Latitude, decimal? Longit
             ParseTolerante.ParaDecimal(latitude),
             ParseTolerante.ParaDecimal(longitude),
             PontoFactory.Criar(latitude, longitude));
+
+    /// <summary>
+    /// Latitude e longitude derivadas do ponto já validado (limitado a ±90/±180): coordenada
+    /// fora do domínio some por inteiro, em vez de estourar a coluna numérica.
+    /// </summary>
+    public static CoordenadaDne DoPontoValidado(string? latitude, string? longitude)
+    {
+        Point? ponto = PontoFactory.Criar(latitude, longitude);
+        return new CoordenadaDne((decimal?)ponto?.Y, (decimal?)ponto?.X, ponto);
+    }
 }

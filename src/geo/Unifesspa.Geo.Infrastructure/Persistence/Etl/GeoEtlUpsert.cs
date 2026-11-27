@@ -10,8 +10,7 @@ using Unifesspa.Geo.Kernel.Results;
 /// <summary>
 /// Helpers de upsert por chave natural compartilhados pelos importadores do ETL DNE
 /// (ADR-0092): dedup intra-fonte (last-wins), agregação contando o que a fonte trouxe
-/// e normalização das chaves naturais. Extraídos do importador de País/Estado/Cidade
-/// (#672) para reuso no de Distrito/Bairro (#673) sem duplicar a lógica idempotente.
+/// e normalização das chaves naturais, sem duplicar a lógica idempotente.
 /// </summary>
 internal static class GeoEtlUpsert
 {
@@ -124,9 +123,8 @@ internal static class GeoEtlUpsert
     /// <summary>
     /// Resolve {id4 da fonte → Guid intra-banco} casando pelo código natural já resolvido
     /// (ex.: <c>id_cidade → cidade_ibge → Cidade.Id</c>) contra um mapa código→Guid
-    /// carregado pelo chamador. Extraído da carga de Distrito/Bairro (#673) para reuso na
-    /// carga de faixas de Cidade (#672, issue #14) — a fonte DNE não expõe o código
-    /// natural nas tabelas de faixa, só o id4 interno (PK da fonte).
+    /// carregado pelo chamador. A fonte DNE não expõe o código natural nas tabelas de faixa,
+    /// só o id4 interno (PK da fonte).
     /// </summary>
     public static async Task<Dictionary<int, Guid>> ResolverIdsDneParaGuidAsync<T>(
         IAsyncEnumerable<T> fonte,
@@ -155,6 +153,17 @@ internal static class GeoEtlUpsert
     /// <summary>Chave natural numérica/código (código IBGE/CEP): trim; vazio → <see langword="null"/>.</summary>
     public static string? ChaveCodigo(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+
+    /// <summary>Guid da cidade para o id da fonte; id ausente ou de cidade não carregada vira <see langword="null"/>.</summary>
+    public static Guid? ResolverCidade(Dictionary<int, Guid> cidadesPorIdDne, int? cidadeIdDne)
+    {
+        ArgumentNullException.ThrowIfNull(cidadesPorIdDne);
+        return cidadeIdDne is int id && cidadesPorIdDne.TryGetValue(id, out Guid cidadeId) ? cidadeId : null;
+    }
+
+    /// <summary>Id da fonte como texto para o relatório; ausente vira "(sem id)".</summary>
+    public static string IdDaFonteParaRelatorio(int? idDne) =>
+        idDne?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(sem id)";
 
     /// <summary>Chave natural composta de uma faixa de CEP: pai (Guid) + limites — casa com a UNIQUE.</summary>
     public static string ChaveFaixa(Guid pai, string cepInicial, string cepFinal) =>

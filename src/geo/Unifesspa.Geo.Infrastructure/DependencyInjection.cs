@@ -59,7 +59,7 @@ public static class GeoInfrastructureRegistration
         // Lookup de CEP (Story #676): reader da cascata (logradouro → grande usuário →
         // faixa) + resolver com cache-aside por selo de versão (ADR-0090/0092). O
         // Lazy<ICacheService> difere o Connect do Redis para o resolver degradar ao
-        // banco quando o cache está fora (espelha o Lazy do ETL, #674).
+        // banco quando o cache está fora (espelha o Lazy da carga).
         services.AddScoped<ICepReader, CepReader>();
         services.AddScoped<ICepResolver, CepResolver>();
         services.AddOptions<GeoCepCacheOptions>();
@@ -69,28 +69,29 @@ public static class GeoInfrastructureRegistration
         // 1 round-trip ao Redis no hot path em vez de 2. AddMemoryCache é idempotente.
         services.AddMemoryCache();
 
-        // ETL DNE (ADR-0092) — serviços de carga de reference data. O gatilho (seed
+        // carga DNE (ADR-0092) — serviços de carga de reference data. O gatilho (seed
         // dev / endpoint admin) e a fonte concreta de produção entram na Story #674.
         // Topo da hierarquia (País/Estado/Cidade, #672):
         services.AddScoped<IGeoImportador, GeoImportadorPaisEstadoCidade>();
 
-        // Folhas (Distrito/Bairro/Logradouro + satélites, #673): o orquestrador compõe
-        // o upsert de Distrito/Bairro e o COPY em lote dos logradouros.
+        // Folhas (Distrito/Bairro/Logradouro + satélites): compõe o upsert de
+        // Distrito/Bairro e o COPY em lote dos logradouros na transação única.
         services.AddScoped<GeoImportadorDistritoBairro>();
-        services.AddScoped<LogradouroCopyImporter>();
+        services.AddScoped<ImportadorDeLogradourosPorCopia>();
         services.AddScoped<IGeoImportadorLocalidades, GeoImportadorLocalidades>();
 
-        // Atualização periódica (#674): orquestrador (uma instância scoped por escopo,
-        // exposta às duas portas — API e worker), fila in-process, fonte por versão,
-        // invalidação do cache de CEP por selo de versão e métricas do ETL.
-        services.AddScoped<GeoEtlOrquestrador>();
-        services.AddScoped<IGeoImportacaoService>(sp => sp.GetRequiredService<GeoEtlOrquestrador>());
-        services.AddScoped<IGeoImportacaoExecutor>(sp => sp.GetRequiredService<GeoEtlOrquestrador>());
+        // Atualização periódica: registro e consulta (API), executor da carga (processo em segundo plano),
+        // trava consultiva, fila em processo, fonte por versão, selo do cache e métricas.
+        services.AddSingleton<TravaConsultivaDaCargaDne>();
+        services.AddScoped<ImportadorDaVersaoDne>();
+        services.AddScoped<FinalizacaoDaCargaDne>();
+        services.AddScoped<IGeoImportacaoService, RegistroDasImportacoes>();
+        services.AddScoped<IGeoImportacaoExecutor, CargaDaImportacao>();
         services.AddSingleton<IGeoImportacaoFila, GeoImportacaoFila>();
         services.AddSingleton<IGeoFonteDadosFactory, DneStagingFonteFactory>();
         services.AddScoped<IGeoCepCacheInvalidador, RedisGeoCepCacheInvalidador>();
-        // Lazy para o orquestrador: difere a resolução da cadeia Redis (IConnectionMultiplexer
-        // conecta na construção) até o momento de selar — só no worker, nunca no disparo.
+        // Lazy para o executor: difere a resolução da cadeia Redis (IConnectionMultiplexer
+        // conecta na construção) até o momento de selar — só no processo em segundo plano, nunca no disparo.
         services.AddScoped(sp => new Lazy<IGeoCepCacheInvalidador>(sp.GetRequiredService<IGeoCepCacheInvalidador>));
         services.AddSingleton<GeoEtlMetrics>();
 
@@ -98,14 +99,12 @@ public static class GeoInfrastructureRegistration
     }
 
     /// <summary>
-    /// Registra os gatilhos hospedados do ETL (#674): a reconciliação de órfãs no startup
-    /// (#695), o <c>BackgroundService</c> que executa as cargas enfileiradas e o seed de
+    /// Registra os gatilhos hospedados da carga: a reconciliação de órfãs na partida,
+    /// o <c>BackgroundService</c> que executa as cargas enfileiradas e o seed de
     /// desenvolvimento. <strong>Deve ser chamado no Program APÓS
     /// <c>AddDbContextMigrationsOnStartup&lt;GeoDbContext&gt;()</c></strong> — como
     /// <c>HostOptions.ServicesStartConcurrently</c> é <see langword="false"/>, a ordem de
-    /// registro é a ordem de start: migrations → reconciliação → worker → seed. A
-    /// reconciliação (cujo <c>StartAsync</c> é aguardado) conclui antes de o seed/HTTP
-    /// aceitarem disparos, e tanto ela quanto o seed tocam o banco (a tabela precisa já existir).
+    /// registro é a ordem de start: migrations → reconciliação → processo em segundo plano → seed.
     /// </summary>
     public static IServiceCollection AddGeoEtlGatilhos(
         this IServiceCollection services,
@@ -120,11 +119,11 @@ public static class GeoInfrastructureRegistration
 
         EtlOpcoes opcoes = configuration.GetSection(EtlOpcoes.SectionName).Get<EtlOpcoes>() ?? new EtlOpcoes();
 
-        if (opcoes.WorkerHabilitado)
+        if (opcoes.ProcessoEmSegundoPlanoHabilitado)
         {
-            // Reconciliação de órfãs ANTES do worker e do seed (#695): hosted service cujo
-            // StartAsync é aguardado pelo host, liberando o índice único parcial de execuções
-            // EmAndamento abandonadas antes que qualquer disparo possa colidir nele.
+            // Reconciliação de órfãs ANTES do processo em segundo plano e do seed: hosted service cujo
+            // StartAsync é aguardado pelo host, liberando o índice único parcial antes
+            // que qualquer disparo possa colidir nele.
             services.AddHostedService<GeoReconciliacaoStartupHostedService>();
             services.AddHostedService<GeoImportacaoBackgroundService>();
         }

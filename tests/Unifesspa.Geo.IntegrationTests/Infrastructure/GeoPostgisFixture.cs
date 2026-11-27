@@ -3,6 +3,7 @@ namespace Unifesspa.Geo.IntegrationTests.Infrastructure;
 using System.Diagnostics.CodeAnalysis;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 using Testcontainers.PostgreSql;
 
@@ -86,8 +87,25 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
     /// Constrói um <see cref="GeoDbContext"/> com NetTopologySuite ativo e os
     /// interceptors de produção (fallback de usuário "system").
     /// </summary>
-    public GeoDbContext CreateDbContext()
+    public GeoDbContext CreateDbContext() => CreateDbContext(TimeProvider.System, []);
+
+    /// <summary>
+    /// Igual a <see cref="CreateDbContext()"/>, com os carimbos de criação e atualização
+    /// vindos do relógio informado: a carga compara esses carimbos com o instante em que iniciou.
+    /// </summary>
+    public GeoDbContext CreateDbContext(TimeProvider relogio) => CreateDbContext(relogio, []);
+
+    /// <summary>
+    /// Igual a <see cref="CreateDbContext()"/>, com interceptadores adicionais do EF Core
+    /// para observar ou interromper pontos do próprio contexto sob teste.
+    /// </summary>
+    public GeoDbContext CreateDbContext(IReadOnlyList<IInterceptor> interceptadoresAdicionais) =>
+        CreateDbContext(TimeProvider.System, interceptadoresAdicionais);
+
+    private GeoDbContext CreateDbContext(TimeProvider relogio, IReadOnlyList<IInterceptor> interceptadoresAdicionais)
     {
+        ArgumentNullException.ThrowIfNull(interceptadoresAdicionais);
+
         DbContextOptions<GeoDbContext> options =
             new DbContextOptionsBuilder<GeoDbContext>()
                 .UseNpgsql(ConnectionString, npgsql =>
@@ -103,8 +121,9 @@ public sealed class GeoPostgisFixture : IAsyncLifetime
                 })
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
-                    new SoftDeleteInterceptor(TimeProvider.System, userContext: null),
-                    new AuditableInterceptor(TimeProvider.System, userContext: null))
+                    new SoftDeleteInterceptor(relogio, userContext: null),
+                    new AuditableInterceptor(relogio, userContext: null))
+                .AddInterceptors([.. interceptadoresAdicionais])
                 .Options;
 
         return new GeoDbContext(options);
