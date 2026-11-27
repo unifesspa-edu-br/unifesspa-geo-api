@@ -18,13 +18,9 @@ internal static class ConferenciaDoPacoteDne
         ArgumentNullException.ThrowIfNull(entradas);
 
         List<string> faltas = [];
-        ConferirQuantidadeETamanhos(entradas, quantidadeMaximaDeEntradas, faltas);
-        ContagemDasEntradasDne contagem = new();
-        foreach (EntradaDoPacoteDne entrada in entradas)
-        {
-            contagem.Registrar(entrada);
-        }
-
+        ConferirQuantidade(entradas, quantidadeMaximaDeEntradas, faltas);
+        ConferirTamanhosDeclarados(entradas, faltas);
+        ContagemDasEntradasDne contagem = ContagemDasEntradasDne.De(entradas);
         contagem.ReportarFaltas(faltas);
         ConferirVersao(contagem.Versoes, faltas);
 
@@ -33,13 +29,16 @@ internal static class ConferenciaDoPacoteDne
             : Result<string>.Failure(ErrosDoPacoteDne.PacoteInvalido(string.Join(' ', faltas)));
     }
 
-    private static void ConferirQuantidadeETamanhos(IReadOnlyList<EntradaDoPacoteDne> entradas, int quantidadeMaximaDeEntradas, List<string> faltas)
+    private static void ConferirQuantidade(IReadOnlyList<EntradaDoPacoteDne> entradas, int quantidadeMaximaDeEntradas, List<string> faltas)
     {
         if (entradas.Count > quantidadeMaximaDeEntradas)
         {
             faltas.Add($"O pacote tem mais de {quantidadeMaximaDeEntradas} entradas.");
         }
+    }
 
+    private static void ConferirTamanhosDeclarados(IReadOnlyList<EntradaDoPacoteDne> entradas, List<string> faltas)
+    {
         if (entradas.Any(entrada => entrada.TamanhoDeclarado > LimitesDoPacoteDne.BytesPorEntrada))
         {
             faltas.Add("Há entrada com tamanho declarado acima de 768 MiB.");

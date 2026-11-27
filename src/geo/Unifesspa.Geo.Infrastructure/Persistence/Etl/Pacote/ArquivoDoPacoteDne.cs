@@ -218,11 +218,20 @@ internal sealed class ArquivoDoPacoteDne
                 return null;
             }
 
-            resumo.AppendData(bloco, 0, lidos);
-            await destino.WriteAsync(bloco.AsMemory(0, lidos), cancellationToken).ConfigureAwait(false);
+            await GravarBlocoAsync(destino, resumo, bloco.AsMemory(0, lidos), cancellationToken).ConfigureAwait(false);
         }
 
         return total;
+    }
+
+    private static async Task GravarBlocoAsync(
+        Stream destino,
+        IncrementalHash resumo,
+        ReadOnlyMemory<byte> bloco,
+        CancellationToken cancellationToken)
+    {
+        await destino.WriteAsync(bloco, cancellationToken).ConfigureAwait(false);
+        resumo.AppendData(bloco.Span);
     }
 
     private Result<PacoteDneRecebido> Conferir(string caminho, ResumoDoCorpo resumo)

@@ -21,7 +21,18 @@ internal sealed class ContagemDasEntradasDne
 
     public IReadOnlyCollection<string> Versoes => _versoes;
 
-    public void Registrar(EntradaDoPacoteDne entrada)
+    public static ContagemDasEntradasDne De(IEnumerable<EntradaDoPacoteDne> entradas)
+    {
+        ContagemDasEntradasDne contagem = new();
+        foreach (EntradaDoPacoteDne entrada in entradas)
+        {
+            contagem.Registrar(entrada);
+        }
+
+        return contagem;
+    }
+
+    private void Registrar(EntradaDoPacoteDne entrada)
     {
         _cifradas += entrada.Cifrada ? 1 : 0;
         CaminhoDaEntradaDne.PartesDaEntrada? partes = CaminhoDaEntradaDne.Separar(entrada.Nome);

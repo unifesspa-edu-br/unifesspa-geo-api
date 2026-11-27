@@ -201,17 +201,29 @@ internal sealed class DneEsquemaDeCargaFonte : IFonteDaCargaDne
         {
             await conexao.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            NpgsqlBatch lote = conexao.CreateBatch();
-            await using (lote.ConfigureAwait(false))
+            await foreach (T linha in LerLinhasAsync(conexao, comando, mapear, cancellationToken).ConfigureAwait(false))
             {
-                lote.BatchCommands.Add(new NpgsqlBatchCommand(comando.Texto));
-                DbDataReader leitor = await lote.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-                await using (leitor.ConfigureAwait(false))
+                yield return linha;
+            }
+        }
+    }
+
+    private static async IAsyncEnumerable<T> LerLinhasAsync<T>(
+        NpgsqlConnection conexao,
+        ComandoDoEsquemaDeCarga comando,
+        Func<DbDataReader, T> mapear,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        NpgsqlBatch lote = conexao.CreateBatch();
+        await using (lote.ConfigureAwait(false))
+        {
+            lote.BatchCommands.Add(new NpgsqlBatchCommand(comando.Texto));
+            DbDataReader leitor = await lote.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            await using (leitor.ConfigureAwait(false))
+            {
+                while (await leitor.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    while (await leitor.ReadAsync(cancellationToken).ConfigureAwait(false))
-                    {
-                        yield return mapear(leitor);
-                    }
+                    yield return mapear(leitor);
                 }
             }
         }
